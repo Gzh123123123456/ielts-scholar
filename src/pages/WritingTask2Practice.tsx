@@ -90,6 +90,7 @@ export default function WritingTask2Practice() {
   };
 
   const isMock = !process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY';
+  const userFrameworkNotes = frameworkChat.filter((msg) => msg.role === 'user').map((msg) => msg.text.trim()).filter(Boolean);
 
   return (
     <PageShell>
@@ -138,6 +139,7 @@ export default function WritingTask2Practice() {
                   </p>
                 </div>
                 <div className="px-6 pt-4 pb-2">
+                  <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/45 mb-2">Framework headings for your notes</p>
                   <div className="grid sm:grid-cols-2 gap-2 text-sm">
                     {['Position', 'View A', 'View B', 'My opinion'].map((label) => (
                       <div key={label} className="border border-paper-ink/10 bg-paper-ink/[0.02] px-3 py-2">
@@ -168,7 +170,7 @@ export default function WritingTask2Practice() {
                     className="w-full bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-base leading-relaxed resize-none placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
                   />
                   <div className="flex justify-end">
-                    <SerifButton type="submit" variant="secondary" className="px-4 py-2 text-xs">Save Note</SerifButton>
+                    <SerifButton type="submit" variant="secondary" className="px-4 py-2 text-xs">Send to Coach</SerifButton>
                   </div>
                 </form>
               </PaperCard>
@@ -182,6 +184,20 @@ export default function WritingTask2Practice() {
 
           {phase === 'writing' && (
             <div className="space-y-6">
+              <PaperCard>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Framework Summary</h3>
+                {userFrameworkNotes.length > 0 ? (
+                  <div className="space-y-3">
+                    {userFrameworkNotes.map((note, i) => (
+                      <p key={i} className="text-sm leading-relaxed border-l-2 border-paper-ink/10 pl-3">
+                        {note}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-paper-ink/60">No framework notes saved yet.</p>
+                )}
+              </PaperCard>
               <PaperCard className="p-0">
                 <textarea
                   value={essay}
@@ -217,6 +233,23 @@ export default function WritingTask2Practice() {
                   </PaperCard>
                 ))}
               </div>
+
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Framework</h3>
+                <PaperCard>
+                  {userFrameworkNotes.length > 0 ? (
+                    <div className="space-y-3">
+                      {userFrameworkNotes.map((note, i) => (
+                        <p key={i} className="text-sm leading-relaxed border-l-2 border-paper-ink/10 pl-3">
+                          {note}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-paper-ink/60">No framework notes saved yet.</p>
+                  )}
+                </PaperCard>
+              </section>
 
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
