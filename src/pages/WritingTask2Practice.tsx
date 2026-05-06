@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -16,9 +16,11 @@ export default function WritingTask2Practice() {
   const [phase, setPhase] = useState<'framework' | 'writing' | 'results'>('framework');
   const [frameworkChat, setFrameworkChat] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
   const [frameworkInput, setFrameworkInput] = useState('');
+  const [finalFrameworkSummary, setFinalFrameworkSummary] = useState('');
   const [essay, setEssay] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
+  const discussionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     loadRandomQuestion();
@@ -31,6 +33,7 @@ export default function WritingTask2Practice() {
     setEssay('');
     setFeedback(null);
     setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
+    setFinalFrameworkSummary('');
     addDebugLog(`Loaded writing question: ${random.id}`);
   };
 
@@ -45,6 +48,12 @@ export default function WritingTask2Practice() {
     // Mocking AI framework response
     await new Promise(r => setTimeout(r, 1000));
     setFrameworkChat(prev => [...prev, { role: 'ai', text: "That sounds like a valid starting point. However, make sure you address 'both views' as requested by the prompt. How do you plan to structure the counter-argument paragraph? (This is a mock response in V1)" }]);
+
+    requestAnimationFrame(() => {
+      if (discussionRef.current) {
+        discussionRef.current.scrollTop = discussionRef.current.scrollHeight;
+      }
+    });
   };
 
   const analyzeEssay = async () => {
@@ -90,8 +99,6 @@ export default function WritingTask2Practice() {
   };
 
   const isMock = !process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY';
-  const userFrameworkNotes = frameworkChat.filter((msg) => msg.role === 'user').map((msg) => msg.text.trim()).filter(Boolean);
-
   return (
     <PageShell>
       <TopBar />
@@ -148,11 +155,15 @@ export default function WritingTask2Practice() {
                     ))}
                   </div>
                 </div>
-                <div className="px-6 py-5 space-y-3 max-h-[280px] overflow-auto">
+                <div ref={discussionRef} className="px-6 py-5 space-y-3 max-h-[280px] overflow-auto">
                   {frameworkChat.map((msg, i) => (
                     <div key={i} className="border-l-2 border-paper-ink/10 pl-3 py-1">
                       <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/50 mb-1">
-                        {msg.role === 'user' ? 'Your note' : 'Prompt guidance'}
+                        {msg.role === 'user'
+                          ? 'Your Note'
+                          : i === 0
+                            ? 'Prompt Guidance'
+                            : 'Coach Feedback'}
                       </p>
                       <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted italic'} text-sm leading-relaxed`}>
                         {msg.text}
@@ -174,6 +185,19 @@ export default function WritingTask2Practice() {
                   </div>
                 </form>
               </PaperCard>
+              <PaperCard>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Final Framework Summary</h3>
+                <p className="text-sm text-paper-ink/70 mb-3">
+                  Consolidate your final writing framework here: Position, View A, View B, My opinion, and optional structure/example.
+                </p>
+                <textarea
+                  value={finalFrameworkSummary}
+                  onChange={(e) => setFinalFrameworkSummary(e.target.value)}
+                  placeholder="Final Framework Summary (Chinese or English)..."
+                  rows={8}
+                  className="w-full bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-base leading-relaxed resize-y placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                />
+              </PaperCard>
               <div className="flex justify-end">
                 <SerifButton onClick={() => setPhase('writing')} className="flex items-center gap-2">
                   Done with Framework <ArrowRight className="w-4 h-4" />
@@ -186,16 +210,10 @@ export default function WritingTask2Practice() {
             <div className="space-y-6">
               <PaperCard>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Framework Summary</h3>
-                {userFrameworkNotes.length > 0 ? (
-                  <div className="space-y-3">
-                    {userFrameworkNotes.map((note, i) => (
-                      <p key={i} className="text-sm leading-relaxed border-l-2 border-paper-ink/10 pl-3">
-                        {note}
-                      </p>
-                    ))}
-                  </div>
+                {finalFrameworkSummary.trim() ? (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalFrameworkSummary}</p>
                 ) : (
-                  <p className="text-sm text-paper-ink/60">No framework notes saved yet.</p>
+                  <p className="text-sm text-paper-ink/60">No final framework summary yet. You can go back to Phase 1 to refine it.</p>
                 )}
               </PaperCard>
               <PaperCard className="p-0">
@@ -237,16 +255,10 @@ export default function WritingTask2Practice() {
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Framework</h3>
                 <PaperCard>
-                  {userFrameworkNotes.length > 0 ? (
-                    <div className="space-y-3">
-                      {userFrameworkNotes.map((note, i) => (
-                        <p key={i} className="text-sm leading-relaxed border-l-2 border-paper-ink/10 pl-3">
-                          {note}
-                        </p>
-                      ))}
-                    </div>
+                  {finalFrameworkSummary.trim() ? (
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalFrameworkSummary}</p>
                   ) : (
-                    <p className="text-sm text-paper-ink/60">No framework notes saved yet.</p>
+                    <p className="text-sm text-paper-ink/60">No final framework summary yet. You can go back to Phase 1 to refine it.</p>
                   )}
                 </PaperCard>
               </section>
