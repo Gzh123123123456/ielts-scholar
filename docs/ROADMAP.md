@@ -23,6 +23,11 @@ _Last updated: 2026-05-06_
 - Add **Finish Session / Export Session Note**.
 - Aggregate multi-attempt learning across a full study session.
 - Include repeated error patterns, improvements, best upgraded answers, reusable expressions, and review cards.
+- Add **Speaking Stuck-Point Assist / Chinese Idea Support** (post-review optional note):
+  - Learner can add a Chinese note after Stop & Review to explain intended meaning.
+  - AI converts intended meaning into natural IELTS Speaking English.
+  - AI provides reusable expressions and a suggested continuation from the stuck point.
+  - No real-time bilingual speech recognition in this phase.
 
 ## V1.3 — Feedback Granularity Upgrade
 - Sentence numbering and correction-to-source mapping.

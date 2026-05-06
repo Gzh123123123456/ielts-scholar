@@ -1,5 +1,29 @@
 # Decision Log
 
+## [2026-05-06] UI Readability Polish (Writing Task 2 + Global Paper UI)
+- **Decision**: Apply readability-focused UI polish only; no business logic changes.
+- **Implemented**:
+  - Slightly increased global serif body text size and line height to improve long-form reading comfort.
+  - Increased PaperCard internal spacing for less cramped analysis blocks.
+  - Increased phase-tab size for clearer phase navigation labels.
+  - Improved spacing/line-height on Writing Task 2 Final Analysis sections:
+    - My Framework
+    - My Essay
+    - Key Corrections
+    - Framework Logic Review
+    - Model Answer Excerpt
+- **Style constraints preserved**: warm old-paper notebook aesthetic, serif typography, beige paper background, dark brown ink text, terracotta accent.
+- **Explicitly unchanged**: provider/schema, Gemini connection status, RAG, pronunciation scoring, Debug Panel, Markdown export, Mock default.
+
+## [2026-05-06] Deferred Idea Logged — Speaking Stuck-Point Assist / Chinese Idea Support (V1.2+)
+- **Decision**: Record as deferred future feature only; do not implement in current UI-polish task.
+- **Future concept**:
+  - After Stop & Review in Speaking Practice, learner may optionally add a Chinese note describing what they wanted to say.
+  - AI coach converts it into natural IELTS Speaking English, gives reusable expressions, and shows how to continue from the stuck point.
+- **Guardrails**:
+  - No real-time bilingual speech recognition now.
+  - No changes to current SpeechRecognition logic in this task.
+
 ## [2026-05-06] Speech Recognition Resilience Fixes
 - **Fix**: `no-speech` errors no longer treated as fatal in Speaking Practice.
 - **Mechanism**: Auto-retry up to 2 times with 500ms delay before each restart. Uses refs (`isRecordingRef`, `fatalSpeechErrorRef`) to avoid React stale-closure bugs.

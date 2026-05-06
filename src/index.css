@@ -16,8 +16,8 @@
   body {
     @apply bg-paper-100 text-paper-ink font-serif antialiased selection:bg-accent-terracotta/20;
     background-image: url("https://www.transparenttextures.com/patterns/paper.png");
-    font-size: 1.05rem;
-    line-height: 1.75;
+    font-size: 1.1rem;
+    line-height: 1.85;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -58,7 +58,7 @@
 }
 
 .paper-card {
-  @apply bg-paper-50 border border-paper-ink/10 rounded-sm p-6 shadow-sm transition-colors duration-200;
+  @apply bg-paper-50 border border-paper-ink/10 rounded-sm p-7 shadow-sm transition-colors duration-200;
 }
 
 .paper-divider {
@@ -70,7 +70,7 @@
 }
 
 .phase-tab {
-  @apply px-4 py-1 rounded-sm transition-all duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/40 hover:text-paper-ink hover:bg-paper-ink/5;
+  @apply px-5 py-1.5 rounded-sm transition-all duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/40 hover:text-paper-ink hover:bg-paper-ink/5 text-[11px];
 }
 
 .phase-tab-active {
