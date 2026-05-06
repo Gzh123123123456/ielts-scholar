@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -16,9 +16,11 @@ export default function WritingTask2Practice() {
   const [phase, setPhase] = useState<'framework' | 'writing' | 'results'>('framework');
   const [frameworkChat, setFrameworkChat] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
   const [frameworkInput, setFrameworkInput] = useState('');
+  const [finalFrameworkSummary, setFinalFrameworkSummary] = useState('');
   const [essay, setEssay] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
+  const discussionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     loadRandomQuestion();
@@ -31,6 +33,7 @@ export default function WritingTask2Practice() {
     setEssay('');
     setFeedback(null);
     setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
+    setFinalFrameworkSummary('');
     addDebugLog(`Loaded writing question: ${random.id}`);
   };
 
@@ -45,6 +48,12 @@ export default function WritingTask2Practice() {
     // Mocking AI framework response
     await new Promise(r => setTimeout(r, 1000));
     setFrameworkChat(prev => [...prev, { role: 'ai', text: "That sounds like a valid starting point. However, make sure you address 'both views' as requested by the prompt. How do you plan to structure the counter-argument paragraph? (This is a mock response in V1)" }]);
+
+    requestAnimationFrame(() => {
+      if (discussionRef.current) {
+        discussionRef.current.scrollTop = discussionRef.current.scrollHeight;
+      }
+    });
   };
 
   const analyzeEssay = async () => {
@@ -90,7 +99,6 @@ export default function WritingTask2Practice() {
   };
 
   const isMock = !process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY';
-
   return (
     <PageShell>
       <TopBar />
@@ -130,34 +138,66 @@ export default function WritingTask2Practice() {
       <div className="max-w-3xl">
           {phase === 'framework' && (
             <div className="space-y-6">
-              <PaperCard className="h-[500px] flex flex-col p-0 overflow-hidden">
-                <div className="flex-1 overflow-auto p-6 space-y-4 font-serif text-sm">
-                  {frameworkChat.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded p-4 ${msg.role === 'user' ? 'bg-accent-terracotta text-paper-50' : 'bg-paper-ink/5 text-paper-ink-muted italic'}`}>
-                        {msg.text}
+              <PaperCard className="p-0 overflow-hidden">
+                <div className="px-6 pt-6 pb-4 border-b border-paper-ink/10 bg-paper-ink/[0.02]">
+                  <h3 className="text-base font-bold uppercase tracking-widest mb-2">Framework Notes</h3>
+                  <p className="text-sm text-paper-ink/70">
+                    Draft in Chinese or English. Focus on Position, View A, View B, and My opinion.
+                  </p>
+                </div>
+                <div className="px-6 pt-4 pb-2">
+                  <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/45 mb-2">Framework headings for your notes</p>
+                  <div className="grid sm:grid-cols-2 gap-2 text-sm">
+                    {['Position', 'View A', 'View B', 'My opinion'].map((label) => (
+                      <div key={label} className="border border-paper-ink/10 bg-paper-ink/[0.02] px-3 py-2">
+                        <span className="font-semibold">{label}</span>
                       </div>
+                    ))}
+                  </div>
+                </div>
+                <div ref={discussionRef} className="px-6 py-5 space-y-3 max-h-[280px] overflow-auto">
+                  {frameworkChat.map((msg, i) => (
+                    <div key={i} className="border-l-2 border-paper-ink/10 pl-3 py-1">
+                      <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/50 mb-1">
+                        {msg.role === 'user'
+                          ? 'Your Note'
+                          : i === 0
+                            ? 'Prompt Guidance'
+                            : 'Coach Feedback'}
+                      </p>
+                      <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted italic'} text-sm leading-relaxed`}>
+                        {msg.text}
+                      </p>
                     </div>
                   ))}
                 </div>
-                <form onSubmit={handleFrameworkSubmit} className="p-4 border-t border-paper-ink/10 flex gap-2 items-end">
+                <form onSubmit={handleFrameworkSubmit} className="p-6 border-t border-paper-ink/10 space-y-3">
                   <textarea
                     value={frameworkInput}
                     onChange={(e) => setFrameworkInput(e.target.value)}
-                    placeholder="Type your logic or points here — Chinese or English..."
-                    rows={3}
+                    placeholder="Planning notes (Chinese or English): thesis, two main arguments, and counter-view structure..."
+                    rows={6}
                     autoFocus
-                    className="flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-2 font-serif text-sm leading-relaxed resize-none placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                    className="w-full bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-base leading-relaxed resize-none placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
                   />
-                  <SerifButton type="submit" variant="secondary" className="px-4 py-1 text-xs">Send</SerifButton>
+                  <div className="flex justify-end">
+                    <SerifButton type="submit" variant="secondary" className="px-4 py-2 text-xs">Send to Coach</SerifButton>
+                  </div>
                 </form>
               </PaperCard>
-              <div className="flex items-center gap-2 text-xs text-paper-ink/40 font-sans border border-paper-ink/10 rounded-sm p-3 bg-paper-ink/[0.02]">
-                <span className="font-bold uppercase tracking-wider text-paper-ink/50 shrink-0">Check:</span>
-                <span>Clear position?</span><span className="text-paper-ink/20">|</span>
-                <span>Both views addressed?</span><span className="text-paper-ink/20">|</span>
-                <span>Logical flow?</span>
-              </div>
+              <PaperCard>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Final Framework Summary</h3>
+                <p className="text-sm text-paper-ink/70 mb-3">
+                  Consolidate your final writing framework here: Position, View A, View B, My opinion, and optional structure/example.
+                </p>
+                <textarea
+                  value={finalFrameworkSummary}
+                  onChange={(e) => setFinalFrameworkSummary(e.target.value)}
+                  placeholder="Final Framework Summary (Chinese or English)..."
+                  rows={8}
+                  className="w-full bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-base leading-relaxed resize-y placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                />
+              </PaperCard>
               <div className="flex justify-end">
                 <SerifButton onClick={() => setPhase('writing')} className="flex items-center gap-2">
                   Done with Framework <ArrowRight className="w-4 h-4" />
@@ -168,13 +208,14 @@ export default function WritingTask2Practice() {
 
           {phase === 'writing' && (
             <div className="space-y-6">
-              <div className="flex items-center gap-2 text-xs text-paper-ink/40 font-sans border border-paper-ink/10 rounded-sm p-3 bg-paper-ink/[0.02]">
-                <span className="font-bold uppercase tracking-wider text-paper-ink/50 shrink-0">Per paragraph:</span>
-                <span>Topic sentence?</span><span className="text-paper-ink/20">|</span>
-                <span>Specific example?</span><span className="text-paper-ink/20">|</span>
-                <span>Link to thesis?</span><span className="text-paper-ink/20">|</span>
-                <span>Natural phrasing?</span>
-              </div>
+              <PaperCard>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Framework Summary</h3>
+                {finalFrameworkSummary.trim() ? (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalFrameworkSummary}</p>
+                ) : (
+                  <p className="text-sm text-paper-ink/60">No final framework summary yet. You can go back to Phase 1 to refine it.</p>
+                )}
+              </PaperCard>
               <PaperCard className="p-0">
                 <textarea
                   value={essay}
@@ -187,17 +228,6 @@ export default function WritingTask2Practice() {
               <div className="flex justify-between items-center bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest">
                 <span>WORD COUNT: {essay.trim() ? essay.trim().split(/\s+/).length : 0}</span>
                 <div className="flex items-center gap-4">
-                  {(() => {
-                    const wc = essay.trim() ? essay.trim().split(/\s+/).length : 0;
-                    if (wc > 0 && wc < 20) {
-                      return (
-                        <span className="text-[10px] normal-case tracking-normal text-paper-ink/30 italic max-w-[200px] text-right leading-tight">
-                          Short for a full Task 2 essay. Feedback is best treated as paragraph-level practice.
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
                   <SerifButton onClick={analyzeEssay} disabled={isAnalyzing || !essay.trim()} className="flex items-center gap-2">
                     {isAnalyzing ? "Analyzing..." : "Submit for Analysis"} <Send className="w-4 h-4" />
                   </SerifButton>
@@ -221,6 +251,26 @@ export default function WritingTask2Practice() {
                   </PaperCard>
                 ))}
               </div>
+
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Framework</h3>
+                <PaperCard>
+                  {finalFrameworkSummary.trim() ? (
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalFrameworkSummary}</p>
+                  ) : (
+                    <p className="text-sm text-paper-ink/60">No final framework summary yet. You can go back to Phase 1 to refine it.</p>
+                  )}
+                </PaperCard>
+              </section>
+
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
+                <PaperCard>
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap text-paper-ink">
+                    {essay}
+                  </div>
+                </PaperCard>
+              </section>
 
               {isMock && (
                 <div className="flex items-center gap-2 p-3 bg-paper-ink/5 rounded text-[10px] text-paper-ink/40 italic uppercase tracking-wider border border-paper-ink/10 font-sans">
@@ -271,13 +321,14 @@ export default function WritingTask2Practice() {
                   {feedback.modelAnswer}
                   <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-paper-50 to-transparent" />
                 </div>
-                <div className="mt-6 flex justify-between gap-4">
-                  <SerifButton onClick={exportMarkdown} variant="outline" className="flex-1 text-xs flex items-center justify-center gap-2">
-                    <FileDown className="w-4 h-4" /> Download Complete Note
-                  </SerifButton>
-                  <SerifButton onClick={loadRandomQuestion} className="flex-1 text-xs">New Question</SerifButton>
-                </div>
               </PaperCard>
+
+              <div className="flex justify-between gap-4">
+                <SerifButton onClick={exportMarkdown} variant="outline" className="flex-1 text-xs flex items-center justify-center gap-2">
+                  <FileDown className="w-4 h-4" /> Download Complete Note
+                </SerifButton>
+                <SerifButton onClick={loadRandomQuestion} className="flex-1 text-xs">New Question</SerifButton>
+              </div>
             </div>
           )}
       </div>

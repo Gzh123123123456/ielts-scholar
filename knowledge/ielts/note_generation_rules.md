@@ -119,6 +119,34 @@ If the essay is significantly shorter than a full Task 2 response (rough guideli
 
 This ensures the permanent note records the limitation without discouraging the user from paragraph-level practice.
 
+## Final Framework Summary (V1 vs V1.1)
+
+- **V1 current behavior**:
+  - `My Framework` in Writing notes should come from the user-edited **Final Framework Summary**.
+  - Do **not** treat raw coach discussion history as the final framework output.
+  - If the final framework summary is empty, keep `My Framework` concise and avoid inventing structure.
+
+- **V1.1 / API-phase target behavior**:
+  - Allow an AI-assisted action (e.g., **Generate Framework Summary** / **Extract Final Framework**) to convert Phase 1 coach discussion into a structured framework draft:
+    - Position
+    - View A
+    - View B
+    - My opinion
+    - Paragraph plan
+    - Possible example
+  - User must review/edit the generated framework before essay drafting and before final note export.
+
+## Session-Level Note Roadmap
+
+- **Current V1**: Export is attempt-level only (`ielts-speaking-[date].md`, `ielts-writing-[date].md`).
+- **Future target**: Add **Finish Session / Export Session Note** covering multiple attempts/questions.
+- Session note should summarize:
+  - repeated error patterns
+  - improvement trends across retries
+  - best upgraded answers
+  - reusable expressions
+  - review cards for revision planning
+
 ## Generation Rules
 
 ### General
@@ -137,3 +165,31 @@ This ensures the permanent note records the limitation without discouraging the 
 - Do not write JSON inside the Markdown note — it should be human-readable.
 - Do not wrap the note in a code block. Output raw Markdown.
 - Do not include the Mock Provider disclaimer in the user's permanent note.
+- Do not claim AI auto-generated a final framework in V1 when it was manually authored by the user.
+
+## Product-State Notes (2026-05-06)
+
+- Writing Task 2 Final Framework Summary is currently manual/user-edited in V1.
+- Do not imply that V1 performs real AI extraction from discussion unless provider-integration phase is active.
+- Phase 2 should consume the final framework summary (not raw coach discussion logs).
+- Phase 3 `My Framework` should mirror the same final framework summary used for writing.
+
+## Future Session Note Direction
+
+When session-level export is introduced, generate a separate session note that can aggregate:
+- multiple Speaking parts/questions/attempts
+- Writing framework discussion, drafts, feedback, and revisions
+
+The session note should emphasize:
+- repeated error patterns
+- improvements over retries
+- best upgraded answers
+- reusable expressions
+- review cards
+
+## Do Not Do Yet (Generation Scope)
+
+- Do not fabricate Gemini-powered framework extraction in V1.
+- Do not emit RAG-sourced claims in V1 notes.
+- Do not include pronunciation scoring claims beyond current product capability.
+- Do not output full inline-annotation style notes as if editor tooling already exists.

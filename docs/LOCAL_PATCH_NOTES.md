@@ -6,6 +6,14 @@ This project was exported from Google AI Studio as a React + TypeScript + Vite I
 
 No architecture was refactored. No Gemini integration was added. No database was introduced. No real-time AI correction was added. Mock Provider remains the default.
 
+### Documentation update (2026-05-06)
+This document now records the intentional V1 Writing Task 2 framework flow:
+- Phase 1 separates **Coach Discussion / Notes** (process) from **Final Framework Summary** (output).
+- Final Framework Summary is currently **manual and user-edited** in V1.
+- Phase 2 surfaces the Final Framework Summary above essay writing.
+- Phase 3 surfaces **My Framework** and **My Essay** before feedback.
+- No real API summarization is enabled yet because Gemini/provider connection is intentionally pending.
+
 ---
 
 ## 2. Files Changed
@@ -148,3 +156,76 @@ Copy the prompt below into an AI Studio session with the original project:
 - **Gemini Provider** is not yet connected. Mock Provider remains the default.
 - **Writing Task 1** is a placeholder page.
 - **Speaking Mock** and **Writing Task 2 Mock** are placeholder pages.
+
+---
+
+## 8. Planned Next Step (V1.1 / API Phase)
+
+### Writing framework consolidation
+- Add a mock-safe but API-ready action such as:
+  - **Generate Framework Summary**, or
+  - **Extract Final Framework**
+- When real provider is connected, summarize Phase 1 coach discussion into structured fields:
+  - Position
+  - View A
+  - View B
+  - My opinion
+  - Paragraph plan
+  - Possible example
+- Keep user editability mandatory before moving to Phase 2.
+
+### Session-level notes
+- Current V1 export is attempt-level.
+- Future flow should support **Finish Session / Export Session Note**.
+- A session may include:
+  - multiple speaking attempts
+  - multiple questions
+  - repeated attempts on the same question
+- Session note target content:
+  - repeated error patterns
+  - improvement trends
+  - best upgraded answers
+  - reusable expressions
+  - review cards
+
+### Future writing feedback layers
+- Keep current Phase 3 ordering (My Framework + My Essay before feedback).
+- Add sentence-level correction mapping in a later version.
+- Inline annotation is future scope only; not part of V1.
+
+---
+
+## 9. Documentation Alignment Update (2026-05-06)
+
+Updated documentation to reflect actual implemented state and next-step backlog:
+
+- Added/updated product state docs:
+  - `docs/CURRENT_STATE.md`
+  - `docs/PROJECT_BACKLOG.md`
+  - `docs/ROADMAP.md`
+  - `docs/DECISION_LOG.md`
+- Updated knowledge policy doc:
+  - `knowledge/ielts/note_generation_rules.md`
+
+### Confirmed current state in docs
+- Writing Task 2: Coach Discussion vs Final Framework Summary split is intentional in V1.
+- Final Framework Summary is user-edited (manual) in V1.
+- Phase 2 and Phase 3 both surface framework context before feedback consumption.
+- Submit gating remains empty-only.
+- Speaking resilience behavior (auto-retry, retry cleanup, stop-protect) remains preserved.
+- Mock Provider remains default; no Gemini/API connected.
+
+### Added backlog tracks
+- API/Gemini optional provider path with robust JSON error handling.
+- Framework intelligence (AI extraction + user confirmation loop).
+- Session-level Obsidian export.
+- Sentence-level correction mapping progression.
+- Speaking improvements and V2 mock exam scope.
+
+### Do-not-do-yet guardrails documented
+- No Gemini connection during UI polish.
+- No RAG yet.
+- No pronunciation scoring yet.
+- No full inline annotation editor yet.
+- No replacement of Mock as default.
+- No architecture rewrite.
