@@ -130,34 +130,39 @@ export default function WritingTask2Practice() {
       <div className="max-w-3xl">
           {phase === 'framework' && (
             <div className="space-y-6">
-              <PaperCard className="h-[500px] flex flex-col p-0 overflow-hidden">
-                <div className="flex-1 overflow-auto p-6 space-y-4 font-serif text-sm">
+              <PaperCard className="p-0 overflow-hidden">
+                <div className="px-6 pt-6 pb-4 border-b border-paper-ink/10 bg-paper-ink/[0.02]">
+                  <h3 className="text-sm font-bold uppercase tracking-widest mb-2">Framework Planning Notes</h3>
+                  <p className="text-xs text-paper-ink/50 font-sans">
+                    Outline your position, reasons, and counter-view structure in Chinese or English.
+                  </p>
+                </div>
+                <div className="px-6 py-5 space-y-3 max-h-[280px] overflow-auto">
                   {frameworkChat.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded p-4 ${msg.role === 'user' ? 'bg-accent-terracotta text-paper-50' : 'bg-paper-ink/5 text-paper-ink-muted italic'}`}>
+                    <div key={i} className="border-l-2 border-paper-ink/10 pl-3 py-1">
+                      <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/40 mb-1">
+                        {msg.role === 'user' ? 'Your note' : 'Prompt guidance'}
+                      </p>
+                      <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted italic'} text-sm leading-relaxed`}>
                         {msg.text}
-                      </div>
+                      </p>
                     </div>
                   ))}
                 </div>
-                <form onSubmit={handleFrameworkSubmit} className="p-4 border-t border-paper-ink/10 flex gap-2 items-end">
+                <form onSubmit={handleFrameworkSubmit} className="p-6 border-t border-paper-ink/10 space-y-3">
                   <textarea
                     value={frameworkInput}
                     onChange={(e) => setFrameworkInput(e.target.value)}
-                    placeholder="Type your logic or points here — Chinese or English..."
-                    rows={3}
+                    placeholder="Planning notes (Chinese or English): thesis, two main arguments, and counter-view structure..."
+                    rows={6}
                     autoFocus
-                    className="flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-2 font-serif text-sm leading-relaxed resize-none placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                    className="w-full bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-base leading-relaxed resize-none placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
                   />
-                  <SerifButton type="submit" variant="secondary" className="px-4 py-1 text-xs">Send</SerifButton>
+                  <div className="flex justify-end">
+                    <SerifButton type="submit" variant="secondary" className="px-4 py-2 text-xs">Save Note</SerifButton>
+                  </div>
                 </form>
               </PaperCard>
-              <div className="flex items-center gap-2 text-xs text-paper-ink/40 font-sans border border-paper-ink/10 rounded-sm p-3 bg-paper-ink/[0.02]">
-                <span className="font-bold uppercase tracking-wider text-paper-ink/50 shrink-0">Check:</span>
-                <span>Clear position?</span><span className="text-paper-ink/20">|</span>
-                <span>Both views addressed?</span><span className="text-paper-ink/20">|</span>
-                <span>Logical flow?</span>
-              </div>
               <div className="flex justify-end">
                 <SerifButton onClick={() => setPhase('writing')} className="flex items-center gap-2">
                   Done with Framework <ArrowRight className="w-4 h-4" />
@@ -168,13 +173,6 @@ export default function WritingTask2Practice() {
 
           {phase === 'writing' && (
             <div className="space-y-6">
-              <div className="flex items-center gap-2 text-xs text-paper-ink/40 font-sans border border-paper-ink/10 rounded-sm p-3 bg-paper-ink/[0.02]">
-                <span className="font-bold uppercase tracking-wider text-paper-ink/50 shrink-0">Per paragraph:</span>
-                <span>Topic sentence?</span><span className="text-paper-ink/20">|</span>
-                <span>Specific example?</span><span className="text-paper-ink/20">|</span>
-                <span>Link to thesis?</span><span className="text-paper-ink/20">|</span>
-                <span>Natural phrasing?</span>
-              </div>
               <PaperCard className="p-0">
                 <textarea
                   value={essay}
