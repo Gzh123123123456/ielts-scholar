@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { speakingPart1, writingTask2 } from '../data/questions/bank';
+import { ProviderDiagnostic } from '../lib/ai/schemas';
 
 interface UserProfile {
   totalSessions: number;
@@ -22,6 +23,8 @@ interface AppContextType {
   sessions: any[];
   debugLogs: string[];
   addDebugLog: (log: string) => void;
+  providerDiagnostic: ProviderDiagnostic | null;
+  setProviderDiagnostic: (diagnostic: ProviderDiagnostic | null) => void;
   capabilities: BrowserCapabilities;
   setCapabilities: (caps: Partial<BrowserCapabilities>) => void;
 }
@@ -45,6 +48,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [providerDiagnostic, setProviderDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [capabilities, setCapabilitiesState] = useState<BrowserCapabilities>({
     speechRecognition: false,
     webkitSpeechRecognition: false,
@@ -105,7 +109,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   return (
-    <AppContext.Provider value={{ profile, saveSession, sessions, debugLogs, addDebugLog, capabilities, setCapabilities }}>
+    <AppContext.Provider value={{
+      profile,
+      saveSession,
+      sessions,
+      debugLogs,
+      addDebugLog,
+      providerDiagnostic,
+      setProviderDiagnostic,
+      capabilities,
+      setCapabilities,
+    }}>
       {children}
     </AppContext.Provider>
   );

@@ -1,5 +1,19 @@
 # Decision Log
 
+## [2026-05-06] V1.1 Provider Safety + Debug Panel Scaffolding
+- **Decision**: Add provider safety scaffolding before connecting any real API provider.
+- **Implemented**:
+  - Added safe Speaking and Writing analysis wrappers around provider calls.
+  - Added runtime normalization for malformed `SpeakingFeedback` and `WritingFeedback`.
+  - Missing arrays normalize to `[]`.
+  - Missing strings normalize to safe fallback text.
+  - Missing scores normalize to safe fallback scores.
+  - Provider diagnostics capture module, provider name, request payload, raw response, parsed JSON, parse error, validation errors, fallback-used status, and timestamp.
+  - Debug Panel shows the latest provider diagnostic in a collapsible section while preserving existing debug information.
+  - Speaking and Writing feedback pages show a small warning when fallback normalization was used.
+- **Handoff docs**: `docs/HANDOFF.md` is now the canonical handoff file; the old Claude-specific handoff filename was removed to avoid duplicate/conflicting guidance.
+- **Explicitly unchanged**: Mock Provider remains default, Gemini remains unconnected, no RAG, no pronunciation scoring, no SpeechRecognition behavior changes, no architecture rewrite, Debug Panel and Markdown export remain.
+
 ## [2026-05-06] UI Readability Polish (Writing Task 2 + Global Paper UI)
 - **Decision**: Apply readability-focused UI polish only; no business logic changes.
 - **Implemented**:
