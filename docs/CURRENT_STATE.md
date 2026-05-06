@@ -7,6 +7,10 @@ _Last updated: 2026-05-06_
 - No Gemini/API provider is connected yet.
 - No RAG pipeline is connected.
 - V1 pronunciation is **not formally assessed**.
+- V1.1 provider safety scaffolding is implemented:
+  - Speaking and Writing provider calls route through safe analysis wrappers.
+  - Malformed provider output is normalized into safe feedback objects.
+  - Latest provider diagnostic is captured for Debug Panel inspection.
 
 ## Speaking Practice (Implemented)
 - `no-speech` auto-retry is implemented and preserved.
@@ -30,6 +34,20 @@ _Last updated: 2026-05-06_
 ## Export Behavior (Implemented)
 - Markdown export is attempt-level in V1.
 - Session-level consolidated note export is not implemented yet.
+
+## Debug / Provider Safety (Implemented)
+- Debug Panel remains globally available.
+- Debug Panel now includes a collapsible latest provider diagnostic section showing:
+  - module
+  - provider name
+  - request payload
+  - raw response
+  - parsed JSON
+  - parse error
+  - validation errors
+  - fallback-used status
+  - timestamp
+- Provider fallback warnings are shown near Speaking and Writing feedback when malformed output was normalized.
 
 ## Scope Guards (Current)
 - Keep Practice mode and future Mock mode separate.

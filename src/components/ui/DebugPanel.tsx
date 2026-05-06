@@ -7,7 +7,8 @@ import { useLocation } from 'react-router-dom';
 
 export const DebugPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const { debugLogs, sessions, profile, capabilities } = useApp();
+  const [isProviderOpen, setIsProviderOpen] = useState(true);
+  const { debugLogs, sessions, profile, capabilities, providerDiagnostic } = useApp();
   const location = useLocation();
 
   const exportState = () => {
@@ -17,6 +18,7 @@ export const DebugPanel: React.FC = () => {
       logs: debugLogs,
       capabilities,
       provider: process.env.AI_PROVIDER || 'mock',
+      providerDiagnostic,
       timestamp: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -68,6 +70,69 @@ export const DebugPanel: React.FC = () => {
             <p><span className="opacity-50">Route:</span> {location.pathname}</p>
             <p><span className="opacity-50">Saved Sessions:</span> {sessions.length}</p>
           </div>
+        </section>
+
+        <section>
+          <button
+            onClick={() => setIsProviderOpen(prev => !prev)}
+            className="w-full flex items-center justify-between font-bold mb-2 text-paper-ink/60 border-b border-paper-ink/5 uppercase tracking-tighter"
+          >
+            <span>Provider Diagnostic</span>
+            {isProviderOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          {isProviderOpen && (
+            <div className="bg-paper-100 p-2 rounded border border-paper-ink/5 space-y-2 font-mono">
+              {providerDiagnostic ? (
+                <>
+                  <p><span className="opacity-50">Module:</span> {providerDiagnostic.module}</p>
+                  <p><span className="opacity-50">Provider:</span> {providerDiagnostic.providerName}</p>
+                  <p><span className="opacity-50">Timestamp:</span> {providerDiagnostic.timestamp}</p>
+                  <p>
+                    <span className="opacity-50">Fallback Used:</span>{' '}
+                    <span className={providerDiagnostic.fallbackUsed ? 'text-red-800 font-bold' : 'text-green-800 font-bold'}>
+                      {providerDiagnostic.fallbackUsed ? 'YES' : 'NO'}
+                    </span>
+                  </p>
+                  {providerDiagnostic.parseError && (
+                    <div>
+                      <p className="text-red-800 font-bold">Parse Error</p>
+                      <pre className="whitespace-pre-wrap break-words bg-red-50/60 p-2 rounded">{providerDiagnostic.parseError}</pre>
+                    </div>
+                  )}
+                  {providerDiagnostic.validationErrors.length > 0 && (
+                    <div>
+                      <p className="text-red-800 font-bold">Validation Errors</p>
+                      <ul className="list-disc pl-4 space-y-1">
+                        {providerDiagnostic.validationErrors.map((error, index) => (
+                          <li key={index}>{error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <details>
+                    <summary className="cursor-pointer font-bold text-paper-ink/50">Request Payload</summary>
+                    <pre className="mt-1 whitespace-pre-wrap break-words bg-paper-50 p-2 rounded">
+                      {JSON.stringify(providerDiagnostic.requestPayload, null, 2)}
+                    </pre>
+                  </details>
+                  <details>
+                    <summary className="cursor-pointer font-bold text-paper-ink/50">Raw Response</summary>
+                    <pre className="mt-1 whitespace-pre-wrap break-words bg-paper-50 p-2 rounded">
+                      {JSON.stringify(providerDiagnostic.rawResponse, null, 2)}
+                    </pre>
+                  </details>
+                  <details>
+                    <summary className="cursor-pointer font-bold text-paper-ink/50">Parsed JSON</summary>
+                    <pre className="mt-1 whitespace-pre-wrap break-words bg-paper-50 p-2 rounded">
+                      {JSON.stringify(providerDiagnostic.parsedJson, null, 2)}
+                    </pre>
+                  </details>
+                </>
+              ) : (
+                <p className="opacity-30 italic">No provider diagnostic yet...</p>
+              )}
+            </div>
+          )}
         </section>
 
         <section>

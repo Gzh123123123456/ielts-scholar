@@ -7,12 +7,16 @@ _Last updated: 2026-05-06_
 ### 1) API / Gemini Provider (Optional, Mock still default)
 - Keep Mock Provider as default.
 - Add Gemini as optional provider toggle/path.
-- Add Debug Panel visibility for:
+- **Done in V1.1 scaffolding**: provider safety wrappers normalize malformed Speaking/Writing feedback and prevent invalid provider output from crashing feedback UI.
+- **Done in V1.1 scaffolding**: Debug Panel visibility for latest provider diagnostic:
   - raw provider response
   - parsed JSON
   - parse error details
-- Ensure invalid JSON never crashes UI.
-- Add resilient fallback path when provider output is malformed.
+  - validation errors
+  - fallback-used status
+- Ensure invalid JSON never crashes UI. *(Scaffolded via safe wrappers; real provider connection still pending.)*
+- Add resilient fallback path when provider output is malformed. *(Scaffolded for existing provider interface.)*
+- Still pending: optional Gemini provider toggle/path. Gemini is not implemented yet.
 
 ### 2) Framework Intelligence (Writing Task 2)
 - Add future button: **Generate Framework Summary** / **Extract Final Framework**.

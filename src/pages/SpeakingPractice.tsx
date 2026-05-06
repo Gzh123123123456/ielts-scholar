@@ -4,13 +4,13 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
-import { getAIProvider } from '@/src/lib/ai';
+import { getAIProvider, getAIProviderName, safeAnalyzeSpeaking } from '@/src/lib/ai';
 import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/questions/bank';
 import { SpeakingFeedback } from '@/src/lib/ai/schemas';
 import { Mic, Square, Play, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Volume2, Info } from 'lucide-react';
 
 export default function SpeakingPractice() {
-  const { addDebugLog, saveSession, capabilities } = useApp();
+  const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
   const [part, setPart] = useState<1 | 2 | 3>(1);
   const [question, setQuestion] = useState<SpeakingQuestion | null>(null);
   const [step, setStep] = useState<'idle' | 'recording' | 'editing' | 'analyzing' | 'results'>('idle');
@@ -18,6 +18,7 @@ export default function SpeakingPractice() {
   const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const [feedback, setFeedback] = useState<SpeakingFeedback | null>(null);
+  const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<'Ready' | 'Requesting microphone...' | 'Listening...' | 'No speech detected' | 'Transcription unavailable' | 'Mic denied'>('Ready');
 
@@ -242,11 +243,13 @@ export default function SpeakingPractice() {
     addDebugLog("Starting AI analysis flow...");
     try {
       const provider = getAIProvider();
-      const result = await provider.analyzeSpeaking({
+      const { feedback: result, diagnostic } = await safeAnalyzeSpeaking(provider, getAIProviderName(), {
         part,
         question: question?.question || '',
         transcript
       });
+      setProviderDiagnostic(diagnostic);
+      setFeedbackFallbackUsed(diagnostic.fallbackUsed);
       setFeedback(result);
       setStep('results');
       
@@ -262,8 +265,12 @@ export default function SpeakingPractice() {
       });
       
       addDebugLog("Analysis complete and results displayed.");
+      if (diagnostic.fallbackUsed) {
+        addDebugLog("Provider fallback used for speaking feedback.");
+      }
     } catch (error) {
       addDebugLog(`Analysis Error: ${error}`);
+      setFeedbackFallbackUsed(false);
       setStep('editing');
     }
   };
@@ -419,6 +426,11 @@ export default function SpeakingPractice() {
         <div className="lg:col-span-12 xl:col-span-5">
           
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {feedbackFallbackUsed && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded font-sans">
+                  Some provider feedback was malformed and has been safely normalized. Check the Debug Panel for details.
+                </div>
+              )}
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-[10px] font-bold uppercase tracking-widest mb-6 text-paper-ink/40 border-b border-paper-ink/10 pb-2">Language Performance</h3>
                 <div className="flex items-baseline gap-2 mb-8">

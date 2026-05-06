@@ -4,14 +4,14 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
-import { getAIProvider } from '@/src/lib/ai';
+import { getAIProvider, getAIProviderName, safeAnalyzeWriting } from '@/src/lib/ai';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
 import { FileText, Send, ArrowRight, FileDown, ShieldCheck, AlertCircle } from 'lucide-react';
 
 
 export default function WritingTask2Practice() {
-  const { addDebugLog, saveSession } = useApp();
+  const { addDebugLog, saveSession, setProviderDiagnostic } = useApp();
   const [question, setQuestion] = useState<WritingQuestion | null>(null);
   const [phase, setPhase] = useState<'framework' | 'writing' | 'results'>('framework');
   const [frameworkChat, setFrameworkChat] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
@@ -20,6 +20,7 @@ export default function WritingTask2Practice() {
   const [essay, setEssay] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
+  const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
   const discussionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -61,11 +62,13 @@ export default function WritingTask2Practice() {
     addDebugLog("Analyzing essay...");
     try {
       const provider = getAIProvider();
-      const result = await provider.analyzeWriting({
+      const { feedback: result, diagnostic } = await safeAnalyzeWriting(provider, getAIProviderName(), {
         task: 'task2',
         question: question?.question || '',
         essay
       });
+      setProviderDiagnostic(diagnostic);
+      setFeedbackFallbackUsed(diagnostic.fallbackUsed);
       setFeedback(result);
       setPhase('results');
       
@@ -79,8 +82,12 @@ export default function WritingTask2Practice() {
         feedback: result
       });
       addDebugLog("Writing analysis complete");
+      if (diagnostic.fallbackUsed) {
+        addDebugLog("Provider fallback used for writing feedback.");
+      }
     } catch (error) {
       console.error(error);
+      setFeedbackFallbackUsed(false);
       alert("Analysis failed.");
     } finally {
       setIsAnalyzing(false);
@@ -275,6 +282,12 @@ export default function WritingTask2Practice() {
               {isMock && (
                 <div className="flex items-center gap-2 p-3 bg-paper-ink/5 rounded text-[10px] text-paper-ink/40 italic uppercase tracking-wider border border-paper-ink/10 font-sans">
                   <span>Prototype feedback shown using mock AI. Connect Gemini for official evaluation.</span>
+                </div>
+              )}
+
+              {feedbackFallbackUsed && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded font-sans">
+                  Some provider feedback was malformed and has been safely normalized. Check the Debug Panel for details.
                 </div>
               )}
 

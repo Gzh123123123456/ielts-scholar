@@ -3,6 +3,18 @@ export type IELTSMode = 'practice' | 'mock';
 export type SpeakingPart = 1 | 2 | 3;
 export type WritingTask = 'task1' | 'task2';
 
+export interface ProviderDiagnostic {
+  module: IELTSModule;
+  providerName: string;
+  requestPayload: unknown;
+  rawResponse: unknown;
+  parsedJson: unknown;
+  parseError?: string;
+  validationErrors: string[];
+  fallbackUsed: boolean;
+  timestamp: string;
+}
+
 export interface ScoreSet {
   fluencyCoherence?: number;
   lexicalResource: number;
