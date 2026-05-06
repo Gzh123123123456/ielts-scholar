@@ -1,0 +1,118 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { speakingPart1, writingTask2 } from '../data/questions/bank';
+
+interface UserProfile {
+  totalSessions: number;
+  estimatedBandHistory: { date: string; band: number }[];
+  errorTags: Record<string, number>;
+  lastPracticed: string | null;
+}
+
+interface BrowserCapabilities {
+  speechRecognition: boolean;
+  webkitSpeechRecognition: boolean;
+  mediaRecorder: boolean;
+  getUserMedia: boolean;
+  microphonePermission: PermissionState | 'unknown';
+}
+
+interface AppContextType {
+  profile: UserProfile;
+  saveSession: (data: any) => void;
+  sessions: any[];
+  debugLogs: string[];
+  addDebugLog: (log: string) => void;
+  capabilities: BrowserCapabilities;
+  setCapabilities: (caps: Partial<BrowserCapabilities>) => void;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [profile, setProfile] = useState<UserProfile>(() => {
+    const saved = localStorage.getItem('ielts_profile');
+    return saved ? JSON.parse(saved) : {
+      totalSessions: 0,
+      estimatedBandHistory: [],
+      errorTags: {},
+      lastPracticed: null
+    };
+  });
+
+  const [sessions, setSessions] = useState<any[]>(() => {
+    const saved = localStorage.getItem('ielts_sessions');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [capabilities, setCapabilitiesState] = useState<BrowserCapabilities>({
+    speechRecognition: false,
+    webkitSpeechRecognition: false,
+    mediaRecorder: false,
+    getUserMedia: false,
+    microphonePermission: 'unknown'
+  });
+
+  const setCapabilities = (caps: Partial<BrowserCapabilities>) => {
+    setCapabilitiesState(prev => ({ ...prev, ...caps }));
+  };
+
+  const addDebugLog = (log: string) => {
+    setDebugLogs(prev => [new Date().toISOString() + ': ' + log, ...prev].slice(0, 50));
+  };
+
+  useEffect(() => {
+    localStorage.setItem('ielts_profile', JSON.stringify(profile));
+  }, [profile]);
+
+  useEffect(() => {
+    localStorage.setItem('ielts_sessions', JSON.stringify(sessions));
+  }, [sessions]);
+
+  useEffect(() => {
+    // Check initial capabilities
+    const hasSpeech = !!(window as any).SpeechRecognition;
+    const hasWebkitSpeech = !!(window as any).webkitSpeechRecognition;
+    const hasMediaRecorder = !!(window.MediaRecorder);
+    const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    
+    setCapabilities({
+      speechRecognition: hasSpeech,
+      webkitSpeechRecognition: hasWebkitSpeech,
+      mediaRecorder: hasMediaRecorder,
+      getUserMedia: hasGetUserMedia
+    });
+    
+    if (navigator.permissions && (navigator.permissions as any).query) {
+      navigator.permissions.query({ name: 'microphone' as any }).then(status => {
+        setCapabilities({ microphonePermission: status.state });
+        status.onchange = () => {
+          setCapabilities({ microphonePermission: status.state });
+        };
+      });
+    }
+  }, []);
+
+  const saveSession = (session: any) => {
+    setSessions(prev => [session, ...prev]);
+    setProfile(prev => ({
+      ...prev,
+      totalSessions: prev.totalSessions + 1,
+      lastPracticed: new Date().toISOString(),
+      estimatedBandHistory: [...prev.estimatedBandHistory, { date: new Date().toISOString(), band: session.feedback?.bandEstimateExcludingPronunciation || session.feedback?.scores?.taskResponse || 0 }]
+    }));
+    addDebugLog(`Session saved: ${session.id}`);
+  };
+
+  return (
+    <AppContext.Provider value={{ profile, saveSession, sessions, debugLogs, addDebugLog, capabilities, setCapabilities }}>
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) throw new Error('useApp must be used within AppProvider');
+  return context;
+};

@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Georgia", "Times New Roman", Times, serif;
+  
+  --color-paper-50: #fdfaf6;
+  --color-paper-100: #fbf6ef;
+  --color-paper-200: #f7ede2;
+  --color-accent-terracotta: #a64d32;
+  --color-paper-ink: #3c2f2f;
+  --color-paper-ink-muted: #5c4f4f;
+}
+
+@layer base {
+  body {
+    @apply bg-paper-100 text-paper-ink font-serif antialiased selection:bg-accent-terracotta/20;
+    background-image: url("https://www.transparenttextures.com/patterns/paper.png");
+    font-size: 1.05rem;
+    line-height: 1.75;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif font-semibold tracking-tight;
+  }
+
+  /* Global input/textarea focus */
+  textarea:focus, input:focus {
+    outline: none;
+    border-color: var(--color-accent-terracotta);
+    box-shadow: 0 0 0 1px rgba(166, 77, 50, 0.2);
+    caret-color: var(--color-accent-terracotta);
+  }
+
+  textarea::placeholder, input::placeholder {
+    opacity: 0.40;
+  }
+
+  /* Ensure all clickable elements have cursor feedback */
+  button:not(:disabled), a, [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* Custom Scrollbar for the paper feel */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-paper-200;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-accent-terracotta/30 hover:bg-accent-terracotta/50 transition-colors rounded-full;
+  }
+}
+
+.paper-card {
+  @apply bg-paper-50 border border-paper-ink/10 rounded-sm p-6 shadow-sm transition-colors duration-200;
+}
+
+.paper-divider {
+  @apply h-[1px] w-full bg-paper-ink/10 my-4;
+}
+
+.accent-button {
+  @apply px-4 py-2 bg-accent-terracotta text-paper-50 font-serif hover:bg-accent-terracotta/80 transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100 disabled:cursor-not-allowed cursor-pointer;
+}
+
+.phase-tab {
+  @apply px-4 py-1 rounded-sm transition-all duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/40 hover:text-paper-ink hover:bg-paper-ink/5;
+}
+
+.phase-tab-active {
+  @apply bg-accent-terracotta text-paper-50 shadow-sm;
+}
+
+.phase-tab:disabled, .phase-tab-active:disabled {
+  @apply opacity-30 cursor-not-allowed;
+}
+
+.question-type-badge {
+  @apply text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/60 italic border border-accent-terracotta/15 rounded-sm px-2 py-0.5;
+}
+
+.ink-link {
+  @apply text-accent-terracotta hover:underline font-medium;
+}
+
+.markdown-body {
+  @apply font-serif leading-relaxed;
+}
+
+.markdown-body h1, .markdown-body h2 {
+  @apply mt-6 mb-4 pb-2 border-b border-paper-ink/10;
+}
+
+.markdown-body p {
+  @apply my-4;
+}
+
+.markdown-body ul {
+  @apply list-disc list-inside my-4;
+}

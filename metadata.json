@@ -1,0 +1,13 @@
+{
+  "name": "IELTS Scholar: Local-First Training Agent",
+  "description": "A serious, academic IELTS Speaking and Writing training agent for Chinese native speakers. Local-first, exportable to Obsidian, and AI-powered feedback.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "AI-powered language training",
+    "Speech-to-text transcription",
+    "Writing framework guidance",
+    "Obsidian-compatible export"
+  ]
+}
