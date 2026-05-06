@@ -222,6 +222,15 @@ export default function WritingTask2Practice() {
                 ))}
               </div>
 
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
+                <PaperCard>
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap text-paper-ink">
+                    {essay}
+                  </div>
+                </PaperCard>
+              </section>
+
               {isMock && (
                 <div className="flex items-center gap-2 p-3 bg-paper-ink/5 rounded text-[10px] text-paper-ink/40 italic uppercase tracking-wider border border-paper-ink/10 font-sans">
                   <span>Prototype feedback shown using mock AI. Connect Gemini for official evaluation.</span>
@@ -271,13 +280,14 @@ export default function WritingTask2Practice() {
                   {feedback.modelAnswer}
                   <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-paper-50 to-transparent" />
                 </div>
-                <div className="mt-6 flex justify-between gap-4">
-                  <SerifButton onClick={exportMarkdown} variant="outline" className="flex-1 text-xs flex items-center justify-center gap-2">
-                    <FileDown className="w-4 h-4" /> Download Complete Note
-                  </SerifButton>
-                  <SerifButton onClick={loadRandomQuestion} className="flex-1 text-xs">New Question</SerifButton>
-                </div>
               </PaperCard>
+
+              <div className="flex justify-between gap-4">
+                <SerifButton onClick={exportMarkdown} variant="outline" className="flex-1 text-xs flex items-center justify-center gap-2">
+                  <FileDown className="w-4 h-4" /> Download Complete Note
+                </SerifButton>
+                <SerifButton onClick={loadRandomQuestion} className="flex-1 text-xs">New Question</SerifButton>
+              </div>
             </div>
           )}
       </div>
