@@ -132,15 +132,24 @@ export default function WritingTask2Practice() {
             <div className="space-y-6">
               <PaperCard className="p-0 overflow-hidden">
                 <div className="px-6 pt-6 pb-4 border-b border-paper-ink/10 bg-paper-ink/[0.02]">
-                  <h3 className="text-sm font-bold uppercase tracking-widest mb-2">Framework Planning Notes</h3>
-                  <p className="text-xs text-paper-ink/50 font-sans">
-                    Outline your position, reasons, and counter-view structure in Chinese or English.
+                  <h3 className="text-base font-bold uppercase tracking-widest mb-2">Framework Notes</h3>
+                  <p className="text-sm text-paper-ink/70">
+                    Draft in Chinese or English. Focus on Position, View A, View B, and My opinion.
                   </p>
+                </div>
+                <div className="px-6 pt-4 pb-2">
+                  <div className="grid sm:grid-cols-2 gap-2 text-sm">
+                    {['Position', 'View A', 'View B', 'My opinion'].map((label) => (
+                      <div key={label} className="border border-paper-ink/10 bg-paper-ink/[0.02] px-3 py-2">
+                        <span className="font-semibold">{label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="px-6 py-5 space-y-3 max-h-[280px] overflow-auto">
                   {frameworkChat.map((msg, i) => (
                     <div key={i} className="border-l-2 border-paper-ink/10 pl-3 py-1">
-                      <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/40 mb-1">
+                      <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/50 mb-1">
                         {msg.role === 'user' ? 'Your note' : 'Prompt guidance'}
                       </p>
                       <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted italic'} text-sm leading-relaxed`}>
@@ -185,17 +194,6 @@ export default function WritingTask2Practice() {
               <div className="flex justify-between items-center bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest">
                 <span>WORD COUNT: {essay.trim() ? essay.trim().split(/\s+/).length : 0}</span>
                 <div className="flex items-center gap-4">
-                  {(() => {
-                    const wc = essay.trim() ? essay.trim().split(/\s+/).length : 0;
-                    if (wc > 0 && wc < 20) {
-                      return (
-                        <span className="text-[10px] normal-case tracking-normal text-paper-ink/30 italic max-w-[200px] text-right leading-tight">
-                          Short for a full Task 2 essay. Feedback is best treated as paragraph-level practice.
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
                   <SerifButton onClick={analyzeEssay} disabled={isAnalyzing || !essay.trim()} className="flex items-center gap-2">
                     {isAnalyzing ? "Analyzing..." : "Submit for Analysis"} <Send className="w-4 h-4" />
                   </SerifButton>

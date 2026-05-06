@@ -415,8 +415,9 @@ export default function SpeakingPractice() {
           )}
         </div>
 
+        {step === 'results' && feedback && (
         <div className="lg:col-span-12 xl:col-span-5">
-          {step === 'results' && feedback ? (
+          
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-[10px] font-bold uppercase tracking-widest mb-6 text-paper-ink/40 border-b border-paper-ink/10 pb-2">Language Performance</h3>
@@ -504,14 +505,8 @@ export default function SpeakingPractice() {
                 </div>
               </PaperCard>
             </div>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-sm text-paper-ink/40 font-serif italic">
-                Feedback appears after you stop and analyze your answer.
-              </p>
-            </div>
-          )}
         </div>
+        )}
       </div>
     </PageShell>
   );
