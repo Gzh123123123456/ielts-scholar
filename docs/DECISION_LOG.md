@@ -15,6 +15,40 @@
 - **Word count**: Still displayed; a lightweight hint appears when `0 < wordCount < 20` indicating the text is short and feedback is best treated as paragraph-level practice. Word count does NOT gate submission.
 - **Unchanged**: Phase 3 Final Analysis, Mock Provider, Markdown export, static Training Coach sidebar. No real-time sentence-by-sentence coaching, no Gemini.
 
+## [2026-05-06] Writing Task 2 Framework Workflow (V1) and API-Phase Direction
+- **Decision (V1)**: Phase 1 separates process and output:
+  - **Coach Discussion / Notes** = iterative drafting conversation.
+  - **Final Framework Summary** = user-edited consolidated framework used for writing.
+- **Decision (V1)**: Final Framework Summary is **manual** (user editable), not auto-generated.
+- **Decision (V1)**: Phase 2 displays Final Framework Summary before essay drafting.
+- **Decision (V1)**: Phase 3 displays **My Framework** and **My Essay** before feedback sections.
+- **Reason**: Real Gemini/API provider is not connected yet; V1 must stay mock-first and deterministic.
+- **Future (V1.1 / API phase)**:
+  - Add **Generate Framework Summary** / **Extract Final Framework** action.
+  - Use real AI provider to summarize Phase 1 coach discussion into structured fields:
+    - Position
+    - View A
+    - View B
+    - My opinion
+    - Paragraph plan
+    - Possible example
+  - User must still be able to edit the generated summary before moving to Phase 2.
+- **Future writing feedback direction**:
+  - Keep My Framework + My Essay placement before feedback.
+  - Consider sentence-level correction mapping in later versions.
+  - Inline annotation is future scope; explicitly not part of V1.
+
+## [2026-05-06] Session-Level Notes Roadmap Decision
+- **Current (V1)**: Markdown export is attempt-level (single speaking attempt or single writing analysis).
+- **Future**: Add **Finish Session / Export Session Note**.
+- **Session definition**: One session may include multiple speaking attempts, multiple questions, and repeated attempts on the same question.
+- **Planned session note content**:
+  - repeated error patterns
+  - improvement trends across attempts
+  - best upgraded answers
+  - reusable expressions
+  - review cards for spaced repetition
+
 ## [2026-05-06] IELTS Knowledge Layer Added
 - **Added**: `/knowledge/ielts` Markdown files as app-usable feedback rules (rubric, strategy, error patterns, style boundaries, note-generation standards).
 - **Decision**: Knowledge files are not answer banks or textbooks; they provide rubric, tag, style, and note-generation constraints.

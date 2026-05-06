@@ -6,6 +6,14 @@ This project was exported from Google AI Studio as a React + TypeScript + Vite I
 
 No architecture was refactored. No Gemini integration was added. No database was introduced. No real-time AI correction was added. Mock Provider remains the default.
 
+### Documentation update (2026-05-06)
+This document now records the intentional V1 Writing Task 2 framework flow:
+- Phase 1 separates **Coach Discussion / Notes** (process) from **Final Framework Summary** (output).
+- Final Framework Summary is currently **manual and user-edited** in V1.
+- Phase 2 surfaces the Final Framework Summary above essay writing.
+- Phase 3 surfaces **My Framework** and **My Essay** before feedback.
+- No real API summarization is enabled yet because Gemini/provider connection is intentionally pending.
+
 ---
 
 ## 2. Files Changed
@@ -148,3 +156,39 @@ Copy the prompt below into an AI Studio session with the original project:
 - **Gemini Provider** is not yet connected. Mock Provider remains the default.
 - **Writing Task 1** is a placeholder page.
 - **Speaking Mock** and **Writing Task 2 Mock** are placeholder pages.
+
+---
+
+## 8. Planned Next Step (V1.1 / API Phase)
+
+### Writing framework consolidation
+- Add a mock-safe but API-ready action such as:
+  - **Generate Framework Summary**, or
+  - **Extract Final Framework**
+- When real provider is connected, summarize Phase 1 coach discussion into structured fields:
+  - Position
+  - View A
+  - View B
+  - My opinion
+  - Paragraph plan
+  - Possible example
+- Keep user editability mandatory before moving to Phase 2.
+
+### Session-level notes
+- Current V1 export is attempt-level.
+- Future flow should support **Finish Session / Export Session Note**.
+- A session may include:
+  - multiple speaking attempts
+  - multiple questions
+  - repeated attempts on the same question
+- Session note target content:
+  - repeated error patterns
+  - improvement trends
+  - best upgraded answers
+  - reusable expressions
+  - review cards
+
+### Future writing feedback layers
+- Keep current Phase 3 ordering (My Framework + My Essay before feedback).
+- Add sentence-level correction mapping in a later version.
+- Inline annotation is future scope only; not part of V1.
