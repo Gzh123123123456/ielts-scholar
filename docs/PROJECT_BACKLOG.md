@@ -57,6 +57,12 @@ _Last updated: 2026-05-06_
 - Repeated-attempt comparison views.
 - Better transcript-based naturalness upgrades.
 - Pronunciation remains not formally assessed until real audio scoring exists.
+- **Deferred (V1.2+) — Speaking Stuck-Point Assist / Chinese Idea Support**
+  - After Stop & Review, allow learner to optionally add a Chinese note for the idea they could not express in English.
+  - AI coach rewrites that idea into natural IELTS Speaking English.
+  - Return reusable expressions + a suggested continuation from the stuck point.
+  - Explicitly out of scope now: real-time bilingual speech recognition.
+  - Explicitly out of scope now: SpeechRecognition architecture changes.
 
 ## P2 — Mock Exam Productization
 

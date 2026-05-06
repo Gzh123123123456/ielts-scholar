@@ -113,7 +113,7 @@ export default function WritingTask2Practice() {
         </PaperCard>
       </div>
 
-      <div className="flex gap-4 p-1 bg-paper-ink/5 rounded-sm self-start mb-8 font-sans text-[10px] uppercase tracking-widest font-bold">
+      <div className="flex gap-4 p-1 bg-paper-ink/5 rounded-sm self-start mb-8 font-sans uppercase tracking-widest font-bold">
         <button
           onClick={() => setPhase('framework')}
           className={phase === 'framework' ? 'phase-tab phase-tab-active' : 'phase-tab'}
@@ -157,7 +157,7 @@ export default function WritingTask2Practice() {
                 </div>
                 <div ref={discussionRef} className="px-6 py-5 space-y-3 max-h-[280px] overflow-auto">
                   {frameworkChat.map((msg, i) => (
-                    <div key={i} className="border-l-2 border-paper-ink/10 pl-3 py-1">
+                    <div key={i} className="border-l-2 border-paper-ink/10 pl-3 py-1.5">
                       <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/50 mb-1">
                         {msg.role === 'user'
                           ? 'Your Note'
@@ -165,7 +165,7 @@ export default function WritingTask2Practice() {
                             ? 'Prompt Guidance'
                             : 'Coach Feedback'}
                       </p>
-                      <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted italic'} text-sm leading-relaxed`}>
+                      <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted italic'} text-base leading-8`}>
                         {msg.text}
                       </p>
                     </div>
@@ -211,7 +211,7 @@ export default function WritingTask2Practice() {
               <PaperCard>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Framework Summary</h3>
                 {finalFrameworkSummary.trim() ? (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalFrameworkSummary}</p>
+                  <p className="text-base leading-8 whitespace-pre-wrap">{finalFrameworkSummary}</p>
                 ) : (
                   <p className="text-sm text-paper-ink/60">No final framework summary yet. You can go back to Phase 1 to refine it.</p>
                 )}
@@ -256,7 +256,7 @@ export default function WritingTask2Practice() {
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Framework</h3>
                 <PaperCard>
                   {finalFrameworkSummary.trim() ? (
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalFrameworkSummary}</p>
+                    <p className="text-base leading-8 whitespace-pre-wrap">{finalFrameworkSummary}</p>
                   ) : (
                     <p className="text-sm text-paper-ink/60">No final framework summary yet. You can go back to Phase 1 to refine it.</p>
                   )}
@@ -266,7 +266,7 @@ export default function WritingTask2Practice() {
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
                 <PaperCard>
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap text-paper-ink">
+                  <div className="text-base leading-8 whitespace-pre-wrap text-paper-ink">
                     {essay}
                   </div>
                 </PaperCard>
@@ -285,14 +285,14 @@ export default function WritingTask2Practice() {
                 <div className="space-y-4">
                   {feedback.sentenceFeedback.map((item, i) => (
                     <PaperCard key={i} className="border-l-2 border-l-paper-ink/20">
-                      <div className="text-xs text-paper-ink/40 italic line-through mb-1">{item.original}</div>
-                      <div className="text-sm font-bold mb-2">{item.correction}</div>
+                      <div className="text-sm text-paper-ink/45 italic line-through mb-2 leading-7">{item.original}</div>
+                      <div className="text-base font-bold mb-3 leading-8">{item.correction}</div>
                       <div className="flex items-center gap-2 mb-2 text-[10px] uppercase font-sans font-bold text-accent-terracotta">
                         <span>{item.dimension}</span>
                         <span className="opacity-30">•</span>
                         <span>{item.tag}</span>
                       </div>
-                      <p className="text-[11px] text-paper-ink-muted bg-paper-ink/5 p-2 rounded">{item.explanationZh}</p>
+                      <p className="text-sm leading-7 text-paper-ink-muted bg-paper-ink/5 p-3 rounded">{item.explanationZh}</p>
                     </PaperCard>
                   ))}
                 </div>
@@ -304,11 +304,11 @@ export default function WritingTask2Practice() {
                 </h3>
                 <div className="space-y-3">
                   {feedback.frameworkFeedback.map((f, i) => (
-                    <div key={i} className={`p-4 border border-paper-ink/10 rounded flex items-start gap-3 transition-colors ${f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-ink/5'}`}>
+                    <div key={i} className={`p-5 border border-paper-ink/10 rounded flex items-start gap-3 transition-colors ${f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-ink/5'}`}>
                       <div className={`w-2 h-2 rounded-full mt-1.5 ${f.severity === 'fatal' ? 'bg-red-800' : 'bg-accent-terracotta'}`} />
                       <div>
-                        <h4 className="text-sm font-bold">{f.issue}</h4>
-                        <p className="text-xs italic text-paper-ink/60">{f.suggestionZh}</p>
+                        <h4 className="text-base font-bold leading-7">{f.issue}</h4>
+                        <p className="text-sm italic leading-7 text-paper-ink/60 mt-1">{f.suggestionZh}</p>
                       </div>
                     </div>
                   ))}
@@ -317,7 +317,7 @@ export default function WritingTask2Practice() {
 
               <PaperCard>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Model Answer Excerpt</h3>
-                <div className="text-sm italic text-paper-ink/60 leading-relaxed max-h-40 overflow-hidden relative">
+                <div className="text-base italic text-paper-ink/60 leading-8 max-h-48 overflow-hidden relative">
                   {feedback.modelAnswer}
                   <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-paper-50 to-transparent" />
                 </div>

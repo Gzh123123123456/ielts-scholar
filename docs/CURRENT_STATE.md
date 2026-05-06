@@ -22,6 +22,10 @@ _Last updated: 2026-05-06_
 - Phase 2 displays Final Framework Summary before essay writing.
 - Phase 3 displays My Framework and My Essay before AI feedback.
 - Submit gating is disabled only when `essay.trim().length === 0` (implemented as `!essay.trim()`).
+- UI readability polish implemented (no logic changes):
+  - Slightly larger base body typography and line-height.
+  - Slightly larger feedback-card/paper-card spacing and phase-tab readability.
+  - Improved line-height/spacing in Final Analysis sections (My Framework, My Essay, Key Corrections, Framework Logic Review, Model Answer Excerpt).
 
 ## Export Behavior (Implemented)
 - Markdown export is attempt-level in V1.
