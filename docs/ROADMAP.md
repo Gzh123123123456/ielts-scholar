@@ -1,35 +1,57 @@
 # Roadmap
 
-## V1.1: API-Assisted Framework Consolidation + Session Notes
-- Add **Generate Framework Summary** / **Extract Final Framework** in Writing Task 2 Phase 1.
-- Use real AI provider (post-connection phase) to summarize Coach Discussion into structured framework fields:
+_Last updated: 2026-05-06_
+
+## V1.1 — API Readiness + Framework Intelligence
+- Keep Mock Provider as default.
+- Add Gemini provider as optional path (post-connection phase).
+- Add Debug Panel diagnostics for raw response, parsed JSON, and parse errors.
+- Ensure invalid JSON does not crash UI.
+
+### Writing Task 2 Framework Intelligence
+- Add **Generate Framework Summary** / **Extract Final Framework**.
+- Extract structured framework from Phase 1 discussion:
   - Position
   - View A
   - View B
   - My opinion
   - Paragraph plan
   - Possible example
-- Keep **user editability mandatory** before moving from Phase 1 to Phase 2.
-- Add **Finish Session / Export Session Note** flow:
-  - aggregate multiple speaking attempts and writing attempts/questions in one study session
-  - summarize repeated errors, improvement trends, best upgraded answers, reusable expressions, and review cards
+- Require user edit/confirmation before entering Phase 2.
 
-## V2: The Mock Exam Update
-- Implementation of `SpeakingMock.tsx` and `WritingTask2Mock.tsx`.
-- Strict timers and sequential question flow.
-- Real API providers (Gemini/OpenAI) with error handling.
+## V1.2 — Session-Level Note System
+- Add **Finish Session / Export Session Note**.
+- Aggregate multi-attempt learning across a full study session.
+- Include repeated error patterns, improvements, best upgraded answers, reusable expressions, and review cards.
 
-## V3: Data & Visualization
-- Task 1 Academic charts with user interaction.
+## V1.3 — Feedback Granularity Upgrade
+- Sentence numbering and correction-to-source mapping.
+- Click-to-locate correction.
+- Inline annotation later (not full editor yet).
+
+## V2 — Mock Exam Update
+- Dedicated Speaking and Writing Task 2 mock flows.
+- Strict timers and sequential Speaking Part 1/2/3.
+- Writing Task 2 40-minute mock mode.
+- End-of-session report.
+- Practice and Mock modes remain separate.
+
+## V3 — Data & Visualization
+- Task 1 Academic charts with interaction.
 - Task 1 General Training letter prompts.
 - Audio recording storage (MediaRecorder) and simple playback.
 
-## V4: Knowledge & RAG
+## V4 — Knowledge & RAG (Later)
 - PDF RAG for personal IELTS materials.
-- Local filesystem access (via File System Access API or local Node server).
-- Advanced pronunciation scoring integration.
+- Local filesystem access options.
+- Advanced pronunciation scoring integration (after reliable audio scoring path).
 
-## Writing Feedback Evolution (Post-V1)
-- Keep current ordering in Writing Phase 3: My Framework and My Essay before feedback.
-- Add sentence-level correction mapping in a future iteration.
-- Consider inline annotation in later versions (not in V1).
+---
+
+## Do Not Do Yet
+- Do not connect Gemini during UI polish.
+- Do not add RAG yet.
+- Do not add pronunciation scoring yet.
+- Do not implement full inline annotation editor yet.
+- Do not replace Mock Provider as default.
+- Do not rewrite app architecture.

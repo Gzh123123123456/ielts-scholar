@@ -166,3 +166,30 @@ This ensures the permanent note records the limitation without discouraging the 
 - Do not wrap the note in a code block. Output raw Markdown.
 - Do not include the Mock Provider disclaimer in the user's permanent note.
 - Do not claim AI auto-generated a final framework in V1 when it was manually authored by the user.
+
+## Product-State Notes (2026-05-06)
+
+- Writing Task 2 Final Framework Summary is currently manual/user-edited in V1.
+- Do not imply that V1 performs real AI extraction from discussion unless provider-integration phase is active.
+- Phase 2 should consume the final framework summary (not raw coach discussion logs).
+- Phase 3 `My Framework` should mirror the same final framework summary used for writing.
+
+## Future Session Note Direction
+
+When session-level export is introduced, generate a separate session note that can aggregate:
+- multiple Speaking parts/questions/attempts
+- Writing framework discussion, drafts, feedback, and revisions
+
+The session note should emphasize:
+- repeated error patterns
+- improvements over retries
+- best upgraded answers
+- reusable expressions
+- review cards
+
+## Do Not Do Yet (Generation Scope)
+
+- Do not fabricate Gemini-powered framework extraction in V1.
+- Do not emit RAG-sourced claims in V1 notes.
+- Do not include pronunciation scoring claims beyond current product capability.
+- Do not output full inline-annotation style notes as if editor tooling already exists.

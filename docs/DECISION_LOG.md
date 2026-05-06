@@ -67,3 +67,28 @@
 
 - **Decision**: Georgia/Serif typography + Warm Paper colors.
 - **Reason**: Match the psychology of "serious study" vs "quick chat".
+
+## [2026-05-06] Current State Lock for UI Polish + V1.1 Planning
+- **Locked behavior**:
+  - Writing Task 2 Phase 1 separates Coach Discussion from Final Framework Summary.
+  - Final Framework Summary is user-edited manually in V1.
+  - Phase 2 shows Final Framework Summary before essay drafting.
+  - Phase 3 shows My Framework and My Essay before feedback.
+  - Writing Submit gating remains empty-only (`essay.trim().length === 0`).
+  - Speaking no-speech auto-retry, Retry cleanup, and Stop & Review protection remain preserved.
+  - Mock Provider remains default; Gemini/API remains unconnected.
+  - V1 pronunciation remains not formally assessed.
+
+- **Deferred to V1.1+**:
+  - API-assisted framework extraction (Generate/Extract Final Framework).
+  - Session-level export (Finish Session / Export Session Note).
+  - Sentence-level correction mapping and later inline annotation.
+  - Advanced speaking comparison and pronunciation scoring.
+
+- **Do Not Do Yet policy reaffirmed**:
+  - No Gemini connection during UI polish.
+  - No RAG yet.
+  - No pronunciation scoring yet.
+  - No full inline annotation editor yet.
+  - No provider-default swap away from Mock.
+  - No architecture rewrite.
