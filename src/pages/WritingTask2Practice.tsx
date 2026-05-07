@@ -7,6 +7,16 @@ import { useApp } from '@/src/context/AppContext';
 import { getAIProvider, getAIProviderName, isMockProviderActive, safeAnalyzeWriting, safeExtractWritingFramework } from '@/src/lib/ai';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
+import {
+  createRecordId,
+  getActiveWritingTask2,
+  getPracticeRecords,
+  PracticeRecord,
+  saveActiveWritingTask2,
+  summarizeDiagnostic,
+  upsertPracticeRecord,
+  WritingTask2PracticeRecord,
+} from '@/src/lib/practiceRecords';
 import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
 
 export default function WritingTask2Practice() {
@@ -22,22 +32,97 @@ export default function WritingTask2Practice() {
   const [frameworkExtractMessage, setFrameworkExtractMessage] = useState('');
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
   const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
+  const [recentAttempts, setRecentAttempts] = useState<PracticeRecord[]>([]);
+  const [restoreMessage, setRestoreMessage] = useState('');
+  const [providerErrorMessage, setProviderErrorMessage] = useState('');
   const discussionRef = useRef<HTMLDivElement | null>(null);
   const isFrameworkInputComposingRef = useRef(false);
+  const activeAttemptIdRef = useRef(createRecordId('wt2'));
 
   useEffect(() => {
+    refreshRecentAttempts();
+    const active = getActiveWritingTask2();
+    if (active) {
+      restoreWritingAttempt(active, 'Restored your latest Writing Task 2 attempt from this browser.');
+      return;
+    }
     loadRandomQuestion();
   }, []);
 
+  useEffect(() => {
+    if (!question || isAnalyzing || isExtractingFramework) return;
+    persistWritingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
+  }, [question, phase, frameworkChat, frameworkInput, finalFrameworkSummary, essay, feedback, feedbackFallbackUsed, providerErrorMessage]);
+
+  const refreshRecentAttempts = () => {
+    setRecentAttempts(getPracticeRecords(8).filter(record => record.module === 'writing'));
+  };
+
+  const buildWritingRecord = (status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft'): WritingTask2PracticeRecord | null => {
+    if (!question) return null;
+    const timestamp = new Date().toISOString();
+    return {
+      id: activeAttemptIdRef.current,
+      module: 'writing',
+      mode: 'practice',
+      status,
+      task: 'task2',
+      question: question.question,
+      questionId: question.id,
+      questionData: question,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      phase,
+      frameworkChat,
+      frameworkInput,
+      finalFrameworkSummary,
+      essay,
+      feedback: status === 'provider_failed' ? undefined : feedback || undefined,
+      feedbackFallbackUsed,
+      obsidianMarkdown: status === 'provider_failed' ? undefined : feedback?.obsidianMarkdown,
+    };
+  };
+
+  const persistWritingAttempt = (status?: 'draft' | 'analyzed' | 'provider_failed') => {
+    const record = buildWritingRecord(status);
+    if (!record) return;
+    saveActiveWritingTask2(record);
+    upsertPracticeRecord(record);
+    refreshRecentAttempts();
+  };
+
+  const restoreWritingAttempt = (record: WritingTask2PracticeRecord, message = 'Opened saved Writing Task 2 attempt. No AI call was made.') => {
+    activeAttemptIdRef.current = record.id;
+    setQuestion(record.questionData || writingTask2.find(item => item.id === record.questionId) || {
+      id: record.questionId || record.id,
+      type: 'saved',
+      question: record.question,
+    });
+    setPhase(record.feedback ? 'results' : record.phase);
+    setFrameworkChat(record.frameworkChat.length ? record.frameworkChat : [{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
+    setFrameworkInput(record.frameworkInput);
+    setFinalFrameworkSummary(record.finalFrameworkSummary);
+    setEssay(record.essay);
+    setFeedback(record.feedback || null);
+    setFeedbackFallbackUsed(Boolean(record.feedbackFallbackUsed || record.providerDiagnostic?.fallbackUsed));
+    setProviderErrorMessage(record.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your draft is preserved.' : '');
+    setFrameworkExtractMessage('');
+    setRestoreMessage(message);
+  };
+
   const loadRandomQuestion = () => {
     const random = writingTask2[Math.floor(Math.random() * writingTask2.length)];
+    activeAttemptIdRef.current = createRecordId('wt2');
     setQuestion(random);
     setPhase('framework');
     setEssay('');
     setFeedback(null);
+    setFeedbackFallbackUsed(false);
     setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
     setFinalFrameworkSummary('');
     setFrameworkExtractMessage('');
+    setProviderErrorMessage('');
+    setRestoreMessage('');
     addDebugLog(`Loaded writing question: ${random.id}`);
   };
 
@@ -104,6 +189,13 @@ export default function WritingTask2Practice() {
       });
 
       setProviderDiagnostic(diagnostic);
+      if (diagnostic.failureKind === 'provider_unavailable') {
+        setFrameworkExtractMessage('AI provider temporarily unavailable. Please retry later. You can keep editing the framework manually.');
+        addDebugLog('Provider unavailable for framework extraction.');
+        persistWritingAttempt('provider_failed');
+        return;
+      }
+
       setFinalFrameworkSummary(result.editableSummary);
       setFrameworkExtractMessage(
         diagnostic.fallbackUsed
@@ -127,6 +219,7 @@ export default function WritingTask2Practice() {
 
   const analyzeEssay = async () => {
     setIsAnalyzing(true);
+    setProviderErrorMessage('');
     addDebugLog("Analyzing essay...");
     try {
       const provider = getAIProvider();
@@ -136,9 +229,36 @@ export default function WritingTask2Practice() {
         essay
       });
       setProviderDiagnostic(diagnostic);
+
+      if (diagnostic.failureKind === 'provider_unavailable') {
+        setFeedbackFallbackUsed(false);
+        setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your essay draft is preserved.');
+        persistWritingAttempt('provider_failed');
+        const failedBase = buildWritingRecord('provider_failed');
+        if (failedBase) {
+          upsertPracticeRecord({
+            ...failedBase,
+            providerDiagnostic: summarizeDiagnostic(diagnostic),
+          });
+        }
+        addDebugLog('Provider unavailable for writing feedback.');
+        return;
+      }
+
       setFeedbackFallbackUsed(diagnostic.fallbackUsed);
       setFeedback(result);
       setPhase('results');
+      persistWritingAttempt('analyzed');
+      const analyzedBase = buildWritingRecord('analyzed');
+      if (analyzedBase) {
+        upsertPracticeRecord({
+          ...analyzedBase,
+          feedback: result,
+          feedbackFallbackUsed: diagnostic.fallbackUsed,
+          obsidianMarkdown: result.obsidianMarkdown,
+          providerDiagnostic: summarizeDiagnostic(diagnostic),
+        });
+      }
 
       saveSession({
         id: `wt2_${Date.now()}`,
@@ -147,7 +267,9 @@ export default function WritingTask2Practice() {
         mode: 'practice',
         question: question?.question,
         essay,
-        feedback: result
+        framework: finalFrameworkSummary,
+        feedback: result,
+        providerDiagnostic: summarizeDiagnostic(diagnostic),
       });
       addDebugLog("Writing analysis complete");
       if (diagnostic.fallbackUsed) {
@@ -169,6 +291,17 @@ export default function WritingTask2Practice() {
     const a = document.createElement('a');
     a.href = url;
     a.download = `ielts-writing-${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportSavedMarkdown = (record: PracticeRecord) => {
+    if (!record.obsidianMarkdown) return;
+    const blob = new Blob([record.obsidianMarkdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ielts-${record.module}-${new Date(record.updatedAt).toISOString().split('T')[0]}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -212,6 +345,63 @@ export default function WritingTask2Practice() {
         >
           Phase 3: Final Analysis
         </button>
+      </div>
+
+      <div className={writingWorkspaceClass}>
+        {(restoreMessage || providerErrorMessage) && (
+          <div className="mb-6 space-y-2">
+            {restoreMessage && (
+              <div className="p-3 bg-paper-ink/5 border border-paper-ink/10 rounded-sm text-xs font-sans text-paper-ink/55">
+                {restoreMessage}
+              </div>
+            )}
+            {providerErrorMessage && (
+              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
+                {providerErrorMessage}
+              </div>
+            )}
+          </div>
+        )}
+
+        {recentAttempts.length > 0 && (
+          <details className="mb-8 border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
+            <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between">
+              <span>Practice Records / Recent Attempts</span>
+              <span className="text-paper-ink/35">Open</span>
+            </summary>
+            <div className="mt-4 space-y-2">
+              {recentAttempts.map(record => (
+                <div key={record.id} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center border border-paper-ink/10 bg-paper-100/60 p-3">
+                  <div>
+                    <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/45">
+                      Writing Task {(record as WritingTask2PracticeRecord).task.toUpperCase()} · {record.status} · {new Date(record.updatedAt).toLocaleString()}
+                    </p>
+                    <p className="text-sm leading-6 text-paper-ink/75 line-clamp-2">{record.question}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <SerifButton
+                      type="button"
+                      variant="outline"
+                      className="text-xs py-2"
+                      onClick={() => restoreWritingAttempt(record as WritingTask2PracticeRecord)}
+                    >
+                      View
+                    </SerifButton>
+                    <SerifButton
+                      type="button"
+                      variant="outline"
+                      className="text-xs py-2"
+                      disabled={!record.obsidianMarkdown}
+                      onClick={() => exportSavedMarkdown(record)}
+                    >
+                      Export
+                    </SerifButton>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
       </div>
 
       <div className={writingWorkspaceClass}>

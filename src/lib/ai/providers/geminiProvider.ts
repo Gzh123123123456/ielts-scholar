@@ -96,11 +96,20 @@ export class GeminiProvider implements AIProvider {
     question: string;
     transcript: string;
   }): Promise<string> {
+    const partFocus = params.part === 1
+      ? 'Part 1 focus: direct answer quality, naturalness, concise development, and whether the answer sounds spontaneous.'
+      : params.part === 2
+        ? 'Part 2 focus: cue card coverage, answer architecture/story structure, specificity/detail, and reusable story material / 万金油素材.'
+        : 'Part 3 focus: abstract reasoning, comparison/generalization, example quality, and argument depth.';
+
     return this.generateJson(`${strictJsonInstruction}
 
 You are an IELTS Speaking feedback engine for a local-first practice app.
 Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null and the note must say pronunciation is not formally assessed in V1.
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
+${partFocus}
+Avoid endless sentence-level nitpicking. If the answer is already strong, return an empty fatalErrors array and say no critical correction is needed through naturalnessHints or upgradedAnswer.
+Do not cap upgraded answers at Band 7; make the upgradedAnswer genuinely high-band while preserving the learner's core idea.
 
 ${speakingSchemaInstruction}
 

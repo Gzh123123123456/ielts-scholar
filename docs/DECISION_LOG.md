@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-07] Practice Persistence Before More Content
+- **Decision**: Prioritize reliable local practice records before expanding question banks or API usage features.
+- **Reason**: First real-use QA showed that moving from Speaking Part 1 to Part 2 and back made prior transcripts, feedback, and notes hard to recover. The same risk applies across practice modules.
+- **Implemented**:
+  - Added a minimal local-first practice record model in `localStorage`.
+  - Speaking Practice saves active Part 1/2/3 attempts and restores previous part attempts without re-calling AI.
+  - Writing Task 2 saves Phase 1 coach notes, final framework summary, essay draft, and analysis result.
+  - Speaking and Writing practice pages include lightweight Recent Attempts access with local view/restore and markdown export when available.
+  - Provider unavailable failures are marked separately from parse/schema fallback and no longer appear as successful coaching.
+  - Speaking feedback readability was improved with Must Fix / Optional Polish grouping and a more prominent upgraded answer.
+- **Explicitly unchanged**: Mock Provider remains default, no new provider, no RAG, no pronunciation scoring, no SpeechRecognition behavior redesign, no question-bank expansion, no API usage panel.
+
 ## [2026-05-07] Optional Gemini Provider Path
 - **Decision**: Add a minimal optional Gemini Provider path for local development while keeping Mock Provider as the default.
 - **Implemented**:

@@ -48,6 +48,14 @@ _Last updated: 2026-05-07_
 
 ## P1 — Learning Loop Depth
 
+### 2.5) Practice Persistence and History Access
+- **Done minimal V1.1**: local-first active attempts and recent records for Speaking Practice and Writing Task 2 Practice.
+- Still pending:
+  - richer full history dashboard
+  - cross-attempt comparison
+  - session-level consolidated note export
+  - storage migration from localStorage to IndexedDB or a local file/database layer if records grow large
+
 ### 3) Session-level Obsidian Notes
 - Current V1: attempt-level export only.
 - Future: **Finish Session / Export Session Note**.

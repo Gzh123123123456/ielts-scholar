@@ -161,6 +161,27 @@ const parseRawResponse = (rawResponse: unknown): { parsedJson: unknown; parseErr
   };
 };
 
+const isProviderUnavailableError = (parseError?: string): boolean => {
+  if (!parseError) return false;
+  const normalized = parseError.toLowerCase();
+  return [
+    '503',
+    'unavailable',
+    'high demand',
+    'try again later',
+    'networkerror',
+    'failed to fetch',
+    'timeout',
+    'rate limit',
+  ].some(marker => normalized.includes(marker));
+};
+
+const getFailureKind = (parseError: string | undefined, validationErrors: string[]) => {
+  if (isProviderUnavailableError(parseError)) return 'provider_unavailable' as const;
+  if (parseError || validationErrors.length > 0) return 'parse_or_schema' as const;
+  return undefined;
+};
+
 const normalizeSpeakingFeedback = (
   value: unknown,
   request: SpeakingRequest,
@@ -462,6 +483,7 @@ export const safeAnalyzeSpeaking = async (
 
   const feedback = normalizeSpeakingFeedback(parsedJson, requestPayload, validationErrors);
   const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
 
   return {
     feedback,
@@ -475,6 +497,7 @@ export const safeAnalyzeSpeaking = async (
       parseError,
       validationErrors,
       fallbackUsed,
+      failureKind,
       timestamp: new Date().toISOString(),
     },
   };
@@ -501,6 +524,7 @@ export const safeAnalyzeWriting = async (
 
   const feedback = normalizeWritingFeedback(parsedJson, requestPayload, validationErrors);
   const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
 
   return {
     feedback,
@@ -514,6 +538,7 @@ export const safeAnalyzeWriting = async (
       parseError,
       validationErrors,
       fallbackUsed,
+      failureKind,
       timestamp: new Date().toISOString(),
     },
   };
@@ -544,6 +569,7 @@ export const safeExtractWritingFramework = async (
 
   const feedback = normalizeWritingFrameworkSummary(parsedJson, requestPayload, validationErrors);
   const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
 
   return {
     feedback,
@@ -557,6 +583,7 @@ export const safeExtractWritingFramework = async (
       parseError,
       validationErrors,
       fallbackUsed,
+      failureKind,
       timestamp: new Date().toISOString(),
     },
   };

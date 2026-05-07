@@ -95,6 +95,9 @@ export const DebugPanel: React.FC = () => {
                       {providerDiagnostic.fallbackUsed ? 'YES' : 'NO'}
                     </span>
                   </p>
+                  {providerDiagnostic.failureKind && (
+                    <p><span className="opacity-50">Failure Kind:</span> {providerDiagnostic.failureKind}</p>
+                  )}
                   {providerDiagnostic.parseError && (
                     <div>
                       <p className="text-red-800 font-bold">Parse Error</p>

@@ -18,12 +18,19 @@ _Last updated: 2026-05-07_
   - Latest provider diagnostic is captured for Debug Panel inspection.
 
 ## Speaking Practice (Implemented)
+- Speaking Practice now saves local-first practice attempts so Part 1/2/3 work can be recovered after part switching, navigation, or page reload.
+- Recent Speaking attempts are accessible from the practice page; opening a saved attempt restores local transcript/feedback without re-calling AI.
+- Provider unavailable failures are distinguished from schema/parse fallback; provider-unavailable attempts preserve the transcript and show a retry-later message instead of normal coaching.
+- Speaking feedback readability was improved with clearer Must Fix / Optional Polish sections, a more prominent upgraded answer, and secondary preserved-style context.
 - `no-speech` auto-retry is implemented and preserved.
 - Retry clears current-attempt state (transcript, feedback, timer, attempt refs).
 - Stop & Review prevents recognition restart after user stop.
 - Pre-analysis view remains focused on prompt, timer, controls, and transcript/review.
 
 ## Writing Task 2 Practice (Implemented)
+- Writing Task 2 now saves active local-first drafts for Phase 1 notes, final framework, essay draft, and existing analysis result.
+- Recent Writing Task 2 attempts are accessible from the practice page; opening a saved attempt restores local state without re-calling AI.
+- Provider unavailable failures preserve the draft/framework/essay and show a retry-later message instead of presenting fallback output as successful coaching.
 - Phase 1 separates:
   - Coach Discussion (process)
   - Final Framework Summary (output)

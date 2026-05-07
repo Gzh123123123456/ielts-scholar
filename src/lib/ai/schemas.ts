@@ -3,6 +3,7 @@ export type IELTSMode = 'practice' | 'mock';
 export type SpeakingPart = 1 | 2 | 3;
 export type WritingTask = 'task1' | 'task2';
 export type ProviderOperation = 'speaking_analysis' | 'writing_analysis' | 'writing_framework_extraction';
+export type ProviderFailureKind = 'provider_unavailable' | 'parse_or_schema';
 
 export interface ProviderDiagnostic {
   module: IELTSModule;
@@ -14,6 +15,7 @@ export interface ProviderDiagnostic {
   parseError?: string;
   validationErrors: string[];
   fallbackUsed: boolean;
+  failureKind?: ProviderFailureKind;
   timestamp: string;
 }
 
