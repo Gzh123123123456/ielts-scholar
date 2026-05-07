@@ -292,7 +292,7 @@ export default function SpeakingPractice() {
     URL.revokeObjectURL(url);
   };
 
-  const isMock = !process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY';
+  const isMock = getAIProviderName() !== 'gemini';
 
   return (
     <PageShell>

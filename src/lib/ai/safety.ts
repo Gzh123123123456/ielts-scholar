@@ -1,4 +1,9 @@
-import { AIProvider } from './providers/base';
+import {
+  AIProvider,
+  SpeakingAnalysisRequest,
+  WritingAnalysisRequest,
+  WritingFrameworkRequest,
+} from './providers/base';
 import {
   ProviderDiagnostic,
   SpeakingFeedback,
@@ -8,13 +13,9 @@ import {
   WritingTask,
 } from './schemas';
 
-type SpeakingRequest = Parameters<AIProvider['analyzeSpeaking']>[0];
-type WritingRequest = Parameters<AIProvider['analyzeWriting']>[0];
-type FrameworkRequest = NonNullable<AIProvider['extractWritingFramework']> extends (
-  request: infer Request,
-) => Promise<WritingFrameworkSummary>
-  ? Request
-  : never;
+type SpeakingRequest = SpeakingAnalysisRequest;
+type WritingRequest = WritingAnalysisRequest;
+type FrameworkRequest = WritingFrameworkRequest;
 
 interface SafeAnalyzeResult<T> {
   feedback: T;

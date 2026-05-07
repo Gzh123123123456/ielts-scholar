@@ -6,7 +6,13 @@ _Last updated: 2026-05-07_
 
 ### 1) API / Gemini Provider (Optional, Mock still default)
 - Keep Mock Provider as default.
-- Add Gemini as optional provider toggle/path.
+- **Done in V1.1 Slice 1**: Add Gemini as an optional env-configured provider path for local development.
+- Gemini configuration:
+  - `VITE_AI_PROVIDER=gemini`
+  - `VITE_GEMINI_API_KEY=...`
+- Missing Gemini API key safely falls back to Mock Provider.
+- `VITE_GEMINI_API_KEY` is exposed to browser/client code and is suitable only for local/personal prototype use.
+- No production key management exists yet.
 - **Done in V1.1 scaffolding**: provider safety wrappers normalize malformed Speaking/Writing feedback and prevent invalid provider output from crashing feedback UI.
 - **Done in V1.1 scaffolding**: Debug Panel visibility for latest provider diagnostic:
   - raw provider response
@@ -16,7 +22,7 @@ _Last updated: 2026-05-07_
   - fallback-used status
 - Ensure invalid JSON never crashes UI. *(Scaffolded via safe wrappers; real provider connection still pending.)*
 - Add resilient fallback path when provider output is malformed. *(Scaffolded for existing provider interface.)*
-- Still pending: optional Gemini provider toggle/path. Gemini is not implemented yet.
+- Still pending: UI provider toggle, browser-side key input decision, and production-safe server-side key management.
 
 ### 2) Framework Intelligence (Writing Task 2)
 - **Done mock-safe in V1.1**: Add **Generate Framework Summary** / **Extract Final Framework** action using Mock Provider by default.

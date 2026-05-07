@@ -1,5 +1,22 @@
 # Decision Log
 
+## [2026-05-07] Optional Gemini Provider Path
+- **Decision**: Add a minimal optional Gemini Provider path for local development while keeping Mock Provider as the default.
+- **Implemented**:
+  - Added `GeminiProvider` implementing the existing provider interface:
+    - Speaking analysis
+    - Writing analysis
+    - Writing Task 2 framework extraction
+  - Gemini prompts request strict JSON-only output.
+  - Gemini returns raw model text so the existing safety wrappers parse, normalize, and capture diagnostics.
+  - Provider selection uses Vite env configuration:
+    - `VITE_AI_PROVIDER=gemini`
+    - `VITE_GEMINI_API_KEY=...`
+  - Missing, unknown, or `mock` provider config uses Mock Provider.
+  - `VITE_AI_PROVIDER=gemini` without a key safely falls back to Mock Provider and reports the effective provider as a missing-key fallback.
+- **Security note**: `VITE_GEMINI_API_KEY` is exposed to browser/client code. This path is suitable only for local/personal prototype use; production key management is not implemented.
+- **Explicitly unchanged**: Mock Provider remains default, no UI provider toggle, no browser-side API key input, no RAG, no pronunciation scoring, no SpeakingPractice SpeechRecognition changes, no Writing Task 2 phase-flow changes.
+
 ## [2026-05-07] Writing Task 2 Wide Workspace UX
 - **Decision**: Change Writing Task 2 from a narrow vertical reading-page layout into a wider desktop writing workspace.
 - **Reason**: Writing Task 2 requires frequent cross-reference between the prompt, framework notes, coach discussion, final framework, essay draft, and feedback.

@@ -4,7 +4,12 @@ _Last updated: 2026-05-07_
 
 ## Product Baseline
 - Mock Provider remains the default provider.
-- No Gemini/API provider is connected yet.
+- Optional Gemini Provider path is implemented for local development only.
+  - Configure with `VITE_AI_PROVIDER=gemini` and `VITE_GEMINI_API_KEY=...`.
+  - Missing, unknown, or `mock` provider configuration uses Mock Provider.
+  - If Gemini is configured without a key, the app safely falls back to Mock Provider.
+  - `VITE_GEMINI_API_KEY` is exposed to browser/client code and is suitable only for local/personal prototype use.
+  - No production key management exists yet.
 - No RAG pipeline is connected.
 - V1 pronunciation is **not formally assessed**.
 - V1.1 provider safety scaffolding is implemented:

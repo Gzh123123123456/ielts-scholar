@@ -4,7 +4,7 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
-import { getAIProvider, getAIProviderName, safeAnalyzeWriting, safeExtractWritingFramework } from '@/src/lib/ai';
+import { getAIProvider, getAIProviderName, isMockProviderActive, safeAnalyzeWriting, safeExtractWritingFramework } from '@/src/lib/ai';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
 import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
@@ -173,7 +173,7 @@ export default function WritingTask2Practice() {
     URL.revokeObjectURL(url);
   };
 
-  const isMock = !process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY';
+  const isMock = isMockProviderActive();
   const writingWorkspaceClass = 'w-[94vw] max-w-[1600px] mx-auto';
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && modelAnswerText !== 'Sample Band 9 essay content...';

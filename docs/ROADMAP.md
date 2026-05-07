@@ -4,7 +4,10 @@ _Last updated: 2026-05-07_
 
 ## V1.1 — API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
-- Add Gemini provider as optional path (post-connection phase).
+- Add Gemini provider as optional path.
+  - Done in Slice 1 as env-configured local-development path.
+  - Mock Provider remains default.
+  - No UI provider toggle or production key management yet.
 - Add Debug Panel diagnostics for raw response, parsed JSON, and parse errors.
 - Ensure invalid JSON does not crash UI.
 

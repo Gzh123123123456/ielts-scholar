@@ -4,6 +4,7 @@ import { PaperCard } from './PaperCard';
 import { SerifButton } from './SerifButton';
 import { X, ChevronDown, ChevronUp, Bug } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { getAIProviderName } from '@/src/lib/ai';
 
 export const DebugPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -17,7 +18,7 @@ export const DebugPanel: React.FC = () => {
       sessions,
       logs: debugLogs,
       capabilities,
-      provider: process.env.AI_PROVIDER || 'mock',
+      provider: getAIProviderName(),
       providerDiagnostic,
       timestamp: new Date().toISOString()
     };
@@ -60,7 +61,7 @@ export const DebugPanel: React.FC = () => {
             <p>getUserMedia: {capabilities.getUserMedia ? '✅' : '❌'}</p>
             <p>MediaRecorder: {capabilities.mediaRecorder ? '✅' : '❌'}</p>
             <p>Mic Permission: {capabilities.microphonePermission}</p>
-            <p>AI Provider: {process.env.AI_PROVIDER || 'mock'}</p>
+            <p>AI Provider: {getAIProviderName()}</p>
           </div>
         </section>
 
