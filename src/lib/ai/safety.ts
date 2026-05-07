@@ -78,17 +78,87 @@ const normalizeStringArray = (
   asArray(value, path, errors)
     .map((item, index) => asString(item, FALLBACK_TEXT, `${path}[${index}]`, errors));
 
-const parseRawResponse = (rawResponse: unknown): { parsedJson: unknown; parseError?: string } => {
-  if (typeof rawResponse !== 'string') return { parsedJson: rawResponse };
-
+const tryParseJson = (source: string): { parsedJson: unknown; parseError?: string } => {
   try {
-    return { parsedJson: JSON.parse(rawResponse) };
+    return { parsedJson: JSON.parse(source) };
   } catch (error) {
     return {
       parsedJson: null,
       parseError: error instanceof Error ? error.message : String(error),
     };
   }
+};
+
+const extractFencedJson = (source: string): string | null => {
+  const match = source.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = match?.[1]?.trim();
+  return candidate || null;
+};
+
+const extractFirstJsonObject = (source: string): string | null => {
+  const start = source.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaping = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+
+    if (character === '\\') {
+      escaping = inString;
+      continue;
+    }
+
+    if (character === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (character === '{') depth += 1;
+    if (character === '}') depth -= 1;
+
+    if (depth === 0) return source.slice(start, index + 1);
+  }
+
+  return null;
+};
+
+const parseRawResponse = (rawResponse: unknown): { parsedJson: unknown; parseError?: string } => {
+  if (typeof rawResponse !== 'string') return { parsedJson: rawResponse };
+
+  const trimmedResponse = rawResponse.trim();
+  const directParse = tryParseJson(trimmedResponse);
+  if (!directParse.parseError) return directParse;
+
+  const parseErrors = [`direct JSON parse failed: ${directParse.parseError}`];
+
+  const fencedJson = extractFencedJson(trimmedResponse);
+  if (fencedJson) {
+    const fencedParse = tryParseJson(fencedJson);
+    if (!fencedParse.parseError) return fencedParse;
+    parseErrors.push(`fenced JSON parse failed: ${fencedParse.parseError}`);
+  }
+
+  const jsonObject = extractFirstJsonObject(trimmedResponse);
+  if (jsonObject) {
+    const objectParse = tryParseJson(jsonObject);
+    if (!objectParse.parseError) return objectParse;
+    parseErrors.push(`embedded JSON object parse failed: ${objectParse.parseError}`);
+  }
+
+  return {
+    parsedJson: null,
+    parseError: parseErrors.join(' | '),
+  };
 };
 
 const normalizeSpeakingFeedback = (
