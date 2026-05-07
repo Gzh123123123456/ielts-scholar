@@ -1,5 +1,20 @@
 import { AIProvider } from './base';
-import { SpeakingFeedback, WritingFeedback } from '../schemas';
+import { SpeakingFeedback, WritingFeedback, WritingFrameworkSummary } from '../schemas';
+
+const firstNonEmptyLine = (text: string, fallback: string): string => {
+  const line = text
+    .split(/\r?\n/)
+    .map(item => item.trim())
+    .find(Boolean);
+
+  return line || fallback;
+};
+
+const shorten = (text: string, maxLength = 180): string => {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 3)}...` : cleaned;
+};
 
 export class MockProvider implements AIProvider {
   async analyzeSpeaking(params: {
@@ -97,6 +112,37 @@ export class MockProvider implements AIProvider {
         }
       ],
       obsidianMarkdown: "# IELTS Writing Note\n..."
+    };
+  }
+
+  async extractWritingFramework(params: {
+    task: 'task2';
+    question: string;
+    notes: string;
+  }): Promise<WritingFrameworkSummary> {
+    await new Promise(r => setTimeout(r, 700));
+
+    const source = params.notes.trim();
+    const anchor = firstNonEmptyLine(source, 'Use the strongest idea from the Phase 1 notes.');
+    const conciseAnchor = shorten(anchor);
+
+    const summary = {
+      mode: 'practice' as const,
+      module: 'writing' as const,
+      task: params.task,
+      question: params.question,
+      sourceNotes: params.notes,
+      position: `Balanced position based on the notes: ${conciseAnchor}`,
+      viewA: 'One side can be acknowledged as reasonable, especially where it protects practical outcomes or short-term social benefits.',
+      viewB: 'The opposing side should be developed with a clearer long-term consequence and a stronger link to the question wording.',
+      myOpinion: 'My opinion should be explicit: partially agree with both views, but give more weight to the side that is better supported by evidence.',
+      paragraphPlan: 'Introduction: paraphrase + balanced thesis.\nBody 1: explain View A with one concrete reason.\nBody 2: explain View B and show why it is stronger.\nConclusion: restate the weighed opinion.',
+      possibleExample: 'Use a simple education, work, technology, or public policy example that directly proves the stronger body paragraph.',
+    };
+
+    return {
+      ...summary,
+      editableSummary: `Position:\n${summary.position}\n\nView A:\n${summary.viewA}\n\nView B:\n${summary.viewB}\n\nMy opinion:\n${summary.myOpinion}\n\nParagraph plan:\n${summary.paragraphPlan}\n\nPossible example:\n${summary.possibleExample}`,
     };
   }
 }

@@ -1,6 +1,6 @@
 # Current State (V1)
 
-_Last updated: 2026-05-06_
+_Last updated: 2026-05-07_
 
 ## Product Baseline
 - Mock Provider remains the default provider.
@@ -22,7 +22,13 @@ _Last updated: 2026-05-06_
 - Phase 1 separates:
   - Coach Discussion (process)
   - Final Framework Summary (output)
-- Final Framework Summary is manually user-edited in V1.
+- Final Framework Summary remains user-editable.
+- Phase 1 includes a mock-safe **Generate Framework Summary** action:
+  - Reads current user Coach Discussion / Notes, including unsent draft notes.
+  - Uses Mock Provider framework extraction by default.
+  - Populates structured sections: Position, View A, View B, My opinion, Paragraph plan, Possible example.
+  - Shows calm non-blocking messages for empty input, loading, success, and safe fallback.
+  - Captures provider diagnostics for Debug Panel inspection.
 - Phase 2 displays Final Framework Summary before essay writing.
 - Phase 3 displays My Framework and My Essay before AI feedback.
 - Submit gating is disabled only when `essay.trim().length === 0` (implemented as `!essay.trim()`).

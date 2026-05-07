@@ -4,11 +4,17 @@ import {
   SpeakingFeedback,
   SpeakingPart,
   WritingFeedback,
+  WritingFrameworkSummary,
   WritingTask,
 } from './schemas';
 
 type SpeakingRequest = Parameters<AIProvider['analyzeSpeaking']>[0];
 type WritingRequest = Parameters<AIProvider['analyzeWriting']>[0];
+type FrameworkRequest = NonNullable<AIProvider['extractWritingFramework']> extends (
+  request: infer Request,
+) => Promise<WritingFrameworkSummary>
+  ? Request
+  : never;
 
 interface SafeAnalyzeResult<T> {
   feedback: T;
@@ -298,6 +304,72 @@ const normalizeWritingFeedback = (
   };
 };
 
+const buildEditableFrameworkSummary = (summary: Omit<WritingFrameworkSummary, 'editableSummary'>): string =>
+  `Position:\n${summary.position}\n\nView A:\n${summary.viewA}\n\nView B:\n${summary.viewB}\n\nMy opinion:\n${summary.myOpinion}\n\nParagraph plan:\n${summary.paragraphPlan}\n\nPossible example:\n${summary.possibleExample}`;
+
+const normalizeWritingFrameworkSummary = (
+  value: unknown,
+  request: FrameworkRequest,
+  validationErrors: string[],
+): WritingFrameworkSummary => {
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+
+  const normalizedWithoutEditable = {
+    mode: source.mode === 'mock' ? 'mock' as const : 'practice' as const,
+    module: 'writing' as const,
+    task: 'task2' as const,
+    question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
+    sourceNotes: asString(source.sourceNotes, request.notes || FALLBACK_TEXT, 'sourceNotes', validationErrors),
+    position: asString(
+      source.position,
+      'Position could not be extracted. Add your final stance manually.',
+      'position',
+      validationErrors,
+    ),
+    viewA: asString(
+      source.viewA,
+      'View A could not be extracted. Add the first view manually.',
+      'viewA',
+      validationErrors,
+    ),
+    viewB: asString(
+      source.viewB,
+      'View B could not be extracted. Add the second view manually.',
+      'viewB',
+      validationErrors,
+    ),
+    myOpinion: asString(
+      source.myOpinion,
+      'My opinion could not be extracted. Add your own opinion manually.',
+      'myOpinion',
+      validationErrors,
+    ),
+    paragraphPlan: asString(
+      source.paragraphPlan,
+      'Paragraph plan could not be extracted. Add the essay structure manually.',
+      'paragraphPlan',
+      validationErrors,
+    ),
+    possibleExample: asString(
+      source.possibleExample,
+      'Possible example could not be extracted. Add an example manually if useful.',
+      'possibleExample',
+      validationErrors,
+    ),
+  };
+
+  return {
+    ...normalizedWithoutEditable,
+    editableSummary: asString(
+      source.editableSummary,
+      buildEditableFrameworkSummary(normalizedWithoutEditable),
+      'editableSummary',
+      validationErrors,
+    ),
+  };
+};
+
 export const safeAnalyzeSpeaking = async (
   provider: AIProvider,
   providerName: string,
@@ -356,6 +428,48 @@ export const safeAnalyzeWriting = async (
   }
 
   const feedback = normalizeWritingFeedback(parsedJson, requestPayload, validationErrors);
+  const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+
+  return {
+    feedback,
+    diagnostic: {
+      module: 'writing',
+      providerName,
+      requestPayload,
+      rawResponse,
+      parsedJson,
+      parseError,
+      validationErrors,
+      fallbackUsed,
+      timestamp: new Date().toISOString(),
+    },
+  };
+};
+
+export const safeExtractWritingFramework = async (
+  provider: AIProvider,
+  providerName: string,
+  requestPayload: FrameworkRequest,
+): Promise<SafeAnalyzeResult<WritingFrameworkSummary>> => {
+  let rawResponse: unknown = null;
+  let parsedJson: unknown = null;
+  let parseError: string | undefined;
+  const validationErrors: string[] = [];
+
+  try {
+    if (!provider.extractWritingFramework) {
+      throw new Error('Provider does not implement extractWritingFramework');
+    }
+
+    rawResponse = await provider.extractWritingFramework(requestPayload);
+    const parsed = parseRawResponse(rawResponse);
+    parsedJson = parsed.parsedJson;
+    parseError = parsed.parseError;
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const feedback = normalizeWritingFrameworkSummary(parsedJson, requestPayload, validationErrors);
   const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
 
   return {

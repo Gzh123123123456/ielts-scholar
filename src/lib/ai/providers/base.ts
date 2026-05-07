@@ -1,4 +1,4 @@
-import { SpeakingFeedback, WritingFeedback } from '../schemas';
+import { SpeakingFeedback, WritingFeedback, WritingFrameworkSummary } from '../schemas';
 
 export interface AIProvider {
   analyzeSpeaking(params: {
@@ -12,4 +12,10 @@ export interface AIProvider {
     question: string;
     essay: string;
   }): Promise<WritingFeedback>;
+
+  extractWritingFramework?(params: {
+    task: 'task2';
+    question: string;
+    notes: string;
+  }): Promise<WritingFrameworkSummary>;
 }

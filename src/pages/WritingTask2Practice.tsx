@@ -4,10 +4,10 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
-import { getAIProvider, getAIProviderName, safeAnalyzeWriting } from '@/src/lib/ai';
+import { getAIProvider, getAIProviderName, safeAnalyzeWriting, safeExtractWritingFramework } from '@/src/lib/ai';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
-import { FileText, Send, ArrowRight, FileDown, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
 
 
 export default function WritingTask2Practice() {
@@ -19,6 +19,8 @@ export default function WritingTask2Practice() {
   const [finalFrameworkSummary, setFinalFrameworkSummary] = useState('');
   const [essay, setEssay] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isExtractingFramework, setIsExtractingFramework] = useState(false);
+  const [frameworkExtractMessage, setFrameworkExtractMessage] = useState('');
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
   const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
   const discussionRef = useRef<HTMLDivElement | null>(null);
@@ -35,6 +37,7 @@ export default function WritingTask2Practice() {
     setFeedback(null);
     setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
     setFinalFrameworkSummary('');
+    setFrameworkExtractMessage('');
     addDebugLog(`Loaded writing question: ${random.id}`);
   };
 
@@ -55,6 +58,60 @@ export default function WritingTask2Practice() {
         discussionRef.current.scrollTop = discussionRef.current.scrollHeight;
       }
     });
+  };
+
+  const buildFrameworkNotes = () => {
+    const chatNotes = frameworkChat
+      .filter(msg => msg.role === 'user')
+      .map(msg => msg.text.trim())
+      .filter(Boolean);
+    const draftInput = frameworkInput.trim();
+
+    return [...chatNotes, draftInput].filter(Boolean).join('\n\n');
+  };
+
+  const extractFinalFramework = async () => {
+    const notes = buildFrameworkNotes();
+    setFrameworkExtractMessage('');
+
+    if (!notes.trim()) {
+      const message = 'Add a few Coach Discussion notes first, then extract a framework summary.';
+      setFrameworkExtractMessage(message);
+      addDebugLog('Framework extraction skipped: empty notes.');
+      return;
+    }
+
+    setIsExtractingFramework(true);
+    addDebugLog('Extracting Writing Task 2 framework summary...');
+
+    try {
+      const provider = getAIProvider();
+      const { feedback: result, diagnostic } = await safeExtractWritingFramework(provider, getAIProviderName(), {
+        task: 'task2',
+        question: question?.question || '',
+        notes,
+      });
+
+      setProviderDiagnostic(diagnostic);
+      setFinalFrameworkSummary(result.editableSummary);
+      setFrameworkExtractMessage(
+        diagnostic.fallbackUsed
+          ? 'A safe fallback framework was generated. Please review and edit it before writing.'
+          : 'Framework summary generated. You can edit it before moving to Phase 2.',
+      );
+      addDebugLog(
+        diagnostic.fallbackUsed
+          ? 'Provider fallback used for framework extraction.'
+          : 'Framework extraction complete.',
+      );
+    } catch (error) {
+      console.error(error);
+      const message = 'Framework extraction failed. You can keep editing the summary manually.';
+      setFrameworkExtractMessage(message);
+      addDebugLog(`Framework extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsExtractingFramework(false);
+    }
   };
 
   const analyzeEssay = async () => {
@@ -193,10 +250,29 @@ export default function WritingTask2Practice() {
                 </form>
               </PaperCard>
               <PaperCard>
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Final Framework Summary</h3>
-                <p className="text-sm text-paper-ink/70 mb-3">
-                  Consolidate your final writing framework here: Position, View A, View B, My opinion, and optional structure/example.
-                </p>
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Final Framework Summary</h3>
+                    <p className="text-sm text-paper-ink/70">
+                      Consolidate your final writing framework here: Position, View A, View B, My opinion, and optional structure/example.
+                    </p>
+                  </div>
+                  <SerifButton
+                    type="button"
+                    variant="outline"
+                    onClick={extractFinalFramework}
+                    disabled={isExtractingFramework}
+                    className="shrink-0 text-xs flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {isExtractingFramework ? 'Extracting...' : 'Generate Framework Summary'}
+                  </SerifButton>
+                </div>
+                {frameworkExtractMessage && (
+                  <p className="text-xs font-sans text-paper-ink/55 bg-paper-ink/5 border border-paper-ink/10 rounded-sm px-3 py-2 mb-3">
+                    {frameworkExtractMessage}
+                  </p>
+                )}
                 <textarea
                   value={finalFrameworkSummary}
                   onChange={(e) => setFinalFrameworkSummary(e.target.value)}

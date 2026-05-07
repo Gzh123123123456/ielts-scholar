@@ -96,3 +96,18 @@ export interface WritingFeedback {
   }[];
   obsidianMarkdown: string;
 }
+
+export interface WritingFrameworkSummary {
+  mode: IELTSMode;
+  module: 'writing';
+  task: 'task2';
+  question: string;
+  sourceNotes: string;
+  position: string;
+  viewA: string;
+  viewB: string;
+  myOpinion: string;
+  paragraphPlan: string;
+  possibleExample: string;
+  editableSummary: string;
+}

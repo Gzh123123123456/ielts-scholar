@@ -1,5 +1,5 @@
 import { MockProvider } from './providers/mockProvider';
-export { safeAnalyzeSpeaking, safeAnalyzeWriting } from './safety';
+export { safeAnalyzeSpeaking, safeAnalyzeWriting, safeExtractWritingFramework } from './safety';
 
 export function getAIProvider() {
   const providerType = getAIProviderName();

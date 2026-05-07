@@ -1,5 +1,24 @@
 # Decision Log
 
+## [2026-05-07] Mock-Safe Writing Task 2 Framework Extraction
+- **Decision**: Implement the V1.1 **Generate Framework Summary** action without connecting a real API provider.
+- **Implemented**:
+  - Added a `WritingFrameworkSummary` schema before provider changes.
+  - Added optional provider method `extractWritingFramework`.
+  - Added Mock Provider implementation for deterministic framework extraction.
+  - Added `safeExtractWritingFramework` normalization and provider diagnostics.
+  - Added a Phase 1 button that extracts current user Coach Discussion / Notes into the existing Final Framework Summary textarea.
+  - Generated summary sections:
+    - Position
+    - View A
+    - View B
+    - My opinion
+    - Paragraph plan
+    - Possible example
+  - Empty notes show a non-blocking message and do not overwrite manual summary text.
+  - Extracted summaries remain fully editable and do not automatically advance to Phase 2.
+- **Explicitly unchanged**: Mock Provider remains default, Gemini remains unconnected, no RAG, no sentence-by-sentence coaching, no SpeakingPractice SpeechRecognition changes, no Writing Task 2 phase-flow changes, no UI redesign.
+
 ## [2026-05-06] V1.1 Provider Safety + Debug Panel Scaffolding
 - **Decision**: Add provider safety scaffolding before connecting any real API provider.
 - **Implemented**:
