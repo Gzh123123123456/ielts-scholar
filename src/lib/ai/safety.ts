@@ -396,6 +396,7 @@ export const safeAnalyzeSpeaking = async (
     feedback,
     diagnostic: {
       module: 'speaking',
+      operation: 'speaking_analysis',
       providerName,
       requestPayload,
       rawResponse,
@@ -434,6 +435,7 @@ export const safeAnalyzeWriting = async (
     feedback,
     diagnostic: {
       module: 'writing',
+      operation: 'writing_analysis',
       providerName,
       requestPayload,
       rawResponse,
@@ -476,6 +478,7 @@ export const safeExtractWritingFramework = async (
     feedback,
     diagnostic: {
       module: 'writing',
+      operation: 'writing_framework_extraction',
       providerName,
       requestPayload,
       rawResponse,

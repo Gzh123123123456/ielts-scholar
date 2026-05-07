@@ -29,9 +29,14 @@ _Last updated: 2026-05-07_
   - Populates structured sections: Position, View A, View B, My opinion, Paragraph plan, Possible example.
   - Shows calm non-blocking messages for empty input, loading, success, and safe fallback.
   - Captures provider diagnostics for Debug Panel inspection.
+- Phase 1 notes input supports Enter-to-send, Shift+Enter for newline, and IME composition protection for Chinese/Japanese/Korean input.
 - Phase 2 displays Final Framework Summary before essay writing.
-- Phase 3 displays My Framework and My Essay before AI feedback.
+- Phase 3 displays My Essay prominently before feedback; My Framework remains available as secondary planning reference.
 - Submit gating is disabled only when `essay.trim().length === 0` (implemented as `!essay.trim()`).
+- Writing Task 2 desktop layout now uses a wider workspace for reduced scrolling and better cross-reference:
+  - Phase 1 uses side-by-side Coach Discussion / Notes and Final Framework Summary panels.
+  - Phase 2 uses side-by-side framework reference and essay editor panels.
+  - Phase 3 emphasizes My Essay, Key Corrections, Framework Logic Review, and Model Answer Excerpt; My Framework remains available as secondary planning reference.
 - UI readability polish implemented (no logic changes):
   - Slightly larger base body typography and line-height.
   - Slightly larger feedback-card/paper-card spacing and phase-tab readability.
@@ -45,6 +50,7 @@ _Last updated: 2026-05-07_
 - Debug Panel remains globally available.
 - Debug Panel now includes a collapsible latest provider diagnostic section showing:
   - module
+  - operation
   - provider name
   - request payload
   - raw response
@@ -53,6 +59,7 @@ _Last updated: 2026-05-07_
   - validation errors
   - fallback-used status
   - timestamp
+- Framework extraction diagnostics are labeled with the `writing_framework_extraction` operation so they are distinguishable from final essay analysis.
 - Provider fallback warnings are shown near Speaking and Writing feedback when malformed output was normalized.
 
 ## Scope Guards (Current)

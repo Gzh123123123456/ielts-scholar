@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-06_
+_Last updated: 2026-05-07_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -19,8 +19,8 @@ _Last updated: 2026-05-06_
 - Still pending: optional Gemini provider toggle/path. Gemini is not implemented yet.
 
 ### 2) Framework Intelligence (Writing Task 2)
-- Add future button: **Generate Framework Summary** / **Extract Final Framework**.
-- Use real AI provider to extract from Phase 1 discussion:
+- **Done mock-safe in V1.1**: Add **Generate Framework Summary** / **Extract Final Framework** action using Mock Provider by default.
+- Still pending: use real AI provider to extract from Phase 1 discussion:
   - Position
   - View A
   - View B
@@ -28,6 +28,17 @@ _Last updated: 2026-05-06_
   - Paragraph plan
   - Possible example
 - Require user edit/confirm before moving to Phase 2.
+
+### 2b) Future UI Consistency Notes
+- Speaking Practice should not automatically inherit the full Writing Task 2 wide workspace.
+- Speaking may later receive a moderate-width layout adjustment only if transcript + feedback comparison requires it.
+- Future Writing Task 1 should inherit the Writing workspace design language from Writing Task 2:
+  - wider desktop workspace
+  - prompt/chart context area
+  - writing editor
+  - feedback area
+  - reduced unnecessary vertical scrolling
+- Do not implement Writing Task 1 now.
 
 ## P1 — Learning Loop Depth
 

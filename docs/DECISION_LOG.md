@@ -1,5 +1,24 @@
 # Decision Log
 
+## [2026-05-07] Writing Task 2 Wide Workspace UX
+- **Decision**: Change Writing Task 2 from a narrow vertical reading-page layout into a wider desktop writing workspace.
+- **Reason**: Writing Task 2 requires frequent cross-reference between the prompt, framework notes, coach discussion, final framework, essay draft, and feedback.
+- **Implemented layout**:
+  - Phase 1 uses a two-column workspace:
+    - left: Framework Notes / Coach Discussion / note input
+    - right: Final Framework Summary / Generate Framework Summary / Done with Framework
+  - Phase 2 uses a two-column writing workspace:
+    - left: framework reference
+    - right: essay editor
+  - Phase 3 prioritizes:
+    - My Essay
+    - Key Corrections
+    - Framework Logic Review
+    - Model Answer Excerpt
+    - My Framework only as secondary planning reference
+- **Design principle**: Use horizontal workspace on desktop to reduce unnecessary vertical scrolling, while preserving the warm old-paper academic style. Keep mobile/tablet as a clean single-column flow.
+- **Explicitly unchanged**: no Gemini connection, Mock Provider remains default, no RAG, no pronunciation scoring, no SpeakingPractice behavior changes, no business logic change to the Writing Task 2 flow.
+
 ## [2026-05-07] Mock-Safe Writing Task 2 Framework Extraction
 - **Decision**: Implement the V1.1 **Generate Framework Summary** action without connecting a real API provider.
 - **Implemented**:

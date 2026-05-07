@@ -85,6 +85,7 @@ export const DebugPanel: React.FC = () => {
               {providerDiagnostic ? (
                 <>
                   <p><span className="opacity-50">Module:</span> {providerDiagnostic.module}</p>
+                  <p><span className="opacity-50">Operation:</span> {providerDiagnostic.operation}</p>
                   <p><span className="opacity-50">Provider:</span> {providerDiagnostic.providerName}</p>
                   <p><span className="opacity-50">Timestamp:</span> {providerDiagnostic.timestamp}</p>
                   <p>

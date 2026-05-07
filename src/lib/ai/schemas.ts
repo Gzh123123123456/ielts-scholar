@@ -2,9 +2,11 @@ export type IELTSModule = 'speaking' | 'writing';
 export type IELTSMode = 'practice' | 'mock';
 export type SpeakingPart = 1 | 2 | 3;
 export type WritingTask = 'task1' | 'task2';
+export type ProviderOperation = 'speaking_analysis' | 'writing_analysis' | 'writing_framework_extraction';
 
 export interface ProviderDiagnostic {
   module: IELTSModule;
+  operation: ProviderOperation;
   providerName: string;
   requestPayload: unknown;
   rawResponse: unknown;

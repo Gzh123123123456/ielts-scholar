@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-06_
+_Last updated: 2026-05-07_
 
 ## V1.1 — API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -43,6 +43,12 @@ _Last updated: 2026-05-06_
 
 ## V3 — Data & Visualization
 - Task 1 Academic charts with interaction.
+- Writing Task 1 should follow the established Writing workspace system when implemented:
+  - wider desktop workspace
+  - prompt/chart context area
+  - writing editor
+  - feedback area
+  - reduced unnecessary vertical scrolling
 - Task 1 General Training letter prompts.
 - Audio recording storage (MediaRecorder) and simple playback.
 
@@ -50,6 +56,10 @@ _Last updated: 2026-05-06_
 - PDF RAG for personal IELTS materials.
 - Local filesystem access options.
 - Advanced pronunciation scoring integration (after reliable audio scoring path).
+
+## Future UI Polish
+- Speaking UI polish may be considered later, but should remain lighter than Writing because Speaking has lower simultaneous information density.
+- Keep Practice mode and Mock mode separate.
 
 ---
 
