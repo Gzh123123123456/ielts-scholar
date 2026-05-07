@@ -53,6 +53,13 @@ export class MockProvider implements AIProvider {
           explanationZh: "使用更地道的副词和形容词搭配来增强口语的自然度。"
         }
       ],
+      band9Refinements: [
+        {
+          observation: "The answer is clear, but it could sound more spontaneous.",
+          refinement: "Add one short personal detail instead of making the answer more formal.",
+          explanationZh: "高分口语不只是更复杂，也要像真实交流。Part 1 尤其适合简短、自然、带一点个人细节的回答。"
+        }
+      ],
       preservedStyle: [
         {
           text: "I used to be a shy boy",

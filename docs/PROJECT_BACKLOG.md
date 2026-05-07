@@ -48,8 +48,22 @@ _Last updated: 2026-05-07_
 
 ## P1 — Learning Loop Depth
 
+### 2.4) Prompt Bank Depth
+- **Done minimal V1.1**: small original local-testing prompt bank:
+  - Speaking Part 1: 11 topics / 36 questions.
+  - Speaking Part 2: 12 cue cards.
+  - Speaking Part 3: 37 follow-up discussion questions.
+  - Writing Task 2: 22 prompts across common IELTS Task 2 types.
+- Still pending:
+  - larger curated prompt bank
+  - tagging/difficulty metadata
+  - source-quality review and deduplication
+  - prompt rotation analytics
+
 ### 2.5) Practice Persistence and History Access
 - **Done minimal V1.1**: local-first active attempts and recent records for Speaking Practice and Writing Task 2 Practice.
+- **Done minimal V1.1**: Speaking records are filtered by current part and can be deleted individually.
+- **Done minimal V1.1**: empty Speaking question loads are not saved as noisy drafts.
 - Still pending:
   - richer full history dashboard
   - cross-attempt comparison
@@ -82,9 +96,14 @@ _Last updated: 2026-05-07_
 - Do not implement full inline editor yet.
 
 ### 5) Speaking Improvements
-- Clean pre-analysis layout.
-- Repeated-attempt comparison views.
-- Better transcript-based naturalness upgrades.
+- **Done minimal V1.1**: cleaner pre-analysis layout and wider post-analysis feedback layout.
+- **Done minimal V1.1**: Change Question works across Parts 1/2/3 when alternatives exist.
+- **Done minimal V1.1**: Practice This Question Again starts a fresh attempt for the same prompt without re-calling AI.
+- **Done minimal V1.1**: Band 9 Refinement / Examiner-Friendly Refinement layer for already-strong answers.
+- Still pending:
+  - richer repeated-attempt comparison views
+  - more advanced speaking structure coaching beyond the current prompt/schema layer
+  - broader transcript-based naturalness upgrades
 - Pronunciation remains not formally assessed until real audio scoring exists.
 - **Deferred (V1.2+) — Speaking Stuck-Point Assist / Chinese Idea Support**
   - After Stop & Review, allow learner to optionally add a Chinese note for the idea they could not express in English.

@@ -182,10 +182,63 @@ const getFailureKind = (parseError: string | undefined, validationErrors: string
   return undefined;
 };
 
+const buildSpeakingObsidianMarkdown = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): string => {
+  const mustFix = feedback.fatalErrors.length
+    ? feedback.fatalErrors
+        .map(item => `- ${item.original} -> ${item.correction}\n  - ${item.explanationZh}`)
+        .join('\n')
+    : '- No critical correction needed.';
+
+  const polish = feedback.naturalnessHints.length
+    ? feedback.naturalnessHints
+        .map(item => `- ${item.original} -> ${item.better}\n  - ${item.explanationZh}`)
+        .join('\n')
+    : '- No optional polish item returned.';
+
+  const refinements = feedback.band9Refinements.length
+    ? feedback.band9Refinements
+        .map(item => `- ${item.observation}\n  - Refinement: ${item.refinement}\n  - ${item.explanationZh}`)
+        .join('\n')
+    : '- No Band 9 refinement returned.';
+
+  const reusable = feedback.reusableExample
+    ? `\n## Reusable Example\n${feedback.reusableExample.example}\n\nCan be reused for: ${feedback.reusableExample.canBeReusedFor.join(', ')}\n\n${feedback.reusableExample.explanationZh}\n`
+    : '';
+
+  return `# IELTS Speaking Note
+
+## Prompt
+${feedback.question}
+
+## Transcript
+${feedback.transcript}
+
+## Score Snapshot
+- Estimated band excluding pronunciation: ${feedback.bandEstimateExcludingPronunciation}
+- Fluency and Coherence: ${feedback.scores.fluencyCoherence}
+- Lexical Resource: ${feedback.scores.lexicalResource}
+- Grammatical Range and Accuracy: ${feedback.scores.grammaticalRangeAccuracy}
+- Pronunciation: not assessed in V1
+
+## Must Fix
+${mustFix}
+
+## Optional Polish
+${polish}
+
+## Band 9 Refinement
+${refinements}
+
+## High-Band Transformation
+${feedback.upgradedAnswer}
+${reusable}`;
+};
+
 const normalizeSpeakingFeedback = (
   value: unknown,
   request: SpeakingRequest,
   validationErrors: string[],
+  normalizedFields: string[],
 ): SpeakingFeedback => {
   const source = isRecord(value) ? value : {};
   if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
@@ -193,7 +246,7 @@ const normalizeSpeakingFeedback = (
   const scores = isRecord(source.scores) ? source.scores : {};
   if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
 
-  return {
+  const feedbackWithoutMarkdown: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
     module: 'speaking',
     part: asSpeakingPart(source.part, request.part, validationErrors),
@@ -250,6 +303,31 @@ const normalizeSpeakingFeedback = (
         ),
       };
     }),
+    band9Refinements: Array.isArray(source.band9Refinements)
+      ? source.band9Refinements.map((item, index) => {
+          const record = isRecord(item) ? item : {};
+          return {
+            observation: asString(
+              record.observation,
+              FALLBACK_TEXT,
+              `band9Refinements[${index}].observation`,
+              validationErrors,
+            ),
+            refinement: asString(
+              record.refinement,
+              FALLBACK_TEXT,
+              `band9Refinements[${index}].refinement`,
+              validationErrors,
+            ),
+            explanationZh: asString(
+              record.explanationZh,
+              'Provider feedback was incomplete; this item was normalized safely.',
+              `band9Refinements[${index}].explanationZh`,
+              validationErrors,
+            ),
+          };
+        })
+      : [],
     preservedStyle: asArray(source.preservedStyle, 'preservedStyle', validationErrors).map((item, index) => {
       const record = isRecord(item) ? item : {};
       if (!isRecord(item)) validationErrors.push(`preservedStyle[${index}] missing or invalid object`);
@@ -285,12 +363,16 @@ const normalizeSpeakingFeedback = (
           ),
         }
       : null,
-    obsidianMarkdown: asString(
-      source.obsidianMarkdown,
-      '# IELTS Speaking Note\n\nProvider output was malformed or incomplete. Please retry analysis.',
-      'obsidianMarkdown',
-      validationErrors,
-    ),
+  };
+
+  return {
+    ...feedbackWithoutMarkdown,
+    obsidianMarkdown: typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()
+      ? source.obsidianMarkdown
+      : (() => {
+          normalizedFields.push('obsidianMarkdown');
+          return buildSpeakingObsidianMarkdown(feedbackWithoutMarkdown);
+        })(),
   };
 };
 
@@ -471,6 +553,7 @@ export const safeAnalyzeSpeaking = async (
   let parsedJson: unknown = null;
   let parseError: string | undefined;
   const validationErrors: string[] = [];
+  const normalizedFields: string[] = [];
 
   try {
     rawResponse = await provider.analyzeSpeaking(requestPayload);
@@ -481,7 +564,7 @@ export const safeAnalyzeSpeaking = async (
     parseError = error instanceof Error ? error.message : String(error);
   }
 
-  const feedback = normalizeSpeakingFeedback(parsedJson, requestPayload, validationErrors);
+  const feedback = normalizeSpeakingFeedback(parsedJson, requestPayload, validationErrors, normalizedFields);
   const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
   const failureKind = getFailureKind(parseError, validationErrors);
 
@@ -498,6 +581,7 @@ export const safeAnalyzeSpeaking = async (
       validationErrors,
       fallbackUsed,
       failureKind,
+      normalizedFields,
       timestamp: new Date().toISOString(),
     },
   };

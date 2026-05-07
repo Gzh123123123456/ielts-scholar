@@ -10,6 +10,7 @@ export interface ProviderDiagnosticSummary {
   failureKind?: ProviderDiagnostic['failureKind'];
   parseError?: string;
   validationErrors: string[];
+  normalizedFields?: string[];
   timestamp: string;
 }
 
@@ -86,6 +87,7 @@ export const summarizeDiagnostic = (diagnostic: ProviderDiagnostic): ProviderDia
   failureKind: diagnostic.failureKind,
   parseError: diagnostic.parseError,
   validationErrors: diagnostic.validationErrors,
+  normalizedFields: diagnostic.normalizedFields,
   timestamp: diagnostic.timestamp,
 });
 

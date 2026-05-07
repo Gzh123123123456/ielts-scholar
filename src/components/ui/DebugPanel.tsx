@@ -98,6 +98,9 @@ export const DebugPanel: React.FC = () => {
                   {providerDiagnostic.failureKind && (
                     <p><span className="opacity-50">Failure Kind:</span> {providerDiagnostic.failureKind}</p>
                   )}
+                  {providerDiagnostic.normalizedFields && providerDiagnostic.normalizedFields.length > 0 && (
+                    <p><span className="opacity-50">Normalized Fields:</span> {providerDiagnostic.normalizedFields.join(', ')}</p>
+                  )}
                   {providerDiagnostic.parseError && (
                     <div>
                       <p className="text-red-800 font-bold">Parse Error</p>

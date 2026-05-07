@@ -20,8 +20,18 @@ _Last updated: 2026-05-07_
 ## Speaking Practice (Implemented)
 - Speaking Practice now saves local-first practice attempts so Part 1/2/3 work can be recovered after part switching, navigation, or page reload.
 - Recent Speaking attempts are accessible from the practice page; opening a saved attempt restores local transcript/feedback without re-calling AI.
+- Recent Speaking attempts are filtered by the current part, and individual saved Speaking attempts can be deleted from localStorage.
+- Empty Speaking question loads are not saved as noisy draft records; drafts are saved only after meaningful transcript or analysis state exists.
+- Speaking question banks now include a small V1 prompt set for practical local testing:
+  - Part 1: 11 common topics / 36 questions.
+  - Part 2: 12 cue cards.
+  - Part 3: 37 follow-up discussion questions.
+- Speaking Change Question now avoids returning the same prompt when alternatives exist and does not call AI.
+- Speaking users can start **Practice This Question Again** after analysis, preserving the analyzed attempt while opening a fresh attempt for the same question.
 - Provider unavailable failures are distinguished from schema/parse fallback; provider-unavailable attempts preserve the transcript and show a retry-later message instead of normal coaching.
-- Speaking feedback readability was improved with clearer Must Fix / Optional Polish sections, a more prominent upgraded answer, and secondary preserved-style context.
+- Speaking feedback readability was improved with clearer Must Fix / Optional Polish sections, a wider result layout, a more prominent upgraded answer, and secondary preserved-style context.
+- Speaking feedback now supports a distinct **Band 9 Refinement / Examiner-Friendly Refinement** section for strong answers with few or no true errors.
+- Speaking markdown export can be locally generated when the provider returns valid core feedback but omits `obsidianMarkdown`; this is shown as a normalized field in diagnostics rather than a full feedback failure.
 - `no-speech` auto-retry is implemented and preserved.
 - Retry clears current-attempt state (transcript, feedback, timer, attempt refs).
 - Stop & Review prevents recognition restart after user stop.
@@ -69,6 +79,7 @@ _Last updated: 2026-05-07_
   - parsed JSON
   - parse error
   - validation errors
+  - normalized fields, when a non-core field was repaired locally
   - fallback-used status
   - timestamp
 - Framework extraction diagnostics are labeled with the `writing_framework_extraction` operation so they are distinguishable from final essay analysis.

@@ -16,6 +16,7 @@ export interface ProviderDiagnostic {
   validationErrors: string[];
   fallbackUsed: boolean;
   failureKind?: ProviderFailureKind;
+  normalizedFields?: string[];
   timestamp: string;
 }
 
@@ -42,6 +43,12 @@ export interface NaturalnessHint {
   explanationZh: string;
 }
 
+export interface Band9Refinement {
+  observation: string;
+  refinement: string;
+  explanationZh: string;
+}
+
 export interface SpeakingFeedback {
   mode: IELTSMode;
   module: 'speaking';
@@ -58,6 +65,7 @@ export interface SpeakingFeedback {
   };
   fatalErrors: FatalError[];
   naturalnessHints: NaturalnessHint[];
+  band9Refinements: Band9Refinement[];
   preservedStyle: { text: string; reasonZh: string }[];
   upgradedAnswer: string;
   reusableExample: {

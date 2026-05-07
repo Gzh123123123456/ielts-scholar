@@ -10,6 +10,13 @@ _Last updated: 2026-05-07_
   - No UI provider toggle or production key management yet.
 - Add Debug Panel diagnostics for raw response, parsed JSON, and parse errors.
 - Ensure invalid JSON does not crash UI.
+- Add local-first practice reliability for current practice modules.
+  - Done: Speaking and Writing Task 2 active attempts and recent records.
+  - Done: Speaking records filtered by part and individual Speaking record deletion.
+- Add a small original V1 prompt bank for local testing.
+  - Done: Speaking Part 1/2/3 and Writing Task 2 prompt coverage sufficient for local QA.
+- Improve Speaking feedback readability and high-band usefulness.
+  - Done: wider result layout, prominent upgraded answer, and Band 9 Refinement section.
 
 ### Writing Task 2 Framework Intelligence
 - Add **Generate Framework Summary** / **Extract Final Framework**.

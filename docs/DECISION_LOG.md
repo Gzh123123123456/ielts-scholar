@@ -1,5 +1,23 @@
 # Decision Log
 
+## [2026-05-07] Speaking Practice Records, Prompt Bank, and High-Band Refinement
+- **Decision**: Close the first real-use Speaking QA gaps before adding larger product features.
+- **Reason**: Practice needed reliable record access, meaningful question switching, and clearer coaching for answers that are already strong.
+- **Implemented**:
+  - Speaking Practice records are filtered by current Part 1/2/3 and can be deleted individually.
+  - Empty question loads no longer create noisy draft records.
+  - Change Question now switches to a different available prompt and does not call AI.
+  - Added a small original V1 prompt bank for local testing:
+    - Speaking Part 1: 11 topics / 36 questions.
+    - Speaking Part 2: 12 cue cards.
+    - Speaking Part 3: 37 abstract follow-up questions.
+    - Writing Task 2: 22 IELTS-style prompts.
+  - Speaking feedback uses a wider result layout with Must Fix / Optional Polish, a prominent upgraded answer, and secondary preserved-style context.
+  - `obsidianMarkdown`-only provider issues are repaired locally when core Speaking feedback is valid, so valid feedback is not replaced with generic fallback.
+  - Added **Band 9 Refinement / Examiner-Friendly Refinement** as a distinct high-level coaching layer for strong answers with few or no true errors.
+  - Added **Practice This Question Again** so learners can retry the same prompt while preserving the analyzed attempt.
+- **Explicitly unchanged**: Mock Provider remains default, no provider selection changes, no RAG, no pronunciation scoring, no SpeechRecognition behavior change, no Writing layout change, no API usage panel.
+
 ## [2026-05-07] Practice Persistence Before More Content
 - **Decision**: Prioritize reliable local practice records before expanding question banks or API usage features.
 - **Reason**: First real-use QA showed that moving from Speaking Part 1 to Part 2 and back made prior transcripts, feedback, and notes hard to recover. The same risk applies across practice modules.

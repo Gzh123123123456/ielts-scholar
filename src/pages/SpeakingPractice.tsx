@@ -167,9 +167,12 @@ export default function SpeakingPractice() {
     persistCurrentSpeakingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
   }, [part, question, step, transcript, feedback, providerErrorMessage]);
 
-  const loadRandomQuestion = (p: 1 | 2 | 3) => {
+  const loadRandomQuestion = (p: 1 | 2 | 3, excludeQuestionId?: string) => {
     const bank = p === 1 ? speakingPart1 : p === 2 ? speakingPart2 : speakingPart3;
-    const random = bank[Math.floor(Math.random() * bank.length)];
+    const available = excludeQuestionId
+      ? bank.filter(item => item.id !== excludeQuestionId)
+      : bank;
+    const random = (available.length ? available : bank)[Math.floor(Math.random() * (available.length ? available.length : bank.length))];
     activeAttemptIdRef.current = createRecordId('sp');
     setQuestion(random);
     setPart(p);
@@ -204,6 +207,13 @@ export default function SpeakingPractice() {
   };
 
   const changeQuestion = () => {
+    const bank = getBank(part);
+    const alternatives = question ? bank.filter(item => item.id !== question.id) : bank;
+    if (alternatives.length === 0) {
+      setRestoreMessage('No other questions available yet.');
+      return;
+    }
+
     const hasCurrentWork = Boolean(transcript.trim() || feedback);
     if (hasCurrentWork) {
       const confirmed = window.confirm('Change question? Your current unsaved transcript or feedback will be cleared.');
@@ -222,8 +232,27 @@ export default function SpeakingPractice() {
       saveActiveSpeakingSession(activeSessionRef.current);
     }
 
-    loadRandomQuestion(part);
+    loadRandomQuestion(part, question?.id);
   };
+
+  const practiceThisQuestionAgain = () => {
+    if (!question) return;
+    activeAttemptIdRef.current = createRecordId('sp');
+    setTranscript('');
+    setFeedback(null);
+    setFeedbackFallbackUsed(false);
+    setProviderDiagnostic(null);
+    setTimer(0);
+    setStep('idle');
+    setStatusMessage('Ready');
+    setProviderErrorMessage('');
+    setRestoreMessage('');
+    setShowAllMustFix(false);
+    setShowAllOptionalPolish(false);
+    transcriptOriginRef.current = 'manual';
+    addDebugLog('Started a fresh attempt for the same speaking question.');
+  };
+
 
   const readQuestion = () => {
     if (!question) return;
@@ -680,9 +709,14 @@ export default function SpeakingPractice() {
                 </>
               )}
               {step === 'results' && (
-                <SerifButton onClick={() => loadRandomQuestion(part)} variant="outline" className="flex items-center gap-2">
-                  Continue Training <ArrowRight className="w-4 h-4" />
-                </SerifButton>
+                <>
+                  <SerifButton onClick={practiceThisQuestionAgain} className="flex items-center gap-2">
+                    Practice This Question Again
+                  </SerifButton>
+                  <SerifButton onClick={() => loadRandomQuestion(part)} variant="outline" className="flex items-center gap-2">
+                    Continue Training <ArrowRight className="w-4 h-4" />
+                  </SerifButton>
+                </>
               )}
             </div>
           </PaperCard>
@@ -835,6 +869,28 @@ export default function SpeakingPractice() {
                   )}
                 </div>
               </div>
+
+              {feedback.band9Refinements.length > 0 && (
+                <section className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-paper-ink/55 ml-1">
+                    Band 9 Refinement / Examiner-Friendly Refinement
+                  </h4>
+                  <PaperCard className="border-l-2 border-l-paper-ink/30 bg-paper-50">
+                    <p className="text-sm font-sans uppercase tracking-widest text-paper-ink/35 mb-4">
+                      Not mistakes. These are high-level refinements for stronger spoken delivery.
+                    </p>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {feedback.band9Refinements.map((item, index) => (
+                        <div key={index} className="border border-paper-ink/10 bg-paper-ink/[0.03] p-4 rounded-sm">
+                          <p className="text-base leading-7 text-paper-ink/75 mb-3">{item.observation}</p>
+                          <p className="text-lg leading-8 font-bold text-paper-ink mb-3">{item.refinement}</p>
+                          <p className="text-base leading-8 text-paper-ink/85">{item.explanationZh}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </PaperCard>
+                </section>
+              )}
 
               {feedback.preservedStyle.length > 0 && (
                 <details className="border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
