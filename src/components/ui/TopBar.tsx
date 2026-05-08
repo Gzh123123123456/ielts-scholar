@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, Mic, PenTool, LayoutDashboard } from 'lucide-react';
+import { BookOpen, Mic, PenTool, LayoutDashboard, History } from 'lucide-react';
 
 export const TopBar: React.FC = () => {
   const location = useLocation();
@@ -9,6 +9,7 @@ export const TopBar: React.FC = () => {
     { name: 'Home', path: '/', icon: BookOpen },
     { name: 'Speaking', path: '/speaking', icon: Mic },
     { name: 'Writing', path: '/writing', icon: PenTool },
+    { name: 'History', path: '/practice-history', icon: History },
     { name: 'Progress', path: '/progress', icon: LayoutDashboard },
   ];
 

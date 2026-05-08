@@ -18,6 +18,7 @@ import WritingTask2Mock from './pages/WritingTask2Mock';
 import WritingTask1Placeholder from './pages/WritingTask1Placeholder';
 import Progress from './pages/Progress';
 import SpeechTest from './pages/SpeechTest';
+import PracticeHistory from './pages/PracticeHistory';
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="/writing/task2/mock" element={<WritingTask2Mock />} />
             <Route path="/writing/task1" element={<WritingTask1Placeholder />} />
             <Route path="/progress" element={<Progress />} />
+            <Route path="/practice-history" element={<PracticeHistory />} />
             <Route path="/speech-test" element={<SpeechTest />} />
           </Routes>
           <DebugPanel />

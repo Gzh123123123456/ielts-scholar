@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { PaperCard } from '@/src/components/ui/PaperCard';
-import { Mic, PenTool, ArrowRight } from 'lucide-react';
+import { Mic, PenTool, ArrowRight, History } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -40,7 +40,10 @@ export default function Home() {
         </Link>
       </div>
 
-      <div className="mt-16 flex justify-center">
+      <div className="mt-16 flex flex-col sm:flex-row items-center justify-center gap-6">
+        <Link to="/practice-history" className="flex items-center gap-2 text-paper-ink/50 hover:text-accent-terracotta transition-colors group text-sm italic">
+          Practice history <History className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+        </Link>
         <Link to="/progress" className="flex items-center gap-2 text-paper-ink/40 hover:text-accent-terracotta transition-colors group text-sm italic">
           View your progress <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
         </Link>

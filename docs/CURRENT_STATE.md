@@ -1,6 +1,6 @@
 # Current State (V1)
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-08_
 
 ## Product Baseline
 - Mock Provider remains the default provider.
@@ -67,6 +67,18 @@ _Last updated: 2026-05-07_
 ## Export Behavior (Implemented)
 - Markdown export is attempt-level in V1.
 - Session-level consolidated note export is not implemented yet.
+
+## Practice History (Implemented)
+- A lightweight `/practice-history` page lists existing localStorage practice records without starting a new attempt.
+- Speaking attempts show part, question, timestamp, transcript preview, and status when available.
+- Writing Task 2 attempts show prompt, timestamp, essay/framework preview, and status when available.
+- Opening a history item writes it into the existing active practice restore path, then navigates to the matching Practice page without making an AI call.
+- Practice History supports deleting individual Speaking and Writing Task 2 attempts from localStorage without affecting unrelated records.
+- Writing Task 2 Recent Attempts now supports View, Export, and Delete, and the visible list updates immediately after deletion.
+- Writing Task 2 framework UI copy was shortened so the workspace stays focused while textarea placeholders retain useful guidance.
+- Empty history sections show “No saved attempts yet.”
+- Practice History is linked from Home, TopBar, Speaking, and Writing.
+- No cross-attempt analytics, export, database, RAG, auth, server, Mock mode, or provider-default changes were added.
 
 ## Debug / Provider Safety (Implemented)
 - Debug Panel remains globally available.

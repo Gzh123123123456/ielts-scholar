@@ -70,9 +70,12 @@ export default function Speaking() {
         </section>
       </div>
 
-      <div className="flex justify-center">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
         <Link to="/speaking/practice" className="font-serif italic text-accent-terracotta hover:underline decoration-accent-terracotta/30 flex items-center gap-2">
           Start a new practice session <PlayCircle className="w-4 h-4" />
+        </Link>
+        <Link to="/practice-history" className="font-serif italic text-paper-ink/45 hover:text-accent-terracotta hover:underline decoration-accent-terracotta/30 flex items-center gap-2">
+          Open practice history <History className="w-4 h-4" />
         </Link>
       </div>
     </PageShell>

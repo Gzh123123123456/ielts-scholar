@@ -9,6 +9,8 @@ import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
 import {
   createRecordId,
+  deleteActiveWritingTask2,
+  deletePracticeRecord,
   getActiveWritingTask2,
   getPracticeRecords,
   PracticeRecord,
@@ -43,7 +45,7 @@ export default function WritingTask2Practice() {
     refreshRecentAttempts();
     const active = getActiveWritingTask2();
     if (active) {
-      restoreWritingAttempt(active, 'Restored your latest Writing Task 2 attempt from this browser.');
+      restoreWritingAttempt(active);
       return;
     }
     loadRandomQuestion();
@@ -91,7 +93,7 @@ export default function WritingTask2Practice() {
     refreshRecentAttempts();
   };
 
-  const restoreWritingAttempt = (record: WritingTask2PracticeRecord, message = 'Opened saved Writing Task 2 attempt. No AI call was made.') => {
+  const restoreWritingAttempt = (record: WritingTask2PracticeRecord, message = '') => {
     activeAttemptIdRef.current = record.id;
     setQuestion(record.questionData || writingTask2.find(item => item.id === record.questionId) || {
       id: record.questionId || record.id,
@@ -124,6 +126,20 @@ export default function WritingTask2Practice() {
     setProviderErrorMessage('');
     setRestoreMessage('');
     addDebugLog(`Loaded writing question: ${random.id}`);
+  };
+
+  const deleteSavedWritingAttempt = (record: WritingTask2PracticeRecord) => {
+    const confirmed = window.confirm('Delete this attempt? This cannot be undone.');
+    if (!confirmed) return;
+
+    deletePracticeRecord(record.id, 'writing');
+    deleteActiveWritingTask2(record.id);
+    refreshRecentAttempts();
+
+    if (activeAttemptIdRef.current === record.id) {
+      loadRandomQuestion();
+      setRestoreMessage('Deleted the opened attempt. Started a fresh Writing Task 2 attempt.');
+    }
   };
 
   const submitFrameworkNote = async () => {
@@ -351,7 +367,7 @@ export default function WritingTask2Practice() {
         {(restoreMessage || providerErrorMessage) && (
           <div className="mb-6 space-y-2">
             {restoreMessage && (
-              <div className="p-3 bg-paper-ink/5 border border-paper-ink/10 rounded-sm text-xs font-sans text-paper-ink/55">
+              <div className="inline-flex p-2 bg-paper-ink/5 border border-paper-ink/10 rounded-sm text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
                 {restoreMessage}
               </div>
             )}
@@ -366,7 +382,7 @@ export default function WritingTask2Practice() {
         {recentAttempts.length > 0 && (
           <details className="mb-8 border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
             <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between">
-              <span>Practice Records / Recent Attempts</span>
+              <span>Recent Attempts</span>
               <span className="text-paper-ink/35">Open</span>
             </summary>
             <div className="mt-4 space-y-2">
@@ -374,7 +390,7 @@ export default function WritingTask2Practice() {
                 <div key={record.id} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center border border-paper-ink/10 bg-paper-100/60 p-3">
                   <div>
                     <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/45">
-                      Writing Task {(record as WritingTask2PracticeRecord).task.toUpperCase()} · {record.status} · {new Date(record.updatedAt).toLocaleString()}
+                      Writing Task {(record as WritingTask2PracticeRecord).task.toUpperCase()} / {record.status} / {new Date(record.updatedAt).toLocaleString()}
                     </p>
                     <p className="text-sm leading-6 text-paper-ink/75 line-clamp-2">{record.question}</p>
                   </div>
@@ -383,7 +399,7 @@ export default function WritingTask2Practice() {
                       type="button"
                       variant="outline"
                       className="text-xs py-2"
-                      onClick={() => restoreWritingAttempt(record as WritingTask2PracticeRecord)}
+                      onClick={() => restoreWritingAttempt(record as WritingTask2PracticeRecord, 'Opened saved Writing Task 2 attempt. No AI call was made.')}
                     >
                       View
                     </SerifButton>
@@ -395,6 +411,14 @@ export default function WritingTask2Practice() {
                       onClick={() => exportSavedMarkdown(record)}
                     >
                       Export
+                    </SerifButton>
+                    <SerifButton
+                      type="button"
+                      variant="outline"
+                      className="text-xs py-2 border-red-800/30 text-red-800 hover:bg-red-50"
+                      onClick={() => deleteSavedWritingAttempt(record as WritingTask2PracticeRecord)}
+                    >
+                      Delete
                     </SerifButton>
                   </div>
                 </div>
@@ -409,20 +433,7 @@ export default function WritingTask2Practice() {
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(460px,0.88fr)] xl:items-start">
             <PaperCard className="p-0 overflow-hidden xl:max-h-[calc(100vh-14rem)] xl:flex xl:flex-col">
               <div className="px-6 pt-6 pb-4 border-b border-paper-ink/10 bg-paper-ink/[0.02] shrink-0">
-                <h3 className="text-base font-bold uppercase tracking-widest mb-2">Framework Notes</h3>
-                <p className="text-sm text-paper-ink/70">
-                  Draft in Chinese or English. Focus on Position, View A, View B, and My opinion.
-                </p>
-              </div>
-              <div className="px-6 pt-4 pb-2 shrink-0">
-                <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/45 mb-2">Framework headings for your notes</p>
-                <div className="grid sm:grid-cols-2 gap-2 text-sm">
-                  {['Position', 'View A', 'View B', 'My opinion'].map((label) => (
-                    <div key={label} className="border border-paper-ink/10 bg-paper-ink/[0.02] px-3 py-2">
-                      <span className="font-semibold">{label}</span>
-                    </div>
-                  ))}
-                </div>
+                <h3 className="text-base font-bold uppercase tracking-widest">Framework Notes</h3>
               </div>
               <div ref={discussionRef} className="px-6 py-5 space-y-3 max-h-[360px] xl:max-h-none xl:flex-1 overflow-auto">
                 {frameworkChat.map((msg, i) => (
@@ -466,9 +477,6 @@ export default function WritingTask2Practice() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3 shrink-0">
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Final Framework Summary</h3>
-                  <p className="text-sm text-paper-ink/70">
-                    Consolidate your final writing framework here: Position, View A, View B, My opinion, and optional structure/example.
-                  </p>
                 </div>
                 <SerifButton
                   type="button"

@@ -31,20 +31,50 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const defaultProfile = (): UserProfile => ({
+  totalSessions: 0,
+  estimatedBandHistory: [],
+  errorTags: {},
+  lastPracticed: null,
+});
+
+const readJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) as T : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const sanitizeProfile = (value: unknown): UserProfile => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return defaultProfile();
+  const source = value as Partial<UserProfile>;
+  return {
+    totalSessions: typeof source.totalSessions === 'number' ? source.totalSessions : 0,
+    estimatedBandHistory: Array.isArray(source.estimatedBandHistory)
+      ? source.estimatedBandHistory.filter(item => (
+        item &&
+        typeof item === 'object' &&
+        typeof (item as { date?: unknown }).date === 'string' &&
+        typeof (item as { band?: unknown }).band === 'number'
+      )) as UserProfile['estimatedBandHistory']
+      : [],
+    errorTags: source.errorTags && typeof source.errorTags === 'object' && !Array.isArray(source.errorTags)
+      ? source.errorTags
+      : {},
+    lastPracticed: typeof source.lastPracticed === 'string' ? source.lastPracticed : null,
+  };
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [profile, setProfile] = useState<UserProfile>(() => {
-    const saved = localStorage.getItem('ielts_profile');
-    return saved ? JSON.parse(saved) : {
-      totalSessions: 0,
-      estimatedBandHistory: [],
-      errorTags: {},
-      lastPracticed: null
-    };
-  });
+  const [profile, setProfile] = useState<UserProfile>(() =>
+    sanitizeProfile(readJson<unknown>('ielts_profile', null))
+  );
 
   const [sessions, setSessions] = useState<any[]>(() => {
-    const saved = localStorage.getItem('ielts_sessions');
-    return saved ? JSON.parse(saved) : [];
+    const saved = readJson<unknown>('ielts_sessions', []);
+    return Array.isArray(saved) ? saved : [];
   });
 
   const [debugLogs, setDebugLogs] = useState<string[]>([]);

@@ -3,6 +3,7 @@ import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { Link } from 'react-router-dom';
+import { History } from 'lucide-react';
 
 export default function Writing() {
   return (
@@ -47,6 +48,11 @@ export default function Writing() {
             <p>Focus on logic before polishing language.</p>
           </PaperCard>
         </section>
+      </div>
+      <div className="flex justify-center mt-12">
+        <Link to="/practice-history" className="font-serif italic text-paper-ink/45 hover:text-accent-terracotta hover:underline decoration-accent-terracotta/30 flex items-center gap-2">
+          Open practice history <History className="w-4 h-4" />
+        </Link>
       </div>
     </PageShell>
   );

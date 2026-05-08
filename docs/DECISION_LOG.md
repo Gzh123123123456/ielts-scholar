@@ -1,5 +1,19 @@
 # Decision Log
 
+## [2026-05-08] Minimal Local-First Practice History Entry
+- **Decision**: Add a small Practice History entry point for existing localStorage practice records.
+- **Reason**: Users needed a way to review and restore saved Speaking Practice and Writing Task 2 attempts without entering a page that immediately feels like a new practice session.
+- **Implemented**:
+  - Added `/practice-history`.
+  - Reused the existing `ielts_practice_records_v1` record list and active-attempt restore helpers.
+  - Speaking history shows part, question, timestamp, transcript preview, and status.
+  - Writing Task 2 history shows prompt, timestamp, essay/framework preview, and status.
+  - Open / Restore writes the selected record to the existing active restore path, then navigates to the relevant Practice page without making an AI call.
+  - Added individual Delete actions to Practice History and Writing Task 2 Recent Attempts, scoped to the selected module record.
+  - Shortened repeated Writing Task 2 framework helper copy while preserving useful textarea placeholders.
+  - Added navigation from Home, TopBar, Speaking, and Writing.
+- **Explicitly unchanged**: Mock Provider remains default, no RAG, no database, no server, no auth, no production API key logic, no cross-attempt analytics, no session export, no Mock mode changes, no redesign.
+
 ## [2026-05-07] Speaking Practice Records, Prompt Bank, and High-Band Refinement
 - **Decision**: Close the first real-use Speaking QA gaps before adding larger product features.
 - **Reason**: Practice needed reliable record access, meaningful question switching, and clearer coaching for answers that are already strong.
