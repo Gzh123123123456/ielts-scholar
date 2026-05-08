@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -31,16 +31,6 @@ const pickPrompt = (excludeId?: string) => {
   return bank[Math.floor(Math.random() * bank.length)];
 };
 
-const hasMeaningfulContent = (report: string, quickPlan: WritingTask1QuickPlan, feedback?: WritingTask1Feedback) =>
-  Boolean(
-    report.trim() ||
-    quickPlan.overview.trim() ||
-    quickPlan.keyFeatures.trim() ||
-    quickPlan.comparisons.trim() ||
-    quickPlan.paragraphPlan.trim() ||
-    feedback,
-  );
-
 const feedbackItems = (feedback: WritingTask1Feedback) => [
   ['Overview', feedback.overviewFeedback],
   ['Key Features', feedback.keyFeaturesFeedback],
@@ -51,6 +41,7 @@ const feedbackItems = (feedback: WritingTask1Feedback) => [
 
 export default function WritingTask1Placeholder() {
   const activeRecord = useMemo(() => getActiveWritingTask1(), []);
+  const initialActiveRecordRef = useRef(activeRecord);
   const initialPrompt = writingTask1Academic.find(prompt => prompt.id === activeRecord?.questionId) || writingTask1Academic[0];
 
   const [recordId, setRecordId] = useState(activeRecord?.id || createRecordId('writing_task1'));
@@ -78,9 +69,10 @@ export default function WritingTask1Placeholder() {
       topic: prompt.topic,
       tags: prompt.tags,
       taskType: prompt.taskType,
+      prompt: prompt.instruction,
       createdAt,
       updatedAt: now,
-      analyzedAt: nextFeedback ? now : activeRecord?.analyzedAt,
+      analyzedAt: nextFeedback ? now : undefined,
       questionData: prompt,
       instruction: prompt.instruction,
       visualBrief: prompt.visualBrief,
@@ -88,17 +80,15 @@ export default function WritingTask1Placeholder() {
       quickPlan,
       report,
       feedback: nextFeedback,
-      providerDiagnostic: diagnostic ? summarizeDiagnostic(diagnostic) : activeRecord?.providerDiagnostic,
-      obsidianMarkdown: nextFeedback?.obsidianMarkdown || activeRecord?.obsidianMarkdown,
+      providerDiagnostic: diagnostic ? summarizeDiagnostic(diagnostic) : initialActiveRecordRef.current?.providerDiagnostic,
+      obsidianMarkdown: nextFeedback?.obsidianMarkdown || initialActiveRecordRef.current?.obsidianMarkdown,
     };
   };
 
   useEffect(() => {
     const record = buildRecord();
     saveActiveWritingTask1(record);
-    if (hasMeaningfulContent(report, quickPlan, feedback)) {
-      upsertPracticeRecord(record);
-    }
+    upsertPracticeRecord(record);
   }, [recordId, createdAt, prompt, quickPlan, report, feedback]);
 
   const updatePlan = (field: keyof WritingTask1QuickPlan, value: string) => {
@@ -114,6 +104,7 @@ export default function WritingTask1Placeholder() {
     setReport('');
     setFeedback(undefined);
     setDiagnostic(null);
+    initialActiveRecordRef.current = null;
   };
 
   const analyzeReport = async () => {

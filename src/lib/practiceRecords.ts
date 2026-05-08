@@ -67,6 +67,7 @@ export interface WritingTask1PracticeRecord extends PracticeRecordBase {
   taskType: string;
   topic: string;
   tags: string[];
+  prompt: string;
   instruction: string;
   visualBrief: string;
   dataSummary: string[];
@@ -287,6 +288,7 @@ const sanitizeWritingTask1Record = (value: unknown): WritingTask1PracticeRecord 
     updatedAt: timestamp,
     analyzedAt: asOptionalString(value.analyzedAt),
     instruction,
+    prompt: asString(value.prompt, instruction),
     visualBrief: asString(value.visualBrief),
     dataSummary: asRequiredStringArray(value.dataSummary),
     quickPlan: asTask1QuickPlan(value.quickPlan),
@@ -425,4 +427,11 @@ export const getActiveWritingTask1 = (): WritingTask1PracticeRecord | null =>
 
 export const saveActiveWritingTask1 = (attempt: WritingTask1PracticeRecord) => {
   writeJson(ACTIVE_WRITING_TASK1_KEY, { ...attempt, updatedAt: nowIso() });
+};
+
+export const deleteActiveWritingTask1 = (recordId: string) => {
+  const active = getActiveWritingTask1();
+  if (active?.id === recordId) {
+    removeJson(ACTIVE_WRITING_TASK1_KEY);
+  }
 };

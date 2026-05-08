@@ -15,7 +15,11 @@
 @layer base {
   body {
     @apply bg-paper-100 text-paper-ink font-serif antialiased selection:bg-accent-terracotta/20;
-    background-image: url("https://www.transparenttextures.com/patterns/paper.png");
+    background-image:
+      radial-gradient(circle at 20% 15%, rgba(60, 47, 47, 0.035) 0 1px, transparent 1px),
+      radial-gradient(circle at 80% 65%, rgba(166, 77, 50, 0.03) 0 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.18), rgba(60, 47, 47, 0.018));
+    background-size: 18px 18px, 24px 24px, 100% 100%;
     font-size: 1.1rem;
     line-height: 1.85;
   }

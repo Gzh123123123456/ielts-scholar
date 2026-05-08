@@ -262,7 +262,6 @@ export default function Progress() {
   const writingEstimate = average(scoredWriting.map(record => getWritingScore(record)).filter(isValidBand));
   const latestRecord = records[0];
   const recentSpeakingScores = scoredSpeaking.slice(0, 6);
-  const recentWritingScores = scoredWriting.slice(0, 6);
   const speakingRecords = records.filter(record => record.module === 'speaking');
   const writingRecords = records.filter(record =>
     record.module === 'writing' && (record as WritingTask2PracticeRecord).task === 'task2'
@@ -270,6 +269,11 @@ export default function Progress() {
   const writingTask1Records = records.filter((record): record is WritingTask1PracticeRecord =>
     record.module === 'writing_task1'
   );
+  const writingTask2Drafts = writingRecords.filter(record => record.status === 'draft').length;
+  const writingTask1Drafts = writingTask1Records.filter(record => record.status === 'draft').length;
+  const recentWritingScores = [...scoredWriting, ...scoredWritingTask1]
+    .sort((a, b) => getTimestamp(b).localeCompare(getTimestamp(a)))
+    .slice(0, 6);
   const speakingCoverage = countTopics(
     speakingTopicCategories,
     speakingRecords,
@@ -330,6 +334,10 @@ export default function Progress() {
               Writing T2 {scoredWriting.length}
               <br />
               Writing T1 {scoredWritingTask1.length}
+              <br />
+              <span className="text-paper-ink/45">
+                Drafts T2 {writingTask2Drafts} / T1 {writingTask1Drafts}
+              </span>
             </div>
           </PaperCard>
 
@@ -357,14 +365,16 @@ export default function Progress() {
           />
 
           <ScoreList
-            title="Recent Writing Task 2 Scores"
-            empty="No analyzed Writing Task 2 attempts yet."
+            title="Recent Writing Scores"
+            empty="No analyzed Writing attempts yet."
             records={recentWritingScores.map(record => ({
               id: record.id,
               date: formatDate(getTimestamp(record)),
-              label: 'Writing Task 2',
+              label: record.module === 'writing_task1' ? `Writing Task 1 / ${record.taskType}` : 'Writing Task 2',
               question: preview(record.question),
-              score: getWritingScore(record),
+              score: record.module === 'writing_task1'
+                ? getWritingTask1Score(record)
+                : getWritingScore(record),
             }))}
           />
         </div>

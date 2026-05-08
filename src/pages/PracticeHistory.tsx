@@ -7,6 +7,7 @@ import { SerifButton } from '@/src/components/ui/SerifButton';
 import {
   getActiveSpeakingSession,
   getPracticeRecords,
+  deleteActiveWritingTask1,
   deleteActiveWritingTask2,
   deletePracticeRecord,
   saveActiveSpeakingSession,
@@ -110,6 +111,7 @@ export default function PracticeHistory() {
     if (!confirmed) return;
 
     deletePracticeRecord(record.id, 'writing_task1');
+    deleteActiveWritingTask1(record.id);
     refreshRecords();
   };
 
