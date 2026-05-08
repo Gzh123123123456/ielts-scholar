@@ -27,9 +27,9 @@ export const conservativeRecentEstimate = (scores: number[]): number | null => {
     weights.reduce((sum, weight) => sum + weight, 0);
   const bestRecent = Math.max(...recent);
   const stableAverage = valid.length === 1
-    ? Math.min(weightedAverage, bestRecent - 0.5)
+    ? Math.min(weightedAverage, 6.5)
     : valid.length === 2
-      ? Math.min(weightedAverage, bestRecent - 0.25)
+      ? Math.min(weightedAverage, bestRecent - 0.5, 7)
       : weightedAverage;
 
   return valid.length < 3 ? floorToHalfBand(stableAverage) : roundToHalfBand(stableAverage);

@@ -100,7 +100,7 @@
 }
 
 .phase-tab {
-  @apply px-5 py-1.5 rounded-sm transition-all duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/40 hover:text-paper-ink hover:bg-paper-ink/5 text-[11px];
+  @apply min-w-0 flex-1 justify-center px-5 py-3 rounded-sm transition-all duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/45 hover:text-paper-ink hover:bg-paper-ink/5 text-xs text-center whitespace-nowrap;
 }
 
 .phase-tab-active {

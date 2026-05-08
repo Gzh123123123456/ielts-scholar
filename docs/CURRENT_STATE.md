@@ -19,8 +19,7 @@ _Last updated: 2026-05-08_
 
 ## Speaking Practice (Implemented)
 - Speaking Practice now saves local-first practice attempts so Part 1/2/3 work can be recovered after part switching, navigation, or page reload.
-- Recent Speaking attempts are accessible from the practice page; opening a saved attempt restores local transcript/feedback without re-calling AI.
-- Recent Speaking attempts are filtered by the current part, and individual saved Speaking attempts can be deleted from localStorage.
+- Active Speaking practice pages no longer show large Recent Attempts / Practice Records panels; History is the learner-facing record center.
 - Empty Speaking question loads are not saved as noisy draft records; drafts are saved only after meaningful transcript or analysis state exists.
 - Speaking question banks now include a small V1 prompt set for practical local testing:
   - Part 1: 11 common topics / 36 questions.
@@ -29,7 +28,8 @@ _Last updated: 2026-05-08_
 - Speaking Change Question now avoids returning the same prompt when alternatives exist and does not call AI.
 - Speaking users can start **Practice This Question Again** after analysis, preserving the analyzed attempt while opening a fresh attempt for the same question.
 - Provider unavailable failures are distinguished from schema/parse fallback; provider-unavailable attempts preserve the transcript and show a retry-later message instead of normal coaching.
-- Speaking feedback readability was improved with clearer Must Fix / Optional Polish sections, a wider result layout, a more prominent upgraded answer, and secondary preserved-style context.
+- Speaking feedback readability was improved with larger Part tabs, clearer Training Estimate presentation, fully visible Must Fix / Optional Polish sections, a more readable upgraded-answer layout, and larger preserved-style context.
+- Short Speaking samples across Parts 1/2/3 are capped conservatively and receive insufficient-sample feedback instead of inflated training estimates.
 - Speaking feedback now supports a distinct **Band 9 Refinement / Examiner-Friendly Refinement** section for strong answers with few or no true errors.
 - Speaking markdown export can be locally generated when the provider returns valid core feedback but omits `obsidianMarkdown`; this is shown as a normalized field in diagnostics rather than a full feedback failure.
 - `no-speech` auto-retry is implemented and preserved.
@@ -39,7 +39,7 @@ _Last updated: 2026-05-08_
 
 ## Writing Task 2 Practice (Implemented)
 - Writing Task 2 now saves active local-first drafts for Phase 1 notes, final framework, essay draft, and existing analysis result.
-- Recent Writing Task 2 attempts are accessible from the practice page; opening a saved attempt restores local state without re-calling AI.
+- Active Writing Task 2 practice no longer shows a large Recent Attempts panel; History is the learner-facing record center and restore path.
 - Provider unavailable failures preserve the draft/framework/essay and show a retry-later message instead of presenting fallback output as successful coaching.
 - Phase 1 separates:
   - Coach Discussion (process)
@@ -55,6 +55,7 @@ _Last updated: 2026-05-08_
 - Phase 2 displays Final Framework Summary before essay writing.
 - Phase 3 displays My Essay prominently before feedback; My Framework remains available as secondary planning reference.
 - Submit gating is disabled only when `essay.trim().length === 0` (implemented as `!essay.trim()`).
+- Under-length or extremely short Task 2 submissions are accepted, but receive conservative low/insufficient-sample feedback instead of high training estimates.
 - Writing Task 2 desktop layout now uses a wider workspace for reduced scrolling and better cross-reference:
   - Phase 1 uses side-by-side Coach Discussion / Notes and Final Framework Summary panels.
   - Phase 2 uses side-by-side framework reference and essay editor panels.
@@ -72,6 +73,7 @@ _Last updated: 2026-05-08_
 - Task 1 feedback has its own schema and Mock Provider analysis path covering overview, key features, comparisons, data accuracy, coherence, must-fix items, rewrite task, reusable report patterns, improved report/model excerpt, and markdown export.
 - Task 1 diagnosis is Chinese-first in learner-facing sections, with English corrections/examples where useful; Improved Report / Model Excerpt remains English.
 - Task 1 under-length and extremely short answers receive conservative training estimates and explicit length feedback instead of high mock/local scores.
+- Active Writing Task 1 practice links to History instead of embedding a recent-record list.
 - Task 1 reports save local-first records with module `writing_task1`, task type, topic/tags, instruction, visual brief, quick plan, report, feedback, status, and timestamps.
 - Task 1 retry/new prompt starts a new attempt without clearing unrelated saved records.
 - Text-based visual briefs are the V1.2 baseline; interactive charts and richer data-accuracy mapping remain later work.
@@ -88,7 +90,7 @@ _Last updated: 2026-05-08_
 - Writing Task 1 attempts are recognized minimally with prompt, timestamp, report/plan preview, status, and Open / Restore.
 - Opening a history item writes it into the existing active practice restore path, then navigates to the matching Practice page without making an AI call.
 - Practice History supports deleting individual Speaking and Writing Task 2 attempts from localStorage without affecting unrelated records.
-- Writing Task 2 Recent Attempts now supports View, Export, and Delete, and the visible list updates immediately after deletion.
+- Active practice pages focus on current work; record review, restore, export, and delete live in Practice History.
 - Writing Task 2 framework UI copy was shortened so the workspace stays focused while textarea placeholders retain useful guidance.
 - Empty history sections show “No saved attempts yet.”
 - Practice History is linked from Home, TopBar, Speaking, and Writing.

@@ -4,23 +4,20 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
+import { Link } from 'react-router-dom';
 import { getAIProvider, getAIProviderName, isMockProviderActive, safeAnalyzeWriting, safeExtractWritingFramework } from '@/src/lib/ai';
 import { formatBandEstimate } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
 import {
   createRecordId,
-  deleteActiveWritingTask2,
-  deletePracticeRecord,
   getActiveWritingTask2,
-  getPracticeRecords,
-  PracticeRecord,
   saveActiveWritingTask2,
   summarizeDiagnostic,
   upsertPracticeRecord,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
-import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
+import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles, History } from 'lucide-react';
 
 export default function WritingTask2Practice() {
   const { addDebugLog, saveSession, setProviderDiagnostic } = useApp();
@@ -35,7 +32,6 @@ export default function WritingTask2Practice() {
   const [frameworkExtractMessage, setFrameworkExtractMessage] = useState('');
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
   const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
-  const [recentAttempts, setRecentAttempts] = useState<PracticeRecord[]>([]);
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
   const discussionRef = useRef<HTMLDivElement | null>(null);
@@ -43,7 +39,6 @@ export default function WritingTask2Practice() {
   const activeAttemptIdRef = useRef(createRecordId('wt2'));
 
   useEffect(() => {
-    refreshRecentAttempts();
     const active = getActiveWritingTask2();
     if (active) {
       restoreWritingAttempt(active);
@@ -56,10 +51,6 @@ export default function WritingTask2Practice() {
     if (!question || isAnalyzing || isExtractingFramework) return;
     persistWritingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
   }, [question, phase, frameworkChat, frameworkInput, finalFrameworkSummary, essay, feedback, feedbackFallbackUsed, providerErrorMessage]);
-
-  const refreshRecentAttempts = () => {
-    setRecentAttempts(getPracticeRecords(8).filter(record => record.module === 'writing'));
-  };
 
   const buildWritingRecord = (status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft'): WritingTask2PracticeRecord | null => {
     if (!question) return null;
@@ -94,7 +85,6 @@ export default function WritingTask2Practice() {
     if (!record) return;
     saveActiveWritingTask2(record);
     upsertPracticeRecord(record);
-    refreshRecentAttempts();
   };
 
   const restoreWritingAttempt = (record: WritingTask2PracticeRecord, message = '') => {
@@ -130,20 +120,6 @@ export default function WritingTask2Practice() {
     setProviderErrorMessage('');
     setRestoreMessage('');
     addDebugLog(`Loaded writing question: ${random.id}`);
-  };
-
-  const deleteSavedWritingAttempt = (record: WritingTask2PracticeRecord) => {
-    const confirmed = window.confirm('Delete this attempt? This cannot be undone.');
-    if (!confirmed) return;
-
-    deletePracticeRecord(record.id, 'writing');
-    deleteActiveWritingTask2(record.id);
-    refreshRecentAttempts();
-
-    if (activeAttemptIdRef.current === record.id) {
-      loadRandomQuestion();
-      setRestoreMessage('Deleted the opened attempt. Started a fresh Writing Task 2 attempt.');
-    }
   };
 
   const submitFrameworkNote = async () => {
@@ -315,17 +291,6 @@ export default function WritingTask2Practice() {
     URL.revokeObjectURL(url);
   };
 
-  const exportSavedMarkdown = (record: PracticeRecord) => {
-    if (!record.obsidianMarkdown) return;
-    const blob = new Blob([record.obsidianMarkdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ielts-${record.module}-${new Date(record.updatedAt).toISOString().split('T')[0]}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const isMock = isMockProviderActive();
   const writingWorkspaceClass = 'practice-workspace';
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
@@ -383,53 +348,11 @@ export default function WritingTask2Practice() {
           </div>
         )}
 
-        {recentAttempts.length > 0 && (
-          <details className="mb-8 border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
-            <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between">
-              <span>Recent Attempts</span>
-              <span className="text-paper-ink/35">Open</span>
-            </summary>
-            <div className="mt-4 space-y-2">
-              {recentAttempts.map(record => (
-                <div key={record.id} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center border border-paper-ink/10 bg-paper-100/60 p-3">
-                  <div>
-                    <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/45">
-                      Writing Task {(record as WritingTask2PracticeRecord).task.toUpperCase()} / {record.status} / {new Date(record.updatedAt).toLocaleString()}
-                    </p>
-                    <p className="text-sm leading-6 text-paper-ink/75 line-clamp-2">{record.question}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <SerifButton
-                      type="button"
-                      variant="outline"
-                      className="text-xs py-2"
-                      onClick={() => restoreWritingAttempt(record as WritingTask2PracticeRecord, 'Opened saved Writing Task 2 attempt. No AI call was made.')}
-                    >
-                      View
-                    </SerifButton>
-                    <SerifButton
-                      type="button"
-                      variant="outline"
-                      className="text-xs py-2"
-                      disabled={!record.obsidianMarkdown}
-                      onClick={() => exportSavedMarkdown(record)}
-                    >
-                      Export
-                    </SerifButton>
-                    <SerifButton
-                      type="button"
-                      variant="outline"
-                      className="text-xs py-2 border-red-800/30 text-red-800 hover:bg-red-50"
-                      onClick={() => deleteSavedWritingAttempt(record as WritingTask2PracticeRecord)}
-                    >
-                      Delete
-                    </SerifButton>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
+        <div className="mb-8 flex justify-end">
+          <Link to="/practice-history" className="inline-flex items-center gap-2 text-sm italic text-paper-ink/45 hover:text-accent-terracotta">
+            View history <History className="w-4 h-4" />
+          </Link>
+        </div>
       </div>
 
       <div className={writingWorkspaceClass}>

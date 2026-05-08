@@ -64,7 +64,7 @@ _Last updated: 2026-05-08_
 - Advanced pronunciation scoring integration after a reliable audio scoring path exists.
 
 ## Future UI Polish
-- Speaking UI polish may be considered later, but should remain lighter than Writing because Speaking has lower simultaneous information density.
+- Further Speaking UI polish may be considered later, but the active practice page already has larger Part tabs and clearer feedback readability.
 - Keep Practice mode and Mock mode separate.
 
 ---

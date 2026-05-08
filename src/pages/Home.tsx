@@ -10,10 +10,10 @@ export default function Home() {
     <PageShell size="wide">
       <TopBar />
       <div className="landing-workspace">
-        <div className="text-center mb-16 mt-8">
-          <h1 className="text-5xl mb-4 text-paper-ink tracking-tighter">IELTS Scholar</h1>
-          <p className="text-paper-ink-muted italic font-serif opacity-70">
-            The quiet, local-first output transformation agent.
+        <div className="text-center mb-12 mt-6">
+          <h1 className="text-5xl mb-3 text-paper-ink tracking-tighter">IELTS Scholar</h1>
+          <p className="text-paper-ink-muted italic font-serif opacity-60">
+            Local IELTS practice for Speaking and Writing.
           </p>
         </div>
 
@@ -25,7 +25,7 @@ export default function Home() {
               </div>
               <h2 className="text-2xl mb-2">Speaking</h2>
               <p className="text-sm text-paper-ink/50 px-8">
-                Transform your spoken English into natural, high-band IELTS responses.
+                Practice Part 1, Part 2, and Part 3 with structured feedback.
               </p>
             </PaperCard>
           </Link>
@@ -37,7 +37,7 @@ export default function Home() {
               </div>
               <h2 className="text-2xl mb-2">Writing</h2>
               <p className="text-sm text-paper-ink/50 px-8">
-                Refine your academic essays with structured framework guidance.
+                Train Academic Task 1 reports and Task 2 essays.
               </p>
             </PaperCard>
           </Link>

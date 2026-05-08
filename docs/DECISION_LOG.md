@@ -1,5 +1,20 @@
 # Decision Log
 
+## [2026-05-08] Practice Pages Focus on Current Work
+- **Decision**: Active practice pages should focus on the current Speaking or Writing attempt, not expanded record management panels.
+- **Reason**: Large Recent Attempts / Practice Records panels duplicated History and made the practice workspace feel cluttered.
+- **Implemented**:
+  - Removed large record-list panels from Speaking Practice and Writing Task 2 Practice.
+  - Kept Practice History as the main learner-facing record center for review, restore, export, and delete.
+  - Removed the Writing landing Approach block and simplified Home copy while preserving the warm paper style.
+- **Decision**: All visible score-like values remain conservative Training Estimates, not official IELTS scores.
+- **Reason**: Short answers and thin local evidence should never imply official scoring precision or overstate readiness.
+- **Implemented**:
+  - Speaking short-sample guardrails apply to Parts 1/2/3, with stricter caps for Part 2 long-turn and Part 3 developed reasoning.
+  - Writing Task 1 under 150 words and Task 2 under 250 words are accepted but capped conservatively with insufficient-sample feedback.
+  - Progress estimates round to whole/half bands and cap thin evidence so one high record does not dominate.
+- **Explicitly unchanged**: no provider-default change, no RAG, no database, no server/auth/API-key architecture changes, no new routes, no Mock Exam, no record auto-clearing, no merge, no push.
+
 ## [2026-05-08] Conservative Training Estimates, Split Writing Coverage, and Shared Layout Shells
 - **Decision**: Treat all visible band values as local training estimates, rounded to whole/half bands and calculated conservatively.
 - **Reason**: The app should not imply official IELTS scoring precision, and one high local attempt should not dominate learner-facing estimates.

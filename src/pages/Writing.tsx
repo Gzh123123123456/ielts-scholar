@@ -10,10 +10,10 @@ export default function Writing() {
     <PageShell size="wide">
       <TopBar />
       <div className="landing-workspace">
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="max-w-4xl mx-auto">
           <section>
             <h2 className="text-xl font-serif mb-4">Writing Modules</h2>
-            <div className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
               <Link to="/writing/task1">
                 <PaperCard className="hover:border-accent-terracotta/30 transition-all cursor-pointer group">
                   <h3 className="text-lg mb-2">Task 1: Academic Visual Report</h3>
@@ -41,13 +41,6 @@ export default function Writing() {
                 </PaperCard>
               </Link>
             </div>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-serif mb-4">Approach</h2>
-            <PaperCard className="bg-paper-ink/5 border-none italic text-sm text-paper-ink/60">
-              <p>Focus on logic before polishing language.</p>
-            </PaperCard>
           </section>
         </div>
         <div className="flex justify-center mt-12">

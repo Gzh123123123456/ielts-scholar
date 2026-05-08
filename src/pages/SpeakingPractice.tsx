@@ -11,16 +11,14 @@ import { SpeakingFeedback } from '@/src/lib/ai/schemas';
 import {
   ActiveSpeakingPracticeSession,
   createRecordId,
-  deletePracticeRecord,
   getActiveSpeakingSession,
-  getPracticeRecords,
-  PracticeRecord,
   saveActiveSpeakingSession,
   SpeakingPracticeRecord,
   summarizeDiagnostic,
   upsertPracticeRecord,
 } from '@/src/lib/practiceRecords';
-import { Mic, Square, Play, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Volume2, Info } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Volume2, Info, History } from 'lucide-react';
 
 export default function SpeakingPractice() {
   const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
@@ -33,11 +31,8 @@ export default function SpeakingPractice() {
   const [feedback, setFeedback] = useState<SpeakingFeedback | null>(null);
   const [, setFeedbackFallbackUsed] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
-  const [recentAttempts, setRecentAttempts] = useState<PracticeRecord[]>([]);
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
-  const [showAllMustFix, setShowAllMustFix] = useState(false);
-  const [showAllOptionalPolish, setShowAllOptionalPolish] = useState(false);
   const [statusMessage, setStatusMessage] = useState<'Ready' | 'Requesting microphone...' | 'Listening...' | 'No speech detected' | 'Transcription unavailable' | 'Mic denied'>('Ready');
 
   const recognitionRef = useRef<any>(null);
@@ -62,14 +57,6 @@ export default function SpeakingPractice() {
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
-
-  const refreshRecentAttempts = () => {
-    setRecentAttempts(getPracticeRecords(80).filter(record => record.module === 'speaking'));
-  };
-
-  const currentPartAttempts = recentAttempts.filter(record =>
-    record.module === 'speaking' && (record as SpeakingPracticeRecord).part === part
-  ).slice(0, 8);
 
   const getBank = (p: 1 | 2 | 3) => p === 1 ? speakingPart1 : p === 2 ? speakingPart2 : speakingPart3;
 
@@ -122,7 +109,6 @@ export default function SpeakingPractice() {
     };
     saveActiveSpeakingSession(activeSessionRef.current);
     upsertPracticeRecord(record);
-    refreshRecentAttempts();
   };
 
   const restoreSpeakingRecord = (record: SpeakingPracticeRecord, message = '') => {
@@ -143,12 +129,9 @@ export default function SpeakingPractice() {
     setTimer(0);
     setProviderErrorMessage(record.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later.' : '');
     setRestoreMessage(message);
-    setShowAllMustFix(false);
-    setShowAllOptionalPolish(false);
   };
 
   useEffect(() => {
-    refreshRecentAttempts();
     const active = getActiveSpeakingSession();
     if (active) {
       activeSessionRef.current = active;
@@ -193,8 +176,6 @@ export default function SpeakingPractice() {
     setStatusMessage('Ready');
     setProviderErrorMessage('');
     setRestoreMessage('');
-    setShowAllMustFix(false);
-    setShowAllOptionalPolish(false);
     transcriptOriginRef.current = 'manual';
     addDebugLog(`Loaded question: ${random.id}`);
   };
@@ -256,8 +237,6 @@ export default function SpeakingPractice() {
     setStatusMessage('Ready');
     setProviderErrorMessage('');
     setRestoreMessage('');
-    setShowAllMustFix(false);
-    setShowAllOptionalPolish(false);
     transcriptOriginRef.current = 'manual';
     addDebugLog('Started a fresh attempt for the same speaking question.');
   };
@@ -477,8 +456,6 @@ export default function SpeakingPractice() {
       setFeedbackFallbackUsed(diagnostic.fallbackUsed);
       setFeedback(result);
       setStep('results');
-      setShowAllMustFix(false);
-      setShowAllOptionalPolish(false);
       persistCurrentSpeakingAttempt('analyzed');
       const analyzedBase = buildCurrentSpeakingRecord('analyzed');
       if (analyzedBase) {
@@ -531,70 +508,32 @@ export default function SpeakingPractice() {
     URL.revokeObjectURL(url);
   };
 
-  const exportSavedMarkdown = (record: PracticeRecord) => {
-    if (!record.obsidianMarkdown) return;
-    const blob = new Blob([record.obsidianMarkdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ielts-${record.module}-${new Date(record.updatedAt).toISOString().split('T')[0]}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const deleteSavedSpeakingAttempt = (record: SpeakingPracticeRecord) => {
-    const confirmed = window.confirm('Delete this attempt? This cannot be undone.');
-    if (!confirmed) return;
-
-    deletePracticeRecord(record.id, 'speaking');
-
-    if (activeSessionRef.current) {
-      activeSessionRef.current = {
-        ...activeSessionRef.current,
-        attemptsByPart: {
-          ...activeSessionRef.current.attemptsByPart,
-          [record.part]: undefined,
-        },
-        updatedAt: new Date().toISOString(),
-      };
-      saveActiveSpeakingSession(activeSessionRef.current);
-    }
-
-    refreshRecentAttempts();
-
-    if (activeAttemptIdRef.current === record.id) {
-      loadRandomQuestion(record.part);
-      setRestoreMessage('Deleted the opened attempt. Started a fresh attempt for this part.');
-    }
-  };
-
   const isMock = getAIProviderName() !== 'gemini';
-  const mustFixItems = feedback
-    ? showAllMustFix ? feedback.fatalErrors : feedback.fatalErrors.slice(0, 3)
-    : [];
-  const optionalPolishItems = feedback
-    ? showAllOptionalPolish ? feedback.naturalnessHints : feedback.naturalnessHints.slice(0, 3)
-    : [];
 
   return (
     <PageShell size={step === 'results' ? 'wide' : 'medium'}>
       <TopBar />
       
-      <div className="flex gap-4 p-1 bg-paper-ink/5 rounded-sm self-start mb-8 font-sans text-[10px] uppercase tracking-widest font-bold">
-        {[1, 2, 3].map((p) => (
-          <button
-            key={p}
-            onClick={() => switchPart(p as 1 | 2 | 3)}
-            className={`px-3 py-1 rounded-sm transition-all duration-200 ${
-              part === p
-                ? 'bg-accent-terracotta text-paper-50'
-                : 'text-paper-ink/40 hover:text-paper-ink hover:bg-paper-ink/5 cursor-pointer'
-            } disabled:opacity-30 disabled:cursor-not-allowed`}
-            disabled={step === 'recording' || step === 'analyzing'}
-          >
-            Part {p}
-          </button>
-        ))}
+      <div className="flex flex-col gap-3 mb-8 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-3 p-1.5 bg-paper-ink/5 rounded-sm self-start font-sans text-sm uppercase tracking-widest font-bold">
+          {[1, 2, 3].map((p) => (
+            <button
+              key={p}
+              onClick={() => switchPart(p as 1 | 2 | 3)}
+              className={`min-w-28 px-5 py-3 rounded-sm transition-all duration-200 ${
+                part === p
+                  ? 'bg-accent-terracotta text-paper-50'
+                  : 'text-paper-ink/40 hover:text-paper-ink hover:bg-paper-ink/5 cursor-pointer'
+              } disabled:opacity-30 disabled:cursor-not-allowed`}
+              disabled={step === 'recording' || step === 'analyzing'}
+            >
+              Part {p}
+            </button>
+          ))}
+        </div>
+        <Link to="/practice-history" className="inline-flex items-center gap-2 text-sm italic text-paper-ink/45 hover:text-accent-terracotta">
+          View history <History className="w-4 h-4" />
+        </Link>
       </div>
 
       {(restoreMessage || providerErrorMessage) && (
@@ -610,54 +549,6 @@ export default function SpeakingPractice() {
             </div>
           )}
         </div>
-      )}
-
-      {currentPartAttempts.length > 0 && (
-        <details className="mb-8 border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
-          <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between">
-            <span>Practice Records / Recent Part {part} Attempts</span>
-            <span className="text-paper-ink/35">Open</span>
-          </summary>
-          <div className="mt-4 space-y-2">
-            {currentPartAttempts.map(record => (
-              <div key={record.id} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center border border-paper-ink/10 bg-paper-100/60 p-3">
-                <div>
-                  <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/45">
-                    Speaking Part {(record as SpeakingPracticeRecord).part} · {record.status} · {new Date(record.updatedAt).toLocaleString()}
-                  </p>
-                  <p className="text-sm leading-6 text-paper-ink/75 line-clamp-2">{record.question}</p>
-                </div>
-                <div className="flex gap-2">
-                  <SerifButton
-                    type="button"
-                    variant="outline"
-                    className="text-xs py-2"
-                    onClick={() => restoreSpeakingRecord(record as SpeakingPracticeRecord)}
-                  >
-                    View
-                  </SerifButton>
-                  <SerifButton
-                    type="button"
-                    variant="outline"
-                    className="text-xs py-2"
-                    disabled={!record.obsidianMarkdown}
-                    onClick={() => exportSavedMarkdown(record)}
-                  >
-                    Export
-                  </SerifButton>
-                  <SerifButton
-                    type="button"
-                    variant="outline"
-                    className="text-xs py-2 border-red-800/30 text-red-800 hover:bg-red-50"
-                    onClick={() => deleteSavedSpeakingAttempt(record as SpeakingPracticeRecord)}
-                  >
-                    Delete
-                  </SerifButton>
-                </div>
-              </div>
-            ))}
-          </div>
-        </details>
       )}
 
       <div className="grid lg:grid-cols-12 gap-8 items-start mb-12">
@@ -780,33 +671,30 @@ export default function SpeakingPractice() {
           
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PaperCard className="bg-paper-200 border-none relative">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest mb-6 text-paper-ink/40 border-b border-paper-ink/10 pb-2">Language Performance</h3>
-                <div className="flex items-baseline gap-2 mb-8">
-                  <span className="text-6xl font-bold text-accent-terracotta leading-none">{formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-paper-ink/40 font-bold uppercase tracking-tight">Training Estimate</span>
-                    <span className="text-[8px] text-paper-ink/30 italic uppercase">(Excl. Pronunciation)</span>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">Language Performance</h3>
+                <div className="flex flex-wrap items-end gap-4 mb-8">
+                  <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
+                  <div className="flex flex-col pb-2">
+                    <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">Training Estimate</span>
+                    <span className="text-xs text-paper-ink/40 italic">Pronunciation is not assessed in V1.</span>
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-1 gap-2 mb-4">
+                <div className="grid gap-3 md:grid-cols-3 mb-4">
                   {[
                     { label: 'Fluency & Coherence', score: feedback.scores.fluencyCoherence },
                     { label: 'Lexical Resource', score: feedback.scores.lexicalResource },
                     { label: 'Grammatical Range', score: feedback.scores.grammaticalRangeAccuracy },
                   ].map((s) => (
-                    <div key={s.label} className="flex justify-between items-center text-xs py-1 border-b border-paper-ink/5 last:border-0">
-                      <span className="text-paper-ink/60">{s.label}</span>
-                      <span className="font-bold">{formatBandEstimate(s.score)}</span>
+                    <div key={s.label} className="border border-paper-ink/10 bg-paper-50/50 p-4">
+                      <span className="block text-xs font-sans uppercase tracking-widest text-paper-ink/50 mb-2">{s.label}</span>
+                      <span className="text-2xl font-bold text-paper-ink">{formatBandEstimate(s.score)}</span>
                     </div>
                   ))}
                 </div>
-                <p className="text-[10px] text-paper-ink/35 italic pt-2">
-                  Pronunciation not assessed in V1.
-                </p>
 
                 {isMock && (
-                  <div className="mt-6 flex items-center gap-2 p-2 bg-paper-ink/5 rounded text-[9px] text-paper-ink/40 italic uppercase tracking-wider">
+                  <div className="mt-6 flex items-center gap-2 p-2 bg-paper-ink/5 rounded text-xs text-paper-ink/40 italic">
                     <Info className="w-3 h-3" /> Prototype feedback using mock AI.
                   </div>
                 )}
@@ -814,25 +702,14 @@ export default function SpeakingPractice() {
 
               <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-red-800 ml-1">Must Fix</h4>
-                    {feedback.fatalErrors.length > 3 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllMustFix(prev => !prev)}
-                        className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 hover:text-red-800"
-                      >
-                        {showAllMustFix ? 'Show Less' : `Show More (${feedback.fatalErrors.length - 3})`}
-                      </button>
-                    )}
-                  </div>
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-red-800 ml-1">Must Fix</h4>
                   {feedback.fatalErrors.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-green-700/50">
                       <p className="text-lg leading-8 text-paper-ink/85 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">No critical correction needed for this attempt. Focus on making the answer more fluent and specific.</p>
                     </PaperCard>
                   ) : (
-                    <div className="space-y-4 max-h-[760px] overflow-auto pr-1">
-                      {mustFixItems.map((err, i) => (
+                    <div className="space-y-4">
+                      {feedback.fatalErrors.map((err, i) => (
                         <PaperCard key={i} className="p-5 border-l-2 border-l-red-800">
                           <div className="text-sm line-through text-paper-ink/45 mb-2 leading-6">{err.original}</div>
                           <div className="text-xl font-bold text-red-800 mb-3 leading-8">{err.correction}</div>
@@ -844,25 +721,14 @@ export default function SpeakingPractice() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#a64d32] ml-1">Optional Polish</h4>
-                    {feedback.naturalnessHints.length > 3 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllOptionalPolish(prev => !prev)}
-                        className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 hover:text-[#a64d32]"
-                      >
-                        {showAllOptionalPolish ? 'Show Less' : `Show More (${feedback.naturalnessHints.length - 3})`}
-                      </button>
-                    )}
-                  </div>
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-[#a64d32] ml-1">Optional Polish</h4>
                   {feedback.naturalnessHints.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-paper-ink/20">
                       <p className="text-lg leading-8 text-paper-ink/75 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">No optional polish item was returned for this attempt.</p>
                     </PaperCard>
                   ) : (
-                    <div className="space-y-4 max-h-[760px] overflow-auto pr-1">
-                      {optionalPolishItems.map((hint, i) => (
+                    <div className="space-y-4">
+                      {feedback.naturalnessHints.map((hint, i) => (
                         <PaperCard key={i} className="p-5 border-l-2 border-l-[#a64d32]/40">
                           <div className="text-sm text-paper-ink/45 mb-2 italic leading-6">"{hint.original}" </div>
                           <div className="text-xl font-bold text-[#a64d32] mb-3 leading-8">Better: {hint.better}</div>
@@ -897,31 +763,34 @@ export default function SpeakingPractice() {
               )}
 
               {feedback.preservedStyle.length > 0 && (
-                <details className="border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
-                  <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 flex justify-between">
+                <section className="border border-paper-ink/10 bg-paper-ink/[0.02] p-5">
+                  <h4 className="text-sm font-sans font-bold uppercase tracking-widest text-paper-ink/50 mb-4">
                     <span>Preserved Personal Style</span>
-                    <span>Open</span>
-                  </summary>
-                  <div className="space-y-3 mt-4 border-t border-paper-ink/10 pt-4">
-                    {feedback.preservedStyle.map((style, i) => (
-                      <div key={i} className="text-sm italic text-paper-ink-muted leading-7">
-                        <span className="font-bold">"{style.text}"</span>
+                  </h4>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {feedback.preservedStyle.slice(0, 4).map((style, i) => (
+                      <div key={i} className="border-l-2 border-l-accent-terracotta/30 pl-4 py-1">
+                        <p className="text-lg italic text-paper-ink leading-8">"{style.text}"</p>
                         <div className="text-[10px] mt-1 opacity-60">— {style.reasonZh}</div>
                       </div>
                     ))}
                   </div>
-                </details>
+                </section>
               )}
 
               <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
-                <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">High-Band Transformation</h4>
-                <p className="text-2xl italic leading-10 text-paper-ink font-serif max-w-5xl">
-                  "{feedback.upgradedAnswer}"
-                </p>
-                <div className="mt-10">
-                  <SerifButton onClick={exportMarkdown} className="w-full text-xs flex items-center justify-center gap-2 py-3" variant="outline">
-                    <FileDown className="w-4 h-4" /> Export to Obsidian (.md)
-                  </SerifButton>
+                <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                  <div>
+                    <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">High-Band Transformation</h4>
+                    <p className="text-2xl italic leading-10 text-paper-ink font-serif max-w-4xl">
+                      "{feedback.upgradedAnswer}"
+                    </p>
+                  </div>
+                  <div className="lg:pt-12">
+                    <SerifButton onClick={exportMarkdown} className="w-full lg:w-auto text-xs flex items-center justify-center gap-2 py-3 whitespace-nowrap" variant="outline">
+                      <FileDown className="w-4 h-4" /> Export to Obsidian (.md)
+                    </SerifButton>
+                  </div>
                 </div>
               </PaperCard>
             </div>

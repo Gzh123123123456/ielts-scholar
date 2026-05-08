@@ -7,6 +7,7 @@ import {
 } from './providers/base';
 import {
   ProviderDiagnostic,
+  FatalError,
   SpeakingFeedback,
   SpeakingPart,
   WritingFeedback,
@@ -32,11 +33,60 @@ const FALLBACK_TEXT = 'Provider output was malformed or incomplete.';
 const countWords = (text: string): number =>
   text.trim().split(/\s+/).filter(Boolean).length;
 
+const insufficientSampleMessageZh = (moduleLabel: string, minimumWords: number) =>
+  `样本太短，无法形成可靠的 ${moduleLabel} 训练估计。先扩展到接近 ${minimumWords} 词，并补充完整观点、细节和例子后再看语言问题。`;
+
 const applyLengthCap = (score: number, words: number, minimumWords: number): number => {
   if (!Number.isFinite(score) || score <= 0) return score;
-  if (words <= 20) return floorToHalfBand(capBand(score, 3.5));
+  if (words <= 20) return floorToHalfBand(capBand(score, 3.0));
+  if (words < minimumWords * 0.5) return floorToHalfBand(capBand(score, 4.0));
   if (words < minimumWords) return floorToHalfBand(capBand(score, 5.0));
   return roundToHalfBand(score);
+};
+
+const speakingMinimumWords = (part: SpeakingPart): number =>
+  part === 1 ? 18 : part === 2 ? 90 : 45;
+
+const applySpeakingLengthCap = (score: number, words: number, part: SpeakingPart): number => {
+  if (!Number.isFinite(score) || score <= 0) return score;
+  if (words <= 6) return floorToHalfBand(capBand(score, 3.0));
+  if (part === 1 && words < speakingMinimumWords(part)) return floorToHalfBand(capBand(score, 5.0));
+  if (part === 2 && words < 45) return floorToHalfBand(capBand(score, 4.0));
+  if (part === 2 && words < speakingMinimumWords(part)) return floorToHalfBand(capBand(score, 5.0));
+  if (part === 3 && words < 25) return floorToHalfBand(capBand(score, 4.0));
+  if (part === 3 && words < speakingMinimumWords(part)) return floorToHalfBand(capBand(score, 5.0));
+  return roundToHalfBand(score);
+};
+
+const buildSpeakingLengthMustFix = (words: number, part: SpeakingPart): FatalError | null => {
+  const minimum = speakingMinimumWords(part);
+  if (words >= minimum) return null;
+  const partLabel = `Speaking Part ${part}`;
+  const guidance = part === 1
+    ? 'Part 1 can be concise, but one-word or one-sentence answers do not show enough range for a high estimate.'
+    : part === 2
+      ? 'Part 2 is a long-turn response, so the sample needs sustained development before a higher estimate is possible.'
+      : 'Part 3 needs developed reasoning, examples, or contrast; very short answers are capped conservatively.';
+  return {
+    original: words <= 6 ? 'Very short answer' : 'Under-developed answer',
+    correction: 'Expand the answer before treating this as score evidence.',
+    tag: 'insufficient_sample',
+    explanationZh: `${insufficientSampleMessageZh(partLabel, minimum)} ${guidance}`,
+  };
+};
+
+const buildWritingLengthFeedback = (
+  words: number,
+  task: WritingTask,
+): WritingFeedback['frameworkFeedback'][number] | null => {
+  const minimum = task === 'task1' ? 150 : 250;
+  const label = task === 'task1' ? 'Writing Task 1' : 'Writing Task 2';
+  if (words >= minimum) return null;
+  return {
+    issue: words <= 20 ? 'Extremely insufficient sample' : 'Under-length response',
+    suggestionZh: insufficientSampleMessageZh(label, minimum),
+    severity: 'fatal' as const,
+  };
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -259,25 +309,44 @@ const normalizeSpeakingFeedback = (
 
   const scores = isRecord(source.scores) ? source.scores : {};
   if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
+  const part = asSpeakingPart(source.part, request.part, validationErrors);
+  const transcriptWords = countWords(request.transcript || '');
+  const lengthMustFix = buildSpeakingLengthMustFix(transcriptWords, part);
 
   const feedbackWithoutMarkdown: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
     module: 'speaking',
-    part: asSpeakingPart(source.part, request.part, validationErrors),
+    part,
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     transcript: asString(source.transcript, request.transcript || FALLBACK_TEXT, 'transcript', validationErrors),
-    bandEstimateExcludingPronunciation: asNumber(
-      source.bandEstimateExcludingPronunciation,
-      'bandEstimateExcludingPronunciation',
-      validationErrors,
+    bandEstimateExcludingPronunciation: applySpeakingLengthCap(
+      asNumber(
+        source.bandEstimateExcludingPronunciation,
+        'bandEstimateExcludingPronunciation',
+        validationErrors,
+      ),
+      transcriptWords,
+      part,
     ),
     scores: {
-      fluencyCoherence: asNumber(scores.fluencyCoherence, 'scores.fluencyCoherence', validationErrors),
-      lexicalResource: asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors),
-      grammaticalRangeAccuracy: asNumber(
-        scores.grammaticalRangeAccuracy,
-        'scores.grammaticalRangeAccuracy',
-        validationErrors,
+      fluencyCoherence: applySpeakingLengthCap(
+        asNumber(scores.fluencyCoherence, 'scores.fluencyCoherence', validationErrors),
+        transcriptWords,
+        part,
+      ),
+      lexicalResource: applySpeakingLengthCap(
+        asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors),
+        transcriptWords,
+        part,
+      ),
+      grammaticalRangeAccuracy: applySpeakingLengthCap(
+        asNumber(
+          scores.grammaticalRangeAccuracy,
+          'scores.grammaticalRangeAccuracy',
+          validationErrors,
+        ),
+        transcriptWords,
+        part,
       ),
       pronunciation: null,
       pronunciationNote: asString(
@@ -287,21 +356,24 @@ const normalizeSpeakingFeedback = (
         validationErrors,
       ),
     },
-    fatalErrors: asArray(source.fatalErrors, 'fatalErrors', validationErrors).map((item, index) => {
-      const record = isRecord(item) ? item : {};
-      if (!isRecord(item)) validationErrors.push(`fatalErrors[${index}] missing or invalid object`);
-      return {
-        original: asString(record.original, FALLBACK_TEXT, `fatalErrors[${index}].original`, validationErrors),
-        correction: asString(record.correction, FALLBACK_TEXT, `fatalErrors[${index}].correction`, validationErrors),
-        tag: asString(record.tag, 'provider_safety', `fatalErrors[${index}].tag`, validationErrors),
-        explanationZh: asString(
-          record.explanationZh,
-          'Provider feedback was incomplete; this item was normalized safely.',
-          `fatalErrors[${index}].explanationZh`,
-          validationErrors,
-        ),
-      };
-    }),
+    fatalErrors: [
+      ...(lengthMustFix ? [lengthMustFix] : []),
+      ...asArray(source.fatalErrors, 'fatalErrors', validationErrors).map((item, index) => {
+        const record = isRecord(item) ? item : {};
+        if (!isRecord(item)) validationErrors.push(`fatalErrors[${index}] missing or invalid object`);
+        return {
+          original: asString(record.original, FALLBACK_TEXT, `fatalErrors[${index}].original`, validationErrors),
+          correction: asString(record.correction, FALLBACK_TEXT, `fatalErrors[${index}].correction`, validationErrors),
+          tag: asString(record.tag, 'provider_safety', `fatalErrors[${index}].tag`, validationErrors),
+          explanationZh: asString(
+            record.explanationZh,
+            'Provider feedback was incomplete; this item was normalized safely.',
+            `fatalErrors[${index}].explanationZh`,
+            validationErrors,
+          ),
+        };
+      }),
+    ],
     naturalnessHints: asArray(source.naturalnessHints, 'naturalnessHints', validationErrors).map((item, index) => {
       const record = isRecord(item) ? item : {};
       if (!isRecord(item)) validationErrors.push(`naturalnessHints[${index}] missing or invalid object`);
@@ -390,7 +462,11 @@ const normalizeSpeakingFeedback = (
   };
 };
 
-const normalizeSeverity = (value: unknown, path: string, errors: string[]) => {
+const normalizeSeverity = (
+  value: unknown,
+  path: string,
+  errors: string[],
+): WritingFeedback['frameworkFeedback'][number]['severity'] => {
   if (value === 'fatal' || value === 'naturalness' || value === 'preserved') return value;
   errors.push(`${path} missing or invalid severity`);
   return 'naturalness';
@@ -413,11 +489,13 @@ const normalizeWritingFeedback = (
   const scores = isRecord(source.scores) ? source.scores : {};
   if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
   const essayWords = countWords(request.essay || '');
+  const task = asWritingTask(source.task, request.task, validationErrors);
+  const lengthFeedback = buildWritingLengthFeedback(essayWords, task);
 
   return {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
     module: 'writing',
-    task: asWritingTask(source.task, request.task, validationErrors),
+    task,
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     essay: asString(source.essay, request.essay || FALLBACK_TEXT, 'essay', validationErrors),
     scores: {
@@ -430,20 +508,23 @@ const normalizeWritingFeedback = (
         250,
       ),
     },
-    frameworkFeedback: asArray(source.frameworkFeedback, 'frameworkFeedback', validationErrors).map((item, index) => {
-      const record = isRecord(item) ? item : {};
-      if (!isRecord(item)) validationErrors.push(`frameworkFeedback[${index}] missing or invalid object`);
-      return {
-        issue: asString(record.issue, FALLBACK_TEXT, `frameworkFeedback[${index}].issue`, validationErrors),
-        suggestionZh: asString(
-          record.suggestionZh,
-          'Provider feedback was incomplete; this item was normalized safely.',
-          `frameworkFeedback[${index}].suggestionZh`,
-          validationErrors,
-        ),
-        severity: normalizeSeverity(record.severity, `frameworkFeedback[${index}].severity`, validationErrors),
-      };
-    }),
+    frameworkFeedback: [
+      ...(lengthFeedback ? [lengthFeedback] : []),
+      ...asArray(source.frameworkFeedback, 'frameworkFeedback', validationErrors).map((item, index) => {
+        const record = isRecord(item) ? item : {};
+        if (!isRecord(item)) validationErrors.push(`frameworkFeedback[${index}] missing or invalid object`);
+        return {
+          issue: asString(record.issue, FALLBACK_TEXT, `frameworkFeedback[${index}].issue`, validationErrors),
+          suggestionZh: asString(
+            record.suggestionZh,
+            'Provider feedback was incomplete; this item was normalized safely.',
+            `frameworkFeedback[${index}].suggestionZh`,
+            validationErrors,
+          ),
+          severity: normalizeSeverity(record.severity, `frameworkFeedback[${index}].severity`, validationErrors),
+        };
+      }),
+    ],
     sentenceFeedback: asArray(source.sentenceFeedback, 'sentenceFeedback', validationErrors).map((item, index) => {
       const record = isRecord(item) ? item : {};
       if (!isRecord(item)) validationErrors.push(`sentenceFeedback[${index}] missing or invalid object`);
@@ -564,6 +645,7 @@ const normalizeWritingTask1Feedback = (
   if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
   const reportWords = countWords(request.report || '');
   const estimatedBand = applyLengthCap(asNumber(source.estimatedBand, 'estimatedBand', validationErrors), reportWords, 150);
+  const lengthMustFix = reportWords < 150 ? insufficientSampleMessageZh('Writing Task 1', 150) : null;
   const improvedReportFallback = typeof source.modelExcerpt === 'string' && source.modelExcerpt.trim()
     ? source.modelExcerpt
     : 'The provider returned incomplete feedback. Please retry analysis.';
@@ -609,7 +691,10 @@ const normalizeWritingTask1Feedback = (
       validationErrors,
     ),
     languageCorrections: normalizeLanguageCorrections(source.languageCorrections, validationErrors),
-    mustFix: normalizeStringArray(source.mustFix, 'mustFix', validationErrors),
+    mustFix: [
+      ...(lengthMustFix ? [lengthMustFix] : []),
+      ...normalizeStringArray(source.mustFix, 'mustFix', validationErrors),
+    ],
     rewriteTask: asString(
       source.rewriteTask,
       'Rewrite the report with a clear overview, grouped key features, and accurate data references.',
