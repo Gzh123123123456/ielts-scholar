@@ -19,6 +19,60 @@ import {
 } from '@/src/lib/practiceRecords';
 import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Volume2, Info } from 'lucide-react';
 
+const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+const hasLowSignalSpeakingText = (text: string) => {
+  const normalized = text.toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return true;
+  const words = normalized.split(' ').filter(Boolean);
+  const uniqueWords = new Set(words);
+  return normalized.replace(/\s/g, '').length < 12 || (words.length >= 4 && uniqueWords.size <= 2);
+};
+
+const isInsufficientSpeakingSample = (
+  text: string,
+  speakingPart: 1 | 2 | 3,
+  currentFeedback?: SpeakingFeedback | null,
+) => {
+  const words = countWords(text);
+  if (currentFeedback?.fatalErrors.some(error => error.tag === 'insufficient_sample')) return true;
+  if (currentFeedback?.upgradedAnswer.toLowerCase().includes('insufficient sample')) return true;
+  if (hasLowSignalSpeakingText(text)) return true;
+  if (speakingPart === 1) return words <= 8;
+  if (speakingPart === 2) return words < 60;
+  return words < 35;
+};
+
+const answerDevelopmentPlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
+  const questionReference = prompt ? `这道题是：“${prompt}”` : '先围绕当前题目补充内容。';
+  const starter = speakingPart === 1
+    ? 'Starter: I would say yes, mainly because...'
+    : speakingPart === 2
+      ? 'Starter: I want to talk about a time when...'
+      : 'Starter: In my view, this depends on the situation...';
+  const items = speakingPart === 1
+    ? [
+      '先给一个直接答案，不要只说 yes/no。',
+      '补充一个具体个人细节，例如时间、地点、人物或频率。',
+      '解释一个简短原因，让回答自然完整。',
+    ]
+    : speakingPart === 2
+      ? [
+        '交代背景：人物、地点、时间或事件起点。',
+        '展开 2 个具体细节，而不是只给结论。',
+        '说明你的感受、变化或为什么这件事重要。',
+        '用一个自然结尾收束故事。',
+      ]
+      : [
+        '先提出清楚观点。',
+        '比较两种情况或两类人群。',
+        '加入一个现实例子支持观点。',
+        '解释这个例子背后的更大影响。',
+      ];
+
+  return { questionReference, starter, items };
+};
+
 export default function SpeakingPractice() {
   const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
   const [part, setPart] = useState<1 | 2 | 3>(1);
@@ -511,6 +565,8 @@ export default function SpeakingPractice() {
   };
 
   const isMock = getAIProviderName() !== 'gemini';
+  const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
+  const developmentPlan = answerDevelopmentPlan(part, question?.question);
 
   return (
     <PageShell size={step === 'results' ? 'wide' : 'medium'}>
@@ -661,7 +717,7 @@ export default function SpeakingPractice() {
         {step === 'results' && feedback && (
         <div className="lg:col-span-12">
           
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto">
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">Language Performance</h3>
                 <div className="flex flex-wrap items-end gap-4 mb-8">
@@ -770,12 +826,30 @@ export default function SpeakingPractice() {
                 </section>
               )}
 
-              <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta max-w-5xl mx-auto">
+              <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
                 <div>
-                  <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">High-Band Transformation</h4>
-                  <p className="text-xl md:text-2xl leading-10 text-paper-ink font-serif">
-                    "{feedback.upgradedAnswer}"
-                  </p>
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
+                    {shouldShowDevelopmentPlan ? 'Answer Development Plan' : 'High-Band Transformation'}
+                  </h4>
+                  {shouldShowDevelopmentPlan ? (
+                    <div className="max-w-5xl space-y-5 text-paper-ink">
+                      <p className="text-lg leading-9">
+                        样本太短或信息量不足，不能可靠生成完整高分改写。{developmentPlan.questionReference}
+                      </p>
+                      <ul className="space-y-3">
+                        {developmentPlan.items.map(item => (
+                          <li key={item} className="text-base leading-8 border-l-2 border-l-accent-terracotta/35 pl-4">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-base leading-8 text-paper-ink/75">{developmentPlan.starter}</p>
+                    </div>
+                  ) : (
+                    <p className="max-w-5xl text-xl md:text-2xl leading-10 text-paper-ink font-serif">
+                      "{feedback.upgradedAnswer}"
+                    </p>
+                  )}
                 </div>
                 <div className="mt-8 flex justify-start border-t border-paper-ink/10 pt-6">
                   <SerifButton onClick={exportMarkdown} className="w-full sm:w-auto text-xs flex items-center justify-center gap-2 py-3" variant="outline">
