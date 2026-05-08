@@ -19,6 +19,7 @@ import {
   WritingTask1PracticeRecord,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
+import { formatBandEstimate } from '@/src/lib/bands';
 
 const isValidBand = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 9;
@@ -40,7 +41,7 @@ const average = (values: number[]) =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 
 const formatBand = (value: number | null) =>
-  value === null ? 'Not enough data' : value.toFixed(1);
+  formatBandEstimate(value, 'Not enough data');
 
 const normalizeText = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
 
@@ -353,7 +354,7 @@ export default function Progress() {
 
         <div className="grid lg:grid-cols-2 gap-8">
           <ScoreList
-            title="Recent Speaking Scores"
+            title="Recent Speaking Training Estimates"
             empty="No analyzed Speaking attempts yet."
             records={recentSpeakingScores.map(record => ({
               id: record.id,
@@ -365,7 +366,7 @@ export default function Progress() {
           />
 
           <ScoreList
-            title="Recent Writing Scores"
+            title="Recent Writing Training Estimates"
             empty="No analyzed Writing attempts yet."
             records={recentWritingScores.map(record => ({
               id: record.id,
@@ -438,7 +439,7 @@ const ScoreList: React.FC<ScoreListProps> = ({ title, empty, records }) => (
               <p className="text-sm leading-6 text-paper-ink/75">{record.question}</p>
             </div>
             <div className="text-2xl font-bold text-accent-terracotta">
-              {record.score === null ? '-' : record.score.toFixed(1)}
+              {formatBandEstimate(record.score)}
             </div>
           </div>
         ))}

@@ -14,6 +14,7 @@ import {
   WritingTask1Feedback,
   WritingTask,
 } from './schemas';
+import { formatBandEstimate } from '../bands';
 
 type SpeakingRequest = SpeakingAnalysisRequest;
 type WritingRequest = WritingAnalysisRequest;
@@ -217,10 +218,10 @@ ${feedback.question}
 ${feedback.transcript}
 
 ## Score Snapshot
-- Estimated band excluding pronunciation: ${feedback.bandEstimateExcludingPronunciation}
-- Fluency and Coherence: ${feedback.scores.fluencyCoherence}
-- Lexical Resource: ${feedback.scores.lexicalResource}
-- Grammatical Range and Accuracy: ${feedback.scores.grammaticalRangeAccuracy}
+- Training estimate excluding pronunciation: ${formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}
+- Fluency and Coherence: ${formatBandEstimate(feedback.scores.fluencyCoherence)}
+- Lexical Resource: ${formatBandEstimate(feedback.scores.lexicalResource)}
+- Grammatical Range and Accuracy: ${formatBandEstimate(feedback.scores.grammaticalRangeAccuracy)}
 - Pronunciation: not assessed in V1
 
 ## Must Fix
@@ -490,8 +491,8 @@ ${feedback.instruction}
 ## Visual Brief
 ${feedback.visualBrief}
 
-## Estimated Band
-${feedback.estimatedBand}
+## Training Estimate
+${formatBandEstimate(feedback.estimatedBand)}
 
 ## Must Fix
 ${feedback.mustFix.length ? feedback.mustFix.map(item => `- ${item}`).join('\n') : '- No critical Task 1 issue returned.'}

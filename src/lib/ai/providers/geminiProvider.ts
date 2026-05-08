@@ -11,7 +11,8 @@ Do not include comments or trailing commas.
 Do not include extra keys.
 Use arrays for every array field, even when empty.
 Use strings for every string field.
-Use numbers for every score field.`;
+Use numbers for every score field.
+All user-facing band estimates and criterion scores must use whole or half bands only, such as 5.0, 5.5, 6.0, or 6.5.`;
 
 const speakingSchemaInstruction = `The JSON object must match this exact key structure:
 {
@@ -186,6 +187,9 @@ Do not invent image details beyond the given brief.
 Do not explain causes unless the visual brief explicitly gives causes.
 Focus on overview quality, key feature selection, useful comparison, data accuracy, coherence, and concise academic reporting.
 Keep feedback concise and Task 1-specific.
+Write overviewFeedback, keyFeaturesFeedback, comparisonFeedback, dataAccuracyFeedback, coherenceFeedback, mustFix, rewriteTask, and language correction explanations mainly in Chinese, while including short English corrections or example phrases where useful.
+Keep improvedReport and modelExcerpt in English.
+Make rewriteTask a newline-separated bullet list of concrete actions, including overview rewriting, comparisons, data accuracy, and grouping when relevant.
 
 ${writingTask1SchemaInstruction}
 

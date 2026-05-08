@@ -6,6 +6,7 @@ import { SerifButton } from '@/src/components/ui/SerifButton';
 import { writingTask1Academic, WritingTask1AcademicPrompt } from '@/src/data/questions/bank';
 import { getAIProvider, getAIProviderName, safeAnalyzeWritingTask1 } from '@/src/lib/ai';
 import { ProviderDiagnostic, WritingTask1Feedback } from '@/src/lib/ai/schemas';
+import { formatBandEstimate } from '@/src/lib/bands';
 import {
   createRecordId,
   getActiveWritingTask1,
@@ -32,12 +33,103 @@ const pickPrompt = (excludeId?: string) => {
 };
 
 const feedbackItems = (feedback: WritingTask1Feedback) => [
-  ['Overview', feedback.overviewFeedback],
-  ['Key Features', feedback.keyFeaturesFeedback],
-  ['Comparisons', feedback.comparisonFeedback],
-  ['Data Accuracy', feedback.dataAccuracyFeedback],
-  ['Coherence', feedback.coherenceFeedback],
+  ['概览问题 / Overview', feedback.overviewFeedback],
+  ['关键信息 / Key Features', feedback.keyFeaturesFeedback],
+  ['比较关系 / Comparisons', feedback.comparisonFeedback],
+  ['数据准确性 / Data Accuracy', feedback.dataAccuracyFeedback],
+  ['结构连贯 / Coherence', feedback.coherenceFeedback],
 ];
+
+const hasPlanContent = (plan: WritingTask1QuickPlan) =>
+  Object.values(plan).some(value => value.trim());
+
+const bulletList = (items: string[], empty: string) =>
+  items.length ? items.map(item => `- ${item}`).join('\n') : `- ${empty}`;
+
+const getRewriteActions = (feedback: WritingTask1Feedback): string[] => {
+  const providerActions = feedback.rewriteTask
+    .split(/\r?\n/)
+    .map(item => item.replace(/^[-*]\s*/, '').trim())
+    .filter(Boolean);
+
+  const actions = providerActions.length > 1
+    ? providerActions
+    : [
+      'Rewrite the overview so it summarizes the whole visual in one clear sentence.',
+      'Group the body paragraphs by trend, size, stage, or category instead of listing points one by one.',
+      'Add direct comparisons between the most important figures, periods, groups, or locations.',
+      'Check every number, unit, and ranking against the visual information before resubmitting.',
+    ];
+
+  return Array.from(new Set(actions));
+};
+
+const buildTask1ObsidianNote = (
+  prompt: WritingTask1AcademicPrompt,
+  quickPlan: WritingTask1QuickPlan,
+  feedback: WritingTask1Feedback,
+) => {
+  const date = new Date().toLocaleString();
+  const languageCorrections = feedback.languageCorrections.length
+    ? feedback.languageCorrections
+        .map(item => `- Original: ${item.original}\n  - Correction: ${item.correction}\n  - 说明: ${item.explanation}`)
+        .join('\n')
+    : '- No focused language correction returned.';
+  const plan = hasPlanContent(quickPlan)
+    ? [
+      quickPlan.overview && `- Overview: ${quickPlan.overview}`,
+      quickPlan.keyFeatures && `- Key features: ${quickPlan.keyFeatures}`,
+      quickPlan.comparisons && `- Comparisons: ${quickPlan.comparisons}`,
+      quickPlan.paragraphPlan && `- Paragraph plan: ${quickPlan.paragraphPlan}`,
+    ].filter(Boolean).join('\n')
+    : '- No quick plan written.';
+
+  return `# IELTS Writing Task 1 Practice Note
+
+## Metadata
+- Date: ${date}
+- Module: Writing Task 1 Academic
+- Task type: ${prompt.taskType}
+- Topic: ${prompt.topic}
+- Training Estimate: ${formatBandEstimate(feedback.estimatedBand)}
+
+## Task Instruction
+${feedback.instruction}
+
+## Visual Information
+${feedback.visualBrief}
+
+${bulletList(prompt.data, 'No visual data stored.')}
+
+## Quick Plan
+${plan}
+
+## My Report
+${feedback.report}
+
+## Chinese Diagnosis
+- 概览: ${feedback.overviewFeedback}
+- 关键信息: ${feedback.keyFeaturesFeedback}
+- 比较关系: ${feedback.comparisonFeedback}
+- 数据准确性: ${feedback.dataAccuracyFeedback}
+- 结构连贯: ${feedback.coherenceFeedback}
+
+## English Corrections / Examples
+${languageCorrections}
+
+## Must Fix
+${bulletList(feedback.mustFix, 'No critical Task 1 issue returned.')}
+
+## Rewrite Task
+${bulletList(getRewriteActions(feedback), 'Rewrite with a clearer overview and grouped details.')}
+
+## Reusable Report Patterns
+${bulletList(feedback.reusableReportPatterns, 'No reusable pattern returned.')}
+
+## Improved Report / Model Excerpt
+${feedback.improvedReport || feedback.modelExcerpt || 'No improved report returned.'}
+`;
+};
 
 export default function WritingTask1Placeholder() {
   const activeRecord = useMemo(() => getActiveWritingTask1(), []);
@@ -52,17 +144,25 @@ export default function WritingTask1Placeholder() {
   const [feedback, setFeedback] = useState<WritingTask1Feedback | undefined>(activeRecord?.feedback);
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [providerErrorMessage, setProviderErrorMessage] = useState(
+    activeRecord?.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your report is preserved.' : '',
+  );
 
   const words = countWords(report);
-  const status = feedback ? 'analyzed' : 'draft';
+  const status = providerErrorMessage ? 'provider_failed' : feedback ? 'analyzed' : 'draft';
+  const currentObsidianNote = feedback ? buildTask1ObsidianNote(prompt, quickPlan, feedback) : '';
 
-  const buildRecord = (nextFeedback = feedback): WritingTask1PracticeRecord => {
+  const buildRecord = (
+    nextFeedback = feedback,
+    statusOverride?: WritingTask1PracticeRecord['status'],
+  ): WritingTask1PracticeRecord => {
     const now = new Date().toISOString();
+    const nextStatus = statusOverride || (nextFeedback ? 'analyzed' : 'draft');
     return {
       id: recordId,
       module: 'writing_task1',
       mode: 'practice',
-      status: nextFeedback ? 'analyzed' : 'draft',
+      status: nextStatus,
       task: 'task1',
       question: prompt.instruction,
       questionId: prompt.id,
@@ -72,16 +172,20 @@ export default function WritingTask1Placeholder() {
       prompt: prompt.instruction,
       createdAt,
       updatedAt: now,
-      analyzedAt: nextFeedback ? now : undefined,
+      analyzedAt: nextStatus === 'analyzed' ? now : undefined,
       questionData: prompt,
       instruction: prompt.instruction,
       visualBrief: prompt.visualBrief,
       dataSummary: prompt.data,
       quickPlan,
       report,
-      feedback: nextFeedback,
+      feedback: nextStatus === 'provider_failed' ? undefined : nextFeedback,
       providerDiagnostic: diagnostic ? summarizeDiagnostic(diagnostic) : initialActiveRecordRef.current?.providerDiagnostic,
-      obsidianMarkdown: nextFeedback?.obsidianMarkdown || initialActiveRecordRef.current?.obsidianMarkdown,
+      obsidianMarkdown: nextStatus === 'provider_failed'
+        ? undefined
+        : nextFeedback
+          ? buildTask1ObsidianNote(prompt, quickPlan, nextFeedback)
+          : initialActiveRecordRef.current?.obsidianMarkdown,
     };
   };
 
@@ -89,7 +193,7 @@ export default function WritingTask1Placeholder() {
     const record = buildRecord();
     saveActiveWritingTask1(record);
     upsertPracticeRecord(record);
-  }, [recordId, createdAt, prompt, quickPlan, report, feedback]);
+  }, [recordId, createdAt, prompt, quickPlan, report, feedback, providerErrorMessage]);
 
   const updatePlan = (field: keyof WritingTask1QuickPlan, value: string) => {
     setQuickPlan(current => ({ ...current, [field]: value }));
@@ -104,12 +208,14 @@ export default function WritingTask1Placeholder() {
     setReport('');
     setFeedback(undefined);
     setDiagnostic(null);
+    setProviderErrorMessage('');
     initialActiveRecordRef.current = null;
   };
 
   const analyzeReport = async () => {
     if (!report.trim()) return;
     setIsAnalyzing(true);
+    setProviderErrorMessage('');
     try {
       const result = await safeAnalyzeWritingTask1(getAIProvider(), getAIProviderName(), {
         task: 'task1',
@@ -124,18 +230,32 @@ export default function WritingTask1Placeholder() {
         commonTraps: prompt.commonTraps,
         reusablePatterns: prompt.reusablePatterns,
       });
+      if (result.diagnostic.failureKind === 'provider_unavailable') {
+        setDiagnostic(result.diagnostic);
+        setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your report is preserved.');
+        const failedRecord = buildRecord(undefined, 'provider_failed');
+        upsertPracticeRecord({
+          ...failedRecord,
+          providerDiagnostic: summarizeDiagnostic(result.diagnostic),
+        });
+        saveActiveWritingTask1({
+          ...failedRecord,
+          providerDiagnostic: summarizeDiagnostic(result.diagnostic),
+        });
+        return;
+      }
       setFeedback(result.feedback);
       setDiagnostic(result.diagnostic);
       const analyzedRecord = buildRecord(result.feedback);
       upsertPracticeRecord({
         ...analyzedRecord,
         providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        obsidianMarkdown: result.feedback.obsidianMarkdown,
+        obsidianMarkdown: buildTask1ObsidianNote(prompt, quickPlan, result.feedback),
       });
       saveActiveWritingTask1({
         ...analyzedRecord,
         providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        obsidianMarkdown: result.feedback.obsidianMarkdown,
+        obsidianMarkdown: buildTask1ObsidianNote(prompt, quickPlan, result.feedback),
       });
     } finally {
       setIsAnalyzing(false);
@@ -143,8 +263,19 @@ export default function WritingTask1Placeholder() {
   };
 
   const exportMarkdown = () => {
-    if (!feedback?.obsidianMarkdown) return;
-    navigator.clipboard.writeText(feedback.obsidianMarkdown).catch(() => undefined);
+    if (!currentObsidianNote) return;
+    navigator.clipboard.writeText(currentObsidianNote).catch(() => undefined);
+  };
+
+  const rewriteThisTask = () => {
+    setRecordId(createRecordId('writing_task1'));
+    setCreatedAt(new Date().toISOString());
+    setQuickPlan(emptyPlan);
+    setReport('');
+    setFeedback(undefined);
+    setDiagnostic(null);
+    setProviderErrorMessage('');
+    initialActiveRecordRef.current = null;
   };
 
   return (
@@ -156,10 +287,13 @@ export default function WritingTask1Placeholder() {
           Academic Writing Task 1
         </p>
         <h2 className="text-3xl mb-2">Describe the Visual Brief</h2>
-        <p className="text-sm italic text-paper-ink/60">
-          Local-first basic practice. Text briefs now, interactive charts later.
-        </p>
       </div>
+
+      {providerErrorMessage && (
+        <div className="mb-6 p-3 border border-accent-terracotta/20 bg-accent-terracotta/5 text-sm text-paper-ink/70">
+          {providerErrorMessage}
+        </div>
+      )}
 
       <div className="grid xl:grid-cols-[0.9fr_1.1fr] gap-8 items-start">
         <div className="space-y-6">
@@ -195,7 +329,8 @@ export default function WritingTask1Placeholder() {
 
         <div className="space-y-6">
           <PaperCard>
-            <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Quick Plan</h3>
+            <h3 className="text-sm font-bold uppercase tracking-widest mb-1">Quick Plan</h3>
+            <p className="text-xs italic text-paper-ink/45 mb-4">Optional scratchpad. Feedback diagnoses My Report below.</p>
             <div className="grid md:grid-cols-2 gap-4">
               <PlanBox label="Overview" value={quickPlan.overview} onChange={value => updatePlan('overview', value)} placeholder="Main trend, pattern, or sequence." />
               <PlanBox label="Key features" value={quickPlan.keyFeatures} onChange={value => updatePlan('keyFeatures', value)} placeholder="Largest changes, standout values, stages." />
@@ -206,7 +341,7 @@ export default function WritingTask1Placeholder() {
 
           <PaperCard>
             <div className="flex items-center justify-between gap-4 mb-3">
-              <h3 className="text-sm font-bold uppercase tracking-widest">Report Editor</h3>
+              <h3 className="text-sm font-bold uppercase tracking-widest">My Report</h3>
               <span className="text-xs font-sans text-paper-ink/45">{words} words</span>
             </div>
             <textarea
@@ -228,7 +363,7 @@ export default function WritingTask1Placeholder() {
                 {isAnalyzing ? 'Analyzing...' : 'Submit for Feedback'}
               </SerifButton>
               <SerifButton onClick={loadNewPrompt} variant="outline" disabled={isAnalyzing}>
-                New Prompt
+                Change Task
               </SerifButton>
             </div>
           </PaperCard>
@@ -246,12 +381,12 @@ export default function WritingTask1Placeholder() {
             <div className="grid lg:grid-cols-[auto_1fr] gap-6">
               <div className="text-center">
                 <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/40 mb-2">
-                  Estimated Band
+                  Training Estimate
                 </p>
-                <p className="text-4xl font-bold text-accent-terracotta">{feedback.estimatedBand.toFixed(1)}</p>
+                <p className="text-4xl font-bold text-accent-terracotta">{formatBandEstimate(feedback.estimatedBand)}</p>
               </div>
               <div>
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Task 1 Diagnosis</h3>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Diagnosis of My Report</h3>
                 <div className="grid md:grid-cols-2 gap-3">
                   {feedbackItems(feedback).map(([label, text]) => (
                     <div key={label} className="border-l-2 border-l-accent-terracotta/35 pl-4 py-1">
@@ -271,17 +406,26 @@ export default function WritingTask1Placeholder() {
 
           <PaperCard>
             <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Rewrite Task</h3>
-            <p className="text-sm leading-7 text-paper-ink/75">{feedback.rewriteTask}</p>
+            <ul className="space-y-3">
+              {getRewriteActions(feedback).map((item, index) => (
+                <li key={`${item}-${index}`} className="text-sm leading-7 text-paper-ink/75 border-l-2 border-l-accent-terracotta/30 pl-4">
+                  {item}
+                </li>
+              ))}
+            </ul>
           </PaperCard>
 
           <PaperCard>
             <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Improved Report / Model Excerpt</h3>
             <p className="whitespace-pre-wrap text-sm leading-7 text-paper-ink/75">{feedback.improvedReport || feedback.modelExcerpt}</p>
-            {feedback.obsidianMarkdown && (
-              <SerifButton onClick={exportMarkdown} variant="outline" className="mt-5 text-xs">
-                Copy Markdown
+            <div className="flex flex-wrap gap-3 mt-5">
+              <SerifButton onClick={rewriteThisTask} variant="outline" className="text-xs">
+                Rewrite This Task
               </SerifButton>
-            )}
+              <SerifButton onClick={exportMarkdown} variant="outline" className="text-xs">
+                Copy Obsidian Note
+              </SerifButton>
+            </div>
           </PaperCard>
         </div>
       )}

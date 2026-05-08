@@ -5,6 +5,7 @@ import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
 import { getAIProvider, getAIProviderName, safeAnalyzeSpeaking } from '@/src/lib/ai';
+import { formatBandEstimate } from '@/src/lib/bands';
 import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/questions/bank';
 import { SpeakingFeedback } from '@/src/lib/ai/schemas';
 import {
@@ -30,7 +31,7 @@ export default function SpeakingPractice() {
   const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const [feedback, setFeedback] = useState<SpeakingFeedback | null>(null);
-  const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
+  const [, setFeedbackFallbackUsed] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [recentAttempts, setRecentAttempts] = useState<PracticeRecord[]>([]);
   const [restoreMessage, setRestoreMessage] = useState('');
@@ -778,17 +779,12 @@ export default function SpeakingPractice() {
         <div className="lg:col-span-12">
           
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {feedbackFallbackUsed && (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded font-sans">
-                  Some provider feedback was malformed and has been safely normalized. Check the Debug Panel for details.
-                </div>
-              )}
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-[10px] font-bold uppercase tracking-widest mb-6 text-paper-ink/40 border-b border-paper-ink/10 pb-2">Language Performance</h3>
                 <div className="flex items-baseline gap-2 mb-8">
-                  <span className="text-6xl font-bold text-accent-terracotta leading-none">{feedback.bandEstimateExcludingPronunciation}</span>
+                  <span className="text-6xl font-bold text-accent-terracotta leading-none">{formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-paper-ink/40 font-bold uppercase tracking-tight">Est. Band</span>
+                    <span className="text-[10px] text-paper-ink/40 font-bold uppercase tracking-tight">Training Estimate</span>
                     <span className="text-[8px] text-paper-ink/30 italic uppercase">(Excl. Pronunciation)</span>
                   </div>
                 </div>
@@ -801,7 +797,7 @@ export default function SpeakingPractice() {
                   ].map((s) => (
                     <div key={s.label} className="flex justify-between items-center text-xs py-1 border-b border-paper-ink/5 last:border-0">
                       <span className="text-paper-ink/60">{s.label}</span>
-                      <span className="font-bold">{s.score}</span>
+                      <span className="font-bold">{formatBandEstimate(s.score)}</span>
                     </div>
                   ))}
                 </div>

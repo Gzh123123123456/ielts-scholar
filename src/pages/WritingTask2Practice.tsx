@@ -5,6 +5,7 @@ import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
 import { getAIProvider, getAIProviderName, isMockProviderActive, safeAnalyzeWriting, safeExtractWritingFramework } from '@/src/lib/ai';
+import { formatBandEstimate } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
 import {
@@ -558,7 +559,7 @@ export default function WritingTask2Practice() {
               ].map((s) => (
                 <PaperCard key={s.label} className="text-center p-4">
                   <div className="text-[10px] font-sans font-bold text-paper-ink/40 uppercase mb-1">{s.label}</div>
-                  <div className="text-2xl font-bold text-accent-terracotta">{s.score}</div>
+                  <div className="text-2xl font-bold text-accent-terracotta">{formatBandEstimate(s.score)}</div>
                 </PaperCard>
               ))}
             </div>
@@ -646,15 +647,10 @@ export default function WritingTask2Practice() {
             <div className="space-y-3">
               {isMock && (
                 <div className="flex items-center gap-2 p-3 bg-paper-ink/5 rounded text-[10px] text-paper-ink/40 italic uppercase tracking-wider border border-paper-ink/10 font-sans">
-                  <span>Prototype feedback shown using mock AI. Connect Gemini for official evaluation.</span>
+                  <span>Prototype feedback shown using mock AI. Connect Gemini for training analysis.</span>
                 </div>
               )}
 
-              {feedbackFallbackUsed && (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded font-sans">
-                  Some provider feedback was malformed and has been safely normalized. Check the Debug Panel for details.
-                </div>
-              )}
             </div>
 
             <div className="flex justify-between gap-4 border-t border-paper-ink/10 pt-6">

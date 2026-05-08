@@ -144,11 +144,11 @@ export class MockProvider implements AIProvider {
     const comparisonExpected = !['process'].includes(params.taskType.toLowerCase());
     const hasComparison = /\b(compared|whereas|while|than|higher|lower|largest|smallest|respectively|in contrast)\b/.test(lower);
     const mustFix = [
-      words < 150 ? 'Reach at least 150 words before treating this as a complete Task 1 response.' : '',
-      !hasOverview ? 'Add a clear overview paragraph that summarizes the main trend, pattern, or stage.' : '',
-      !hasNumbers ? 'Include precise data references from the visual instead of only general descriptions.' : '',
-      comparisonExpected && !hasComparison ? 'Add direct comparisons between categories, periods, or locations.' : '',
-      'Do not explain causes unless the visual brief explicitly gives causes.',
+      words < 150 ? '字数还不足 150 词，先不要把这次当作完整 Task 1 训练结果。' : '',
+      !hasOverview ? '必须补一个清晰 overview，用一句话概括整体趋势、主要模式或关键阶段。' : '',
+      !hasNumbers ? '加入来自图表的准确数字和单位，不要只做笼统描述。' : '',
+      comparisonExpected && !hasComparison ? '增加直接比较，例如 higher than, whereas, in contrast, the largest proportion。' : '',
+      '不要解释原因，除非题目视觉信息本身明确给出原因。',
     ].filter(Boolean);
 
     const estimatedBand = words < 120 ? 5.5 : hasOverview && hasNumbers && (!comparisonExpected || hasComparison) ? 7 : 6.5;
@@ -174,37 +174,42 @@ export class MockProvider implements AIProvider {
       taskAchievement: {
         score: estimatedBand,
         feedback: words < 150
-          ? 'The response is under-length, so Task Achievement is limited even if the ideas are relevant.'
-          : 'The report addresses the visual, but the score depends on overview clarity and data selection.',
+          ? '文章低于 Task 1 字数要求，所以即使内容相关，Task Achievement 也会受限。'
+          : '这篇报告回应了图表，但估计表现主要取决于 overview 是否概括全图，以及数据选择是否抓住重点。',
       },
       overviewFeedback: hasOverview
-        ? 'A broad overview signal is present. Make sure it summarizes the whole visual, not just one data point.'
-        : 'No clear overview signal was detected. Add one concise overview before detailed figures.',
+        ? '已经有 overview 信号。下一步要确认它概括的是全图主趋势，而不是某一个孤立数据点。'
+        : '没有检测到清楚的 overview。建议在细节段前加入一句总览，例如 "Overall, ...", 概括主要趋势或最突出的差异。',
       keyFeaturesFeedback: hasNumbers
-        ? 'The report refers to measurable information. Keep selecting only the largest changes and standout figures.'
-        : 'The report needs clearer key features with figures or concrete values from the visual.',
+        ? '已经使用了可量化信息。继续筛选最大变化、最高/最低值和最突出的阶段，不需要覆盖每个数字。'
+        : '关键信息不够具体，需要从视觉信息中加入数字、单位或明确数值，例如 "rose from X to Y"。',
       comparisonFeedback: comparisonExpected
         ? (hasComparison
-          ? 'Comparison language is present. Use it to group categories, not just connect sentences.'
-          : 'Add comparison language such as higher than, whereas, in contrast, or the largest proportion.')
-        : 'For a process, focus on sequence and transformation rather than category comparison.',
+          ? '已经有比较语言。注意比较应服务于分组，而不只是用 while/whereas 连接两个句子。'
+          : '需要加入比较关系，例如 higher than, whereas, in contrast, 或 the largest proportion，把类别、时间段或地点放在一起比较。')
+        : '如果是流程图，重点不是类别比较，而是阶段顺序和变化结果。',
       dataAccuracyFeedback: hasNumbers
-        ? 'Numbers are included; check that every figure matches the brief and has a unit where needed.'
-        : 'No data reference was detected, so the report may sound too general for Academic Task 1.',
-      coherenceFeedback: 'Use four compact paragraphs: introduction, overview, key details group 1, key details group 2.',
+        ? '已经包含数字。请逐个检查数值、单位和排名是否与题目数据一致，避免近似数字造成误导。'
+        : '没有检测到数据引用，这会让 Academic Task 1 显得太泛泛。至少加入 3 个准确数据点。',
+      coherenceFeedback: '建议使用四个紧凑段落：改写题目、overview、细节组 1、细节组 2。细节段按趋势/大小/阶段分组。',
       languageCorrections: [
         {
           original: 'The chart explains why...',
           correction: 'The chart shows that...',
-          explanation: 'Task 1 reports describe visible information; they should not invent causes.',
+          explanation: 'Task 1 只描述可见信息，不要自行推测原因。可以改成 "The chart shows that..."。',
         },
       ],
       mustFix,
-      rewriteTask: 'Rewrite the report with one overview sentence, two grouped detail paragraphs, and at least three accurate data references.',
+      rewriteTask: [
+        '- 重写 overview：用一句话概括全图最大趋势、主要差异或流程结果。',
+        '- 重新分组主体段：按趋势、大小、阶段或类别组合信息，避免逐项流水账。',
+        '- 加入比较：使用 higher than, whereas, in contrast 等表达说明关键差异。',
+        '- 核对数据准确性：至少保留 3 个准确数字、单位或排名。',
+      ].join('\n'),
       reusableReportPatterns: patterns,
       improvedReport,
       modelExcerpt: improvedReport,
-      obsidianMarkdown: `# IELTS Writing Task 1 Note\n\n## Prompt\n${params.instruction}\n\n## Estimated Band\n${estimatedBand}\n\n## Must Fix\n${mustFix.map(item => `- ${item}`).join('\n')}\n\n## Reusable Patterns\n${patterns.map(item => `- ${item}`).join('\n')}`,
+      obsidianMarkdown: `# IELTS Writing Task 1 Note\n\n## Prompt\n${params.instruction}\n\n## Training Estimate\n${estimatedBand.toFixed(1)}\n\n## Must Fix\n${mustFix.map(item => `- ${item}`).join('\n')}\n\n## Reusable Patterns\n${patterns.map(item => `- ${item}`).join('\n')}`,
     };
   }
 
