@@ -67,7 +67,7 @@
 
 .page-shell {
   @apply min-h-screen flex flex-col mx-auto px-4 py-8 md:px-8;
-  width: min(100%, var(--page-shell-width));
+  width: min(100%, 100rem);
 }
 
 .page-shell--medium {
@@ -76,6 +76,20 @@
 
 .page-shell--wide {
   --page-shell-width: 100rem;
+}
+
+.top-bar-shell {
+  @apply w-full;
+}
+
+.page-shell--medium > :not(.top-bar-shell) {
+  width: min(100%, var(--page-shell-width));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.page-shell--wide > :not(.top-bar-shell) {
+  width: min(100%, var(--page-shell-width));
 }
 
 .practice-workspace {

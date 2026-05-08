@@ -38,6 +38,40 @@ const isPlaceholderModelAnswer = (text: string) =>
   text === 'Sample Band 9 essay content...' ||
   /too short for a high training estimate|provider returned incomplete|malformed or incomplete/i.test(text);
 
+const humanizeKey = (value: string) =>
+  value
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .replace(/\b\w/g, character => character.toUpperCase());
+
+const dimensionLabels: Record<string, string> = {
+  TR: '任务回应 / Task Response',
+  CC: '连贯性 / Coherence',
+  LR: '词汇准确性 / Lexical Resource',
+  GRA: '语法准确性 / Grammar',
+};
+
+const categoryLabels: Record<string, string> = {
+  lexical_precision: '词汇准确性 / Lexical Precision',
+  word_choice: '词汇选择 / Word Choice',
+  grammar: '语法准确性 / Grammar',
+  grammatical_accuracy: '语法准确性 / Grammar',
+  coherence: '连贯性 / Coherence',
+  cohesion: '衔接 / Cohesion',
+  task_response: '任务回应 / Task Response',
+  task_achievement: '任务完成度 / Task Achievement',
+  provider_safety: '反馈格式 / Feedback Format',
+  insufficient_sample: '样本不足 / Insufficient Sample',
+};
+
+const displayDimension = (value: string) => dimensionLabels[value] || humanizeKey(value);
+
+const displayCategory = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  return categoryLabels[normalized] || humanizeKey(value);
+};
+
 export default function WritingTask2Practice() {
   const { addDebugLog, saveSession, setProviderDiagnostic } = useApp();
   const [question, setQuestion] = useState<WritingQuestion | null>(null);
@@ -534,10 +568,10 @@ export default function WritingTask2Practice() {
                     <PaperCard key={i} className="border-l-2 border-l-paper-ink/20">
                       <div className="text-base text-paper-ink/60 line-through mb-2 leading-7">{item.original}</div>
                       <div className="text-[17px] font-bold mb-3 leading-8">{item.correction}</div>
-                      <div className="flex items-center gap-2 mb-2 text-[10px] uppercase font-sans font-bold text-accent-terracotta">
-                        <span>{item.dimension}</span>
+                      <div className="flex flex-wrap items-center gap-2 mb-2 text-[10px] uppercase font-sans font-bold text-accent-terracotta">
+                        <span>{displayDimension(item.dimension)}</span>
                         <span className="opacity-30">-</span>
-                        <span>{item.tag}</span>
+                        <span>{displayCategory(item.tag)}</span>
                       </div>
                       <p className="text-sm leading-7 text-paper-ink-muted bg-paper-ink/5 p-3 rounded">{item.explanationZh}</p>
                     </PaperCard>

@@ -6,7 +6,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
-import { TopBar } from './components/ui/TopBar';
 import { DebugPanel } from './components/ui/DebugPanel';
 import Home from './pages/Home';
 import Speaking from './pages/Speaking';

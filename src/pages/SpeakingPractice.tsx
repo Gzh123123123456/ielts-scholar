@@ -770,8 +770,8 @@ export default function SpeakingPractice() {
                 </section>
               )}
 
-              <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
-                <div className="max-w-4xl">
+              <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta max-w-5xl mx-auto">
+                <div>
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">High-Band Transformation</h4>
                   <p className="text-xl md:text-2xl leading-10 text-paper-ink font-serif">
                     "{feedback.upgradedAnswer}"

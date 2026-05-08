@@ -14,7 +14,7 @@ export const TopBar: React.FC = () => {
   ];
 
   return (
-    <nav className="flex items-center justify-between mb-12 border-b border-paper-ink/10 pb-4">
+    <nav className="top-bar-shell flex items-center justify-between mb-12 border-b border-paper-ink/10 pb-4">
       <Link to="/" className="text-xl font-serif font-bold tracking-tight text-paper-ink hover:text-accent-terracotta transition-colors duration-200">
         IELTS Scholar
       </Link>
