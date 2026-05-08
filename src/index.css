@@ -82,6 +82,11 @@
   @apply w-full mx-auto space-y-8;
 }
 
+.landing-workspace {
+  @apply w-full mx-auto;
+  max-width: 84rem;
+}
+
 .reading-comfort {
   @apply text-base leading-8;
 }
