@@ -2,115 +2,218 @@ import React from 'react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
-import { useApp } from '@/src/context/AppContext';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
+import {
+  getPracticeRecords,
+  PracticeRecord,
+  SpeakingPracticeRecord,
+  WritingTask2PracticeRecord,
+} from '@/src/lib/practiceRecords';
+
+const isValidBand = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 9;
+
+const getTimestamp = (record: PracticeRecord) =>
+  record.analyzedAt || record.updatedAt || record.createdAt;
+
+const formatDate = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+};
+
+const preview = (value: string) => {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length > 96 ? `${normalized.slice(0, 96)}...` : normalized;
+};
+
+const average = (values: number[]) =>
+  values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+
+const formatBand = (value: number | null) =>
+  value === null ? 'Not enough data' : value.toFixed(1);
+
+const getSpeakingScore = (record: SpeakingPracticeRecord) => {
+  const score = record.feedback?.bandEstimateExcludingPronunciation;
+  return isValidBand(score) ? score : null;
+};
+
+const getWritingScore = (record: WritingTask2PracticeRecord) => {
+  const scores = record.feedback?.scores;
+  if (!scores) return null;
+  const values = [
+    scores.taskResponse,
+    scores.coherenceCohesion,
+    scores.lexicalResource,
+    scores.grammaticalRangeAccuracy,
+  ];
+  return values.every(isValidBand) ? average(values) : null;
+};
+
+const isScoredSpeaking = (record: PracticeRecord): record is SpeakingPracticeRecord =>
+  record.module === 'speaking' && record.status === 'analyzed' && getSpeakingScore(record as SpeakingPracticeRecord) !== null;
+
+const isScoredWriting = (record: PracticeRecord): record is WritingTask2PracticeRecord =>
+  record.module === 'writing' &&
+  (record as WritingTask2PracticeRecord).task === 'task2' &&
+  record.status === 'analyzed' &&
+  getWritingScore(record as WritingTask2PracticeRecord) !== null;
 
 export default function Progress() {
-  const { profile, sessions } = useApp();
-
-  const chartData = profile.estimatedBandHistory.map((h, i) => ({
-    session: i + 1,
-    band: h.band,
-    date: new Date(h.date).toLocaleDateString()
-  }));
-
-  const tagData = Object.entries(profile.errorTags)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 5);
-
-  const colors = ['#a64d32', '#3c2f2f', '#5c4f4f', '#8c7d7d', '#b19f9f'];
+  const records = getPracticeRecords(80);
+  const scoredSpeaking = records.filter(isScoredSpeaking);
+  const scoredWriting = records.filter(isScoredWriting);
+  const speakingEstimate = average(scoredSpeaking.map(record => getSpeakingScore(record)).filter(isValidBand));
+  const writingEstimate = average(scoredWriting.map(record => getWritingScore(record)).filter(isValidBand));
+  const latestRecord = records[0];
+  const recentRecords = records.slice(0, 6);
+  const recentSpeakingScores = scoredSpeaking.slice(0, 6);
+  const recentWritingScores = scoredWriting.slice(0, 6);
 
   return (
     <PageShell>
       <TopBar />
+
       <div className="mb-12 text-center max-w-2xl mx-auto">
-        <h2 className="text-3xl mb-2">Your Training Trajectory</h2>
+        <h2 className="text-3xl mb-2">Your Training Snapshot</h2>
         <p className="text-sm italic text-paper-ink/60">
-          "The distance between where you are and where you want to be is determined by your daily output."
+          Based on local practice records. Not a mock exam score.
         </p>
       </div>
 
-      {sessions.length === 0 ? (
-        <PaperCard className="text-center py-20 bg-paper-ink/5 border-dashed">
-          <p className="text-paper-ink/40 italic">No practice data recorded yet. Complete a session to see your growth.</p>
-        </PaperCard>
-      ) : (
-        <div className="space-y-8">
-          <div className="grid md:grid-cols-3 gap-8">
-            <PaperCard className="text-center py-8">
-              <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">Total Practices</div>
-              <div className="text-4xl font-bold text-paper-ink">{profile.totalSessions}</div>
-            </PaperCard>
-            <PaperCard className="text-center py-8">
-              <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">Latest Band Estimate</div>
-              <div className="text-4xl font-bold text-accent-terracotta">
-                {profile.estimatedBandHistory[profile.estimatedBandHistory.length - 1]?.band || 0}
-              </div>
-            </PaperCard>
-            <PaperCard className="text-center py-8">
-              <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">Last Active</div>
-              <div className="text-sm font-bold uppercase tracking-widest text-paper-ink pt-2 font-sans">
-                {profile.lastPracticed ? new Date(profile.lastPracticed).toLocaleDateString() : 'Today'}
-              </div>
-            </PaperCard>
-          </div>
+      <div className="space-y-8">
+        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <PaperCard className="text-center py-8">
+            <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+              Speaking Estimate
+            </div>
+            <div className={speakingEstimate === null ? 'text-lg font-bold text-paper-ink/45 pt-2' : 'text-4xl font-bold text-accent-terracotta'}>
+              {formatBand(speakingEstimate)}
+            </div>
+          </PaperCard>
 
-          <div className="grid lg:grid-cols-2 gap-8">
-            <PaperCard className="h-80">
-              <h3 className="text-sm font-bold uppercase tracking-widest mb-6 border-b border-paper-ink/5 pb-2">Band Progression</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#3c2f2f10" />
-                  <XAxis dataKey="session" stroke="#3c2f2f40" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis domain={[0, 9]} stroke="#3c2f2f40" fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#fdfaf6', border: '1px solid #3c2f2f10', fontSize: '12px', fontFamily: 'Georgia' }}
-                    itemStyle={{ color: '#a64d32' }}
-                  />
-                  <Line type="monotone" dataKey="band" stroke="#a64d32" strokeWidth={2} dot={{ fill: '#a64d32', r: 4 }} activeDot={{ r: 6 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </PaperCard>
+          <PaperCard className="text-center py-8">
+            <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+              Writing Task 2 Estimate
+            </div>
+            <div className={writingEstimate === null ? 'text-lg font-bold text-paper-ink/45 pt-2' : 'text-4xl font-bold text-accent-terracotta'}>
+              {formatBand(writingEstimate)}
+            </div>
+          </PaperCard>
 
-            <PaperCard className="h-80">
-              <h3 className="text-sm font-bold uppercase tracking-widest mb-6 border-b border-paper-ink/5 pb-2">Top Difficulty Areas (Planned)</h3>
-              <div className="h-full flex items-center justify-center italic text-xs text-paper-ink/40 p-12 text-center leading-relaxed">
-                <p>
-                  V2 will include automated error tag frequency tracking. <br/>
-                  Currently, patterns are preserved in your individual Obsidian notes.
-                </p>
-              </div>
-            </PaperCard>
-          </div>
+          <PaperCard className="text-center py-8">
+            <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+              Analyzed Attempts
+            </div>
+            <div className="text-sm font-bold uppercase tracking-widest text-paper-ink pt-2 font-sans leading-7">
+              Speaking {scoredSpeaking.length}
+              <br />
+              Writing {scoredWriting.length}
+            </div>
+          </PaperCard>
 
-          <div>
-            <h3 className="text-xl font-serif mb-4 ml-1">Recent Sessions</h3>
-            <div className="space-y-4">
-              {sessions.slice(0, 5).map((session) => (
-                <PaperCard key={session.id} className="p-4 hover:bg-paper-50/50 transition-colors cursor-default">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded text-[10px] font-bold uppercase tracking-widest ${session.module === 'speaking' ? 'bg-blue-50 text-blue-800' : 'bg-orange-50 text-orange-800'}`}>
-                        {session.module}
+          <PaperCard className="text-center py-8">
+            <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+              Last Practice
+            </div>
+            <div className="text-sm font-bold text-paper-ink pt-2 font-sans leading-6">
+              {latestRecord ? formatDate(getTimestamp(latestRecord)) : 'No records yet'}
+            </div>
+          </PaperCard>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-8">
+          <ScoreList
+            title="Recent Speaking Scores"
+            empty="No analyzed Speaking attempts yet."
+            records={recentSpeakingScores.map(record => ({
+              id: record.id,
+              date: formatDate(getTimestamp(record)),
+              label: `Speaking Part ${record.part}`,
+              question: preview(record.question),
+              score: getSpeakingScore(record),
+            }))}
+          />
+
+          <ScoreList
+            title="Recent Writing Task 2 Scores"
+            empty="No analyzed Writing Task 2 attempts yet."
+            records={recentWritingScores.map(record => ({
+              id: record.id,
+              date: formatDate(getTimestamp(record)),
+              label: 'Writing Task 2',
+              question: preview(record.question),
+              score: getWritingScore(record),
+            }))}
+          />
+        </div>
+
+        <section>
+          <h3 className="text-xl font-serif mb-4 ml-1">Recent Practice Records</h3>
+          {recentRecords.length === 0 ? (
+            <PaperCard className="text-center py-12 bg-paper-ink/5 border-dashed">
+              <p className="text-paper-ink/40 italic">No records yet.</p>
+            </PaperCard>
+          ) : (
+            <div className="space-y-3">
+              {recentRecords.map(record => (
+                <PaperCard key={record.id} className="p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">
+                        {record.module === 'speaking'
+                          ? `Speaking Part ${(record as SpeakingPracticeRecord).part}`
+                          : 'Writing Task 2'} / {record.status}
                       </div>
-                      <div>
-                        <div className="text-sm font-semibold truncate max-w-[200px] sm:max-w-md">{session.question}</div>
-                        <div className="text-[10px] text-paper-ink/40 font-sans tracking-widest mt-1">
-                          {new Date(session.date).toLocaleString()} • {session.mode}
-                        </div>
-                      </div>
+                      <div className="text-sm font-semibold text-paper-ink leading-6">{preview(record.question)}</div>
                     </div>
-                    <div className="text-xl font-bold text-accent-terracotta">
-                      {(session.feedback?.bandEstimateExcludingPronunciation || session.feedback?.scores?.taskResponse || 0).toFixed(1)}
+                    <div className="text-xs text-paper-ink/40 font-sans whitespace-nowrap">
+                      {formatDate(getTimestamp(record))}
                     </div>
                   </div>
                 </PaperCard>
               ))}
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </section>
+      </div>
     </PageShell>
   );
 }
+
+interface ScoreListProps {
+  title: string;
+  empty: string;
+  records: {
+    id: string;
+    date: string;
+    label: string;
+    question: string;
+    score: number | null;
+  }[];
+}
+
+const ScoreList: React.FC<ScoreListProps> = ({ title, empty, records }) => (
+  <PaperCard>
+    <h3 className="text-sm font-bold uppercase tracking-widest mb-5 border-b border-paper-ink/5 pb-2">
+      {title}
+    </h3>
+    {records.length === 0 ? (
+      <p className="text-sm italic text-paper-ink/45 py-8 text-center">{empty}</p>
+    ) : (
+      <div className="space-y-3">
+        {records.map(record => (
+          <div key={record.id} className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center border-b border-paper-ink/5 pb-3 last:border-b-0 last:pb-0">
+            <div>
+              <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/40 mb-1">
+                {record.label} / {record.date}
+              </p>
+              <p className="text-sm leading-6 text-paper-ink/75">{record.question}</p>
+            </div>
+            <div className="text-2xl font-bold text-accent-terracotta">
+              {record.score === null ? '-' : record.score.toFixed(1)}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </PaperCard>
+);
