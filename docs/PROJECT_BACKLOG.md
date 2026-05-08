@@ -62,6 +62,7 @@ _Last updated: 2026-05-07_
   - richer topic taxonomy and difficulty metadata
   - official-source review, source-quality review, and deduplication
   - optional AI tagging later, clearly separated from static prep taxonomy and never treated as official syllabus coverage
+  - topic-filtered practice start from Progress or History
   - prompt rotation analytics
 
 ### 2.5) Practice Persistence and History Access
@@ -72,6 +73,7 @@ _Last updated: 2026-05-07_
   - richer full history dashboard
   - cross-attempt comparison
   - session-level consolidated note export
+  - optional manual backup/export for local practice records before any future storage migration
   - storage migration from localStorage to IndexedDB or a local file/database layer if records grow large
 
 ### 3) Session-level Obsidian Notes

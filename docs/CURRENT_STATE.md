@@ -88,8 +88,17 @@ _Last updated: 2026-05-08_
   - Speaking: 12 preparation categories.
   - Writing Task 2: 12 preparation categories.
 - Progress resolves topic coverage by preferring stored record metadata, matching prompt-bank metadata, then using a small keyword fallback. Unknown topics are not counted as score 0.
-- Recommended Next Focus is rule-based and modest: it suggests one under-practiced Speaking category and one under-practiced Writing Task 2 category, and mentions unfinished drafts only when local draft records exist.
+- Progress includes a rule-based **Suggested Training Plan** with up to 3 modest suggestions covering data sufficiency, module balance, Speaking part balance, topic coverage, and unfinished drafts when local records support them.
 - Topic coverage is explicitly presented as IELTS preparation categories, not an official exam syllabus.
+
+## Practice Record Safety (Implemented)
+- New Speaking records persist static prompt metadata when available: topic, tags, and part.
+- New Writing Task 2 records persist static prompt metadata when available: topic, tags, task type, and task.
+- Old records without topic metadata remain readable; Progress falls back to prompt-bank matching and then minimal keyword matching.
+- Practice records use the stable `ielts_practice_records_v1` key.
+- Malformed or unknown old record entries are ignored for display but preserved in storage; they are not automatically deleted.
+- Practice records are protected from automatic clearing during app start, route navigation, server restart, build, or normal development flow.
+- Deletion remains explicit and record-specific through user delete actions.
 
 ## Debug / Provider Safety (Implemented)
 - Debug Panel remains globally available.

@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-08] Persist Prep Topic Metadata and Protect Local Records
+- **Decision**: Persist static preparation topic metadata on new practice records and protect the local-first record store from automatic cleanup.
+- **Reason**: Progress recommendations should work from stable local evidence, while local practice records must not disappear during app start, route navigation, dev-server restart, or malformed-data handling.
+- **Implemented**:
+  - New Speaking records store topic, tags, and part metadata when prompt metadata is available.
+  - New Writing Task 2 records store topic, tags, task type, and task metadata when prompt metadata is available.
+  - Progress now shows a rule-based **Suggested Training Plan** with up to 3 prioritized suggestions and reasons.
+  - Practice record reads ignore malformed/unknown old entries for display without deleting them.
+  - Removed automatic record-list truncation from practice-record upsert.
+  - Active Writing deletion now requires a matching record id.
+- **Explicitly unchanged**: no provider changes, no RAG, no database, no server, no auth, no routing architecture change, no History UI change, no AI auto-tagging, no localStorage migration, no bulk delete.
+
 ## [2026-05-08] Progress Topic Coverage Uses Static Prep Taxonomy
 - **Decision**: Add topic coverage to Progress using static preparation categories on the local prompt bank.
 - **Reason**: Learners need a simple view of which Speaking and Writing Task 2 areas they have practiced, without implying an official IELTS syllabus or adding AI auto-tagging.

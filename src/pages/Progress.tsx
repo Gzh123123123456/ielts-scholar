@@ -156,6 +156,88 @@ const countTopics = <T extends string>(
 const pickUnderPracticed = <T extends string>(coverage: { topic: T; count: number }[]) =>
   [...coverage].sort((a, b) => a.count - b.count || a.topic.localeCompare(b.topic))[0];
 
+interface TrainingSuggestion {
+  title: string;
+  reason: string;
+}
+
+const buildTrainingSuggestions = (
+  scoredSpeaking: SpeakingPracticeRecord[],
+  scoredWriting: WritingTask2PracticeRecord[],
+  speakingCoverage: { topic: SpeakingTopicCategory; count: number }[],
+  writingCoverage: { topic: WritingTask2TopicCategory; count: number }[],
+  unfinishedDrafts: number,
+): TrainingSuggestion[] => {
+  const suggestions: TrainingSuggestion[] = [];
+  const addSuggestion = (suggestion: TrainingSuggestion) => {
+    if (suggestions.length < 3) suggestions.push(suggestion);
+  };
+
+  if (scoredSpeaking.length < 3 || scoredWriting.length < 3) {
+    const modules = [
+      scoredSpeaking.length < 3 ? `Speaking (${scoredSpeaking.length}/3)` : '',
+      scoredWriting.length < 3 ? `Writing Task 2 (${scoredWriting.length}/3)` : '',
+    ].filter(Boolean).join(' and ');
+    addSuggestion({
+      title: `Add more analyzed attempts for ${modules}`,
+      reason: 'Estimates are steadier after at least 3 analyzed records per module.',
+    });
+  }
+
+  const countDifference = Math.abs(scoredSpeaking.length - scoredWriting.length);
+  if (countDifference >= 2) {
+    const underPracticed = scoredSpeaking.length < scoredWriting.length ? 'Speaking' : 'Writing Task 2';
+    addSuggestion({
+      title: `Balance practice with ${underPracticed}`,
+      reason: `Your analyzed counts differ by ${countDifference}, so the lighter module has less evidence behind its estimate.`,
+    });
+  }
+
+  if (scoredSpeaking.length > 0) {
+    const partCounts = ([1, 2, 3] as const).map(part => ({
+      part,
+      count: scoredSpeaking.filter(record => record.part === part).length,
+    }));
+    const leastPart = [...partCounts].sort((a, b) => a.count - b.count || a.part - b.part)[0];
+    const mostPart = [...partCounts].sort((a, b) => b.count - a.count || a.part - b.part)[0];
+    if (leastPart.count < mostPart.count) {
+      addSuggestion({
+        title: `Practice Speaking Part ${leastPart.part}`,
+        reason: `Part ${leastPart.part} has ${leastPart.count} analyzed record${leastPart.count === 1 ? '' : 's'}, fewer than your most-practiced Speaking part.`,
+      });
+    }
+  }
+
+  const nextSpeaking = pickUnderPracticed(speakingCoverage);
+  if (nextSpeaking) {
+    addSuggestion({
+      title: `Cover Speaking: ${nextSpeaking.topic}`,
+      reason: nextSpeaking.count === 0
+        ? 'No local attempts are recorded for this preparation category yet.'
+        : `This category has only ${nextSpeaking.count} local attempt${nextSpeaking.count === 1 ? '' : 's'}, making it one of your lighter areas.`,
+    });
+  }
+
+  const nextWriting = pickUnderPracticed(writingCoverage);
+  if (nextWriting) {
+    addSuggestion({
+      title: `Cover Writing Task 2: ${nextWriting.topic}`,
+      reason: nextWriting.count === 0
+        ? 'No local attempts are recorded for this preparation category yet.'
+        : `This category has only ${nextWriting.count} local attempt${nextWriting.count === 1 ? '' : 's'}, making it one of your lighter areas.`,
+    });
+  }
+
+  if (unfinishedDrafts > 0) {
+    addSuggestion({
+      title: 'Finish saved drafts',
+      reason: `${unfinishedDrafts} draft${unfinishedDrafts === 1 ? ' is' : 's are'} saved locally and not analyzed yet.`,
+    });
+  }
+
+  return suggestions.slice(0, 3);
+};
+
 export default function Progress() {
   const records = getPracticeRecords(80);
   const scoredSpeaking = records.filter(isScoredSpeaking);
@@ -179,9 +261,14 @@ export default function Progress() {
     writingRecords,
     record => getWritingTopic(record as WritingTask2PracticeRecord),
   );
-  const nextSpeaking = pickUnderPracticed(speakingCoverage);
-  const nextWriting = pickUnderPracticed(writingCoverage);
   const unfinishedDrafts = records.filter(record => record.status === 'draft').length;
+  const trainingSuggestions = buildTrainingSuggestions(
+    scoredSpeaking,
+    scoredWriting,
+    speakingCoverage,
+    writingCoverage,
+    unfinishedDrafts,
+  );
 
   return (
     <PageShell>
@@ -262,21 +349,18 @@ export default function Progress() {
         </div>
 
         <PaperCard>
-          <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Recommended Next Focus</h3>
-          <div className="grid md:grid-cols-2 gap-4 text-sm leading-7 text-paper-ink/75">
-            <p>
-              Speaking: try <span className="font-bold text-paper-ink">{nextSpeaking.topic}</span>
-              {nextSpeaking.count > 0 ? ' again; it is still one of your lighter areas.' : ' first; no local attempts are recorded yet.'}
-            </p>
-            <p>
-              Writing Task 2: try <span className="font-bold text-paper-ink">{nextWriting.topic}</span>
-              {nextWriting.count > 0 ? ' again; it is still one of your lighter areas.' : ' first; no local attempts are recorded yet.'}
-            </p>
-          </div>
-          {unfinishedDrafts > 0 && (
-            <p className="mt-4 text-xs italic text-paper-ink/45">
-              You also have {unfinishedDrafts} unfinished draft{unfinishedDrafts === 1 ? '' : 's'} saved locally.
-            </p>
+          <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Suggested Training Plan</h3>
+          {trainingSuggestions.length === 0 ? (
+            <p className="text-sm italic text-paper-ink/45">No local practice records yet. Start with one Speaking attempt and one Writing Task 2 attempt.</p>
+          ) : (
+            <div className="space-y-3">
+              {trainingSuggestions.map((suggestion, index) => (
+                <div key={`${suggestion.title}-${index}`} className="border-l-2 border-l-accent-terracotta/40 pl-4 py-1">
+                  <p className="text-base font-bold text-paper-ink leading-7">{suggestion.title}</p>
+                  <p className="text-sm leading-7 text-paper-ink/65">{suggestion.reason}</p>
+                </div>
+              ))}
+            </div>
           )}
         </PaperCard>
 

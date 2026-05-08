@@ -21,6 +21,9 @@ interface PracticeRecordBase {
   status: PracticeRecordStatus;
   question: string;
   questionId?: string;
+  topic?: string;
+  tags?: string[];
+  taskType?: string;
   createdAt: string;
   updatedAt: string;
   analyzedAt?: string;
@@ -90,6 +93,9 @@ const asFrameworkChat = (value: unknown): WritingTask2PracticeRecord['frameworkC
     })).filter(item => item.text.trim())
     : [];
 
+const asStringArray = (value: unknown) =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined;
+
 const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined => {
   if (!isObject(value)) return undefined;
   const scores = isObject(value.scores) ? value.scores : {};
@@ -146,6 +152,8 @@ const sanitizeSpeakingRecord = (value: unknown): SpeakingPracticeRecord | null =
     part: asSpeakingPart(value.part),
     question,
     questionId: asOptionalString(value.questionId),
+    topic: asOptionalString(value.topic),
+    tags: asStringArray(value.tags),
     createdAt: asString(value.createdAt, timestamp),
     updatedAt: timestamp,
     analyzedAt: asOptionalString(value.analyzedAt),
@@ -172,6 +180,9 @@ const sanitizeWritingTask2Record = (value: unknown): WritingTask2PracticeRecord 
     task: 'task2',
     question,
     questionId: asOptionalString(value.questionId),
+    topic: asOptionalString(value.topic),
+    tags: asStringArray(value.tags),
+    taskType: asOptionalString(value.taskType),
     createdAt: asString(value.createdAt, timestamp),
     updatedAt: timestamp,
     analyzedAt: asOptionalString(value.analyzedAt),
@@ -201,6 +212,11 @@ const readJson = <T>(key: string, fallback: T): T => {
   }
 };
 
+const readJsonArray = (key: string): unknown[] => {
+  const value = readJson<unknown>(key, []);
+  return Array.isArray(value) ? value : [];
+};
+
 const writeJson = (key: string, value: unknown) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
@@ -223,15 +239,19 @@ export const summarizeDiagnostic = (diagnostic: ProviderDiagnostic): ProviderDia
 });
 
 export const getPracticeRecords = (limit = 12): PracticeRecord[] =>
-  readJson<unknown[]>(RECORDS_KEY, [])
+  readJsonArray(RECORDS_KEY)
     .map(sanitizePracticeRecord)
     .filter((record): record is PracticeRecord => Boolean(record))
     .sort((a, b) => sortTimestamp(b).localeCompare(sortTimestamp(a)))
     .slice(0, limit);
 
 export const upsertPracticeRecord = (record: PracticeRecord) => {
-  const records = readJson<PracticeRecord[]>(RECORDS_KEY, []);
-  const existing = records.find(item => item.id === record.id);
+  const rawRecords = readJsonArray(RECORDS_KEY);
+  const validRecords = rawRecords
+    .map(sanitizePracticeRecord)
+    .filter((item): item is PracticeRecord => Boolean(item));
+  const preservedUnknownRecords = rawRecords.filter(item => !sanitizePracticeRecord(item));
+  const existing = validRecords.find(item => item.id === record.id);
   const nextRecord = {
     ...existing,
     ...record,
@@ -241,11 +261,11 @@ export const upsertPracticeRecord = (record: PracticeRecord) => {
     providerDiagnostic: record.providerDiagnostic || existing?.providerDiagnostic,
     obsidianMarkdown: record.obsidianMarkdown || existing?.obsidianMarkdown,
   } as PracticeRecord;
-  const next = [nextRecord, ...records.filter(item => item.id !== record.id)]
-    .sort((a, b) => (
-      (b.analyzedAt || b.createdAt || b.updatedAt).localeCompare(a.analyzedAt || a.createdAt || a.updatedAt)
-    ))
-    .slice(0, 80);
+  const next = [
+    ...[nextRecord, ...validRecords.filter(item => item.id !== record.id)]
+      .sort((a, b) => sortTimestamp(b).localeCompare(sortTimestamp(a))),
+    ...preservedUnknownRecords,
+  ];
   writeJson(RECORDS_KEY, next);
 };
 
@@ -253,9 +273,9 @@ export const deletePracticeRecord = (
   recordId: string,
   module?: PracticeRecord['module'],
 ) => {
-  const records = readJson<PracticeRecord[]>(RECORDS_KEY, []);
+  const records = readJsonArray(RECORDS_KEY);
   const next = records.filter(record => (
-    record.id !== recordId || (module ? record.module !== module : false)
+    !isObject(record) || record.id !== recordId || (module ? record.module !== module : false)
   ));
   writeJson(RECORDS_KEY, next);
 };
@@ -290,9 +310,9 @@ export const saveActiveWritingTask2 = (attempt: WritingTask2PracticeRecord) => {
   writeJson(ACTIVE_WRITING_TASK2_KEY, { ...attempt, updatedAt: nowIso() });
 };
 
-export const deleteActiveWritingTask2 = (recordId?: string) => {
+export const deleteActiveWritingTask2 = (recordId: string) => {
   const active = getActiveWritingTask2();
-  if (!recordId || active?.id === recordId) {
+  if (active?.id === recordId) {
     removeJson(ACTIVE_WRITING_TASK2_KEY);
   }
 };

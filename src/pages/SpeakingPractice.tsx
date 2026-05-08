@@ -83,6 +83,8 @@ export default function SpeakingPractice() {
       part,
       question: question.question,
       questionId: question.id,
+      topic: question.topicCategory || question.topic,
+      tags: question.tags || (question.topicCategory ? [question.topicCategory] : undefined),
       questionData: question,
       createdAt: timestamp,
       updatedAt: timestamp,
