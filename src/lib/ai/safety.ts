@@ -14,7 +14,7 @@ import {
   WritingTask1Feedback,
   WritingTask,
 } from './schemas';
-import { formatBandEstimate } from '../bands';
+import { capBand, floorToHalfBand, formatBandEstimate, roundToHalfBand } from '../bands';
 
 type SpeakingRequest = SpeakingAnalysisRequest;
 type WritingRequest = WritingAnalysisRequest;
@@ -28,6 +28,16 @@ interface SafeAnalyzeResult<T> {
 
 const FALLBACK_SCORE = 0;
 const FALLBACK_TEXT = 'Provider output was malformed or incomplete.';
+
+const countWords = (text: string): number =>
+  text.trim().split(/\s+/).filter(Boolean).length;
+
+const applyLengthCap = (score: number, words: number, minimumWords: number): number => {
+  if (!Number.isFinite(score) || score <= 0) return score;
+  if (words <= 20) return floorToHalfBand(capBand(score, 3.5));
+  if (words < minimumWords) return floorToHalfBand(capBand(score, 5.0));
+  return roundToHalfBand(score);
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -402,6 +412,7 @@ const normalizeWritingFeedback = (
 
   const scores = isRecord(source.scores) ? source.scores : {};
   if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
+  const essayWords = countWords(request.essay || '');
 
   return {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -410,13 +421,13 @@ const normalizeWritingFeedback = (
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     essay: asString(source.essay, request.essay || FALLBACK_TEXT, 'essay', validationErrors),
     scores: {
-      taskResponse: asNumber(scores.taskResponse, 'scores.taskResponse', validationErrors),
-      coherenceCohesion: asNumber(scores.coherenceCohesion, 'scores.coherenceCohesion', validationErrors),
-      lexicalResource: asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors),
-      grammaticalRangeAccuracy: asNumber(
-        scores.grammaticalRangeAccuracy,
-        'scores.grammaticalRangeAccuracy',
-        validationErrors,
+      taskResponse: applyLengthCap(asNumber(scores.taskResponse, 'scores.taskResponse', validationErrors), essayWords, 250),
+      coherenceCohesion: applyLengthCap(asNumber(scores.coherenceCohesion, 'scores.coherenceCohesion', validationErrors), essayWords, 250),
+      lexicalResource: applyLengthCap(asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors), essayWords, 250),
+      grammaticalRangeAccuracy: applyLengthCap(
+        asNumber(scores.grammaticalRangeAccuracy, 'scores.grammaticalRangeAccuracy', validationErrors),
+        essayWords,
+        250,
       ),
     },
     frameworkFeedback: asArray(source.frameworkFeedback, 'frameworkFeedback', validationErrors).map((item, index) => {
@@ -551,7 +562,8 @@ const normalizeWritingTask1Feedback = (
 ): WritingTask1Feedback => {
   const source = isRecord(value) ? value : {};
   if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
-  const estimatedBand = asNumber(source.estimatedBand, 'estimatedBand', validationErrors);
+  const reportWords = countWords(request.report || '');
+  const estimatedBand = applyLengthCap(asNumber(source.estimatedBand, 'estimatedBand', validationErrors), reportWords, 150);
   const improvedReportFallback = typeof source.modelExcerpt === 'string' && source.modelExcerpt.trim()
     ? source.modelExcerpt
     : 'The provider returned incomplete feedback. Please retry analysis.';

@@ -46,7 +46,7 @@ _Last updated: 2026-05-08_
   - reduced unnecessary vertical scrolling
 - Still pending for Task 1:
   - General Training letters later
-  - interactive charts later
+  - data-driven chart rendering later, kept separate from current text-brief practice
   - richer Task 1 data accuracy mapping later
   - official-source review of topic taxonomy and prompt coverage
   - optional AI tagging later, kept separate from static prep taxonomy
@@ -65,6 +65,7 @@ _Last updated: 2026-05-08_
 - Still pending:
   - larger curated prompt bank
   - richer topic taxonomy and difficulty metadata
+  - stronger scoring calibration with real provider data and larger local attempt samples
   - official-source review, source-quality review, and deduplication
   - optional AI tagging later, clearly separated from static prep taxonomy and never treated as official syllabus coverage
   - topic-filtered practice start from Progress or History

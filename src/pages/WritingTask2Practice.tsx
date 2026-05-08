@@ -327,12 +327,12 @@ export default function WritingTask2Practice() {
   };
 
   const isMock = isMockProviderActive();
-  const writingWorkspaceClass = 'w-[94vw] max-w-[1600px] mx-auto';
+  const writingWorkspaceClass = 'practice-workspace';
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && modelAnswerText !== 'Sample Band 9 essay content...';
 
   return (
-    <PageShell className="max-w-none px-3 md:px-6 xl:px-8">
+    <PageShell size="wide">
       <TopBar />
 
       <div className={`${writingWorkspaceClass} mb-8`}>

@@ -51,8 +51,9 @@ _Last updated: 2026-05-08_
 - Practice and Mock modes remain separate.
 
 ## V3 - Data & Visualization
-- Task 1 Academic charts with interaction and richer data accuracy mapping.
+- Task 1 Academic data-driven chart rendering with richer data accuracy mapping.
 - Task 1 General Training letter prompts.
+- Stronger scoring calibration using real provider data and larger local attempt samples.
 - Optional richer topic taxonomy review, official-source review, and optional AI tagging later.
 - Optional manual backup/export for local practice records before any future storage migration.
 - Audio recording storage with MediaRecorder and simple playback.

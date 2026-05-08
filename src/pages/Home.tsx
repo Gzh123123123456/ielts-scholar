@@ -1,20 +1,22 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
+import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { Mic, PenTool, ArrowRight, History } from 'lucide-react';
 
 export default function Home() {
   return (
-    <PageShell className="justify-center py-20">
-      <div className="text-center mb-16">
+    <PageShell size="medium">
+      <TopBar />
+      <div className="text-center mb-16 mt-8">
         <h1 className="text-5xl mb-4 text-paper-ink tracking-tighter">IELTS Scholar</h1>
         <p className="text-paper-ink-muted italic font-serif opacity-70">
           The quiet, local-first output transformation agent.
         </p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto w-full px-4">
+      <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto w-full">
         <Link to="/speaking" className="group">
           <PaperCard className="h-full hover:border-accent-terracotta/40 hover:bg-paper-50/80 transition-all cursor-pointer flex flex-col items-center justify-center py-12 text-center">
             <div className="w-16 h-16 rounded-full bg-accent-terracotta/10 flex items-center justify-center mb-6 text-accent-terracotta group-hover:scale-110 transition-transform">

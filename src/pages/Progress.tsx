@@ -7,6 +7,8 @@ import {
   speakingPart2,
   speakingPart3,
   speakingTopicCategories,
+  writingTask1Academic,
+  WritingTask1AcademicTaskType,
   writingTask2,
   writingTask2TopicCategories,
   SpeakingTopicCategory,
@@ -19,7 +21,22 @@ import {
   WritingTask1PracticeRecord,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
-import { formatBandEstimate } from '@/src/lib/bands';
+import {
+  combineWritingEstimates,
+  conservativeRecentEstimate,
+  formatApproxBandEstimate,
+  formatBandEstimate,
+} from '@/src/lib/bands';
+
+const task1VisualTypes: WritingTask1AcademicTaskType[] = [
+  'line graph',
+  'bar chart',
+  'table',
+  'pie chart',
+  'mixed chart',
+  'process',
+  'map',
+];
 
 const isValidBand = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 9;
@@ -40,9 +57,6 @@ const preview = (value: string) => {
 const average = (values: number[]) =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 
-const formatBand = (value: number | null) =>
-  formatBandEstimate(value, 'Not enough data');
-
 const normalizeText = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
 
 const getSpeakingScore = (record: SpeakingPracticeRecord) => {
@@ -50,7 +64,7 @@ const getSpeakingScore = (record: SpeakingPracticeRecord) => {
   return isValidBand(score) ? score : null;
 };
 
-const getWritingScore = (record: WritingTask2PracticeRecord) => {
+const getWritingTask2Score = (record: WritingTask2PracticeRecord) => {
   const scores = record.feedback?.scores;
   if (!scores) return null;
   const values = [
@@ -70,11 +84,11 @@ const getWritingTask1Score = (record: WritingTask1PracticeRecord) => {
 const isScoredSpeaking = (record: PracticeRecord): record is SpeakingPracticeRecord =>
   record.module === 'speaking' && record.status === 'analyzed' && getSpeakingScore(record as SpeakingPracticeRecord) !== null;
 
-const isScoredWriting = (record: PracticeRecord): record is WritingTask2PracticeRecord =>
+const isScoredWritingTask2 = (record: PracticeRecord): record is WritingTask2PracticeRecord =>
   record.module === 'writing' &&
   (record as WritingTask2PracticeRecord).task === 'task2' &&
   record.status === 'analyzed' &&
-  getWritingScore(record as WritingTask2PracticeRecord) !== null;
+  getWritingTask2Score(record as WritingTask2PracticeRecord) !== null;
 
 const isScoredWritingTask1 = (record: PracticeRecord): record is WritingTask1PracticeRecord =>
   record.module === 'writing_task1' &&
@@ -90,7 +104,7 @@ const speakingKeywordFallback: Record<SpeakingTopicCategory, string[]> = {
   'Daily Life': ['routine', 'evening', 'daily', 'day', 'change', 'decision'],
   'Hobbies & Free Time': ['music', 'sport', 'hobby', 'free time', 'enjoy'],
   'Books & Reading': ['book', 'read', 'e-book'],
-  'Technology': ['technology', 'phone', 'app', 'device', 'online'],
+  Technology: ['technology', 'phone', 'app', 'device', 'online'],
   'Travel & Places': ['travel', 'place', 'city', 'public space', 'visit'],
   'Food & Health': ['food', 'cook', 'restaurant', 'health'],
   'Culture & Media': ['media', 'film', 'tv', 'celebration', 'ceremony', 'event'],
@@ -127,10 +141,7 @@ const fromRecordMetadata = <T extends string>(record: PracticeRecord, validTopic
   ) || null;
 };
 
-const fromQuestionText = <T extends string>(
-  text: string,
-  fallback: Record<T, string[]>,
-) => {
+const fromQuestionText = <T extends string>(text: string, fallback: Record<T, string[]>) => {
   const normalized = normalizeText(text);
   return (Object.entries(fallback) as [T, string[]][])
     .find(([, keywords]) => keywords.some(keyword => normalized.includes(keyword)))?.[0] || null;
@@ -146,13 +157,9 @@ const getSpeakingTopic = (record: SpeakingPracticeRecord): SpeakingTopicCategory
   return matched?.topicCategory || fromQuestionText(record.question, speakingKeywordFallback);
 };
 
-const getWritingTopic = (record: WritingTask2PracticeRecord | WritingTask1PracticeRecord): WritingTask2TopicCategory | null => {
+const getWritingTask2Topic = (record: WritingTask2PracticeRecord): WritingTask2TopicCategory | null => {
   const metadataTopic = fromRecordMetadata(record, writingTask2TopicCategories);
   if (metadataTopic) return metadataTopic;
-
-  if (record.module === 'writing_task1') {
-    return fromQuestionText(`${record.topic} ${record.instruction} ${record.visualBrief}`, writingKeywordFallback);
-  }
 
   const matched = writingTask2.find(question =>
     question.id === record.questionId || normalizeText(question.question) === normalizeText(record.question)
@@ -160,17 +167,27 @@ const getWritingTopic = (record: WritingTask2PracticeRecord | WritingTask1Practi
   return matched?.topicCategory || fromQuestionText(record.question, writingKeywordFallback);
 };
 
-const countTopics = <T extends string>(
-  topics: readonly T[],
+const getTask1VisualType = (record: WritingTask1PracticeRecord): WritingTask1AcademicTaskType | null => {
+  const direct = record.taskType as WritingTask1AcademicTaskType;
+  if (task1VisualTypes.includes(direct)) return direct;
+
+  const matched = writingTask1Academic.find(prompt =>
+    prompt.id === record.questionId || normalizeText(prompt.instruction) === normalizeText(record.instruction)
+  );
+  return matched?.taskType || null;
+};
+
+const countCoverage = <T extends string>(
+  items: readonly T[],
   records: PracticeRecord[],
-  resolveTopic: (record: PracticeRecord) => T | null,
-) => topics.map(topic => ({
-  topic,
-  count: records.reduce((total, record) => total + (resolveTopic(record) === topic ? 1 : 0), 0),
+  resolveItem: (record: PracticeRecord) => T | null,
+) => items.map(item => ({
+  item,
+  count: records.reduce((total, record) => total + (resolveItem(record) === item ? 1 : 0), 0),
 }));
 
-const pickUnderPracticed = <T extends string>(coverage: { topic: T; count: number }[]) =>
-  [...coverage].sort((a, b) => a.count - b.count || a.topic.localeCompare(b.topic))[0];
+const pickUnderPracticed = <T extends string>(coverage: { item: T; count: number }[]) =>
+  [...coverage].sort((a, b) => a.count - b.count || a.item.localeCompare(b.item))[0];
 
 interface TrainingSuggestion {
   title: string;
@@ -179,68 +196,59 @@ interface TrainingSuggestion {
 
 const buildTrainingSuggestions = (
   scoredSpeaking: SpeakingPracticeRecord[],
-  scoredWriting: WritingTask2PracticeRecord[],
-  speakingCoverage: { topic: SpeakingTopicCategory; count: number }[],
-  writingCoverage: { topic: WritingTask2TopicCategory; count: number }[],
+  scoredWritingTask1: WritingTask1PracticeRecord[],
+  scoredWritingTask2: WritingTask2PracticeRecord[],
+  speakingCoverage: { item: SpeakingTopicCategory; count: number }[],
+  task1Coverage: { item: WritingTask1AcademicTaskType; count: number }[],
+  task2Coverage: { item: WritingTask2TopicCategory; count: number }[],
   unfinishedDrafts: number,
 ): TrainingSuggestion[] => {
   const suggestions: TrainingSuggestion[] = [];
   const addSuggestion = (suggestion: TrainingSuggestion) => {
-    if (suggestions.length < 3) suggestions.push(suggestion);
+    if (suggestions.length < 4) suggestions.push(suggestion);
   };
 
-  if (scoredSpeaking.length < 3 || scoredWriting.length < 3) {
-    const modules = [
-      scoredSpeaking.length < 3 ? `Speaking (${scoredSpeaking.length}/3)` : '',
-      scoredWriting.length < 3 ? `Writing Task 2 (${scoredWriting.length}/3)` : '',
-    ].filter(Boolean).join(' and ');
+  if (scoredSpeaking.length < 3) {
     addSuggestion({
-      title: `Add more analyzed attempts for ${modules}`,
-      reason: 'Estimates are steadier after at least 3 analyzed records per module.',
+      title: `Add more analyzed Speaking attempts (${scoredSpeaking.length}/3)`,
+      reason: 'Training estimates are steadier after several local attempts.',
     });
   }
 
-  const countDifference = Math.abs(scoredSpeaking.length - scoredWriting.length);
-  if (countDifference >= 2) {
-    const underPracticed = scoredSpeaking.length < scoredWriting.length ? 'Speaking' : 'Writing Task 2';
+  if (scoredWritingTask2.length < 3) {
     addSuggestion({
-      title: `Balance practice with ${underPracticed}`,
-      reason: `Your analyzed counts differ by ${countDifference}, so the lighter module has less evidence behind its estimate.`,
+      title: `Add more analyzed Writing Task 2 attempts (${scoredWritingTask2.length}/3)`,
+      reason: 'Task 2 carries more weight in the combined Writing training estimate.',
     });
   }
 
-  if (scoredSpeaking.length > 0) {
-    const partCounts = ([1, 2, 3] as const).map(part => ({
-      part,
-      count: scoredSpeaking.filter(record => record.part === part).length,
-    }));
-    const leastPart = [...partCounts].sort((a, b) => a.count - b.count || a.part - b.part)[0];
-    const mostPart = [...partCounts].sort((a, b) => b.count - a.count || a.part - b.part)[0];
-    if (leastPart.count < mostPart.count) {
-      addSuggestion({
-        title: `Practice Speaking Part ${leastPart.part}`,
-        reason: `Part ${leastPart.part} has ${leastPart.count} analyzed record${leastPart.count === 1 ? '' : 's'}, fewer than your most-practiced Speaking part.`,
-      });
-    }
+  const thinTask1 = pickUnderPracticed(task1Coverage);
+  if (thinTask1 && (thinTask1.count === 0 || scoredWritingTask1.length < 3)) {
+    addSuggestion({
+      title: `Practice Task 1 visual type: ${thinTask1.item}`,
+      reason: thinTask1.count === 0
+        ? 'No local analyzed attempt is recorded for this visual type yet.'
+        : `Only ${thinTask1.count} local attempt${thinTask1.count === 1 ? '' : 's'} are recorded for this visual type.`,
+    });
+  }
+
+  const thinTask2 = pickUnderPracticed(task2Coverage);
+  if (thinTask2) {
+    addSuggestion({
+      title: `Cover Writing Task 2 topic: ${thinTask2.item}`,
+      reason: thinTask2.count === 0
+        ? 'No local Task 2 attempt is recorded for this preparation category yet.'
+        : `This category has ${thinTask2.count} local Task 2 attempt${thinTask2.count === 1 ? '' : 's'}.`,
+    });
   }
 
   const nextSpeaking = pickUnderPracticed(speakingCoverage);
   if (nextSpeaking) {
     addSuggestion({
-      title: `Cover Speaking: ${nextSpeaking.topic}`,
+      title: `Cover Speaking: ${nextSpeaking.item}`,
       reason: nextSpeaking.count === 0
         ? 'No local attempts are recorded for this preparation category yet.'
-        : `This category has only ${nextSpeaking.count} local attempt${nextSpeaking.count === 1 ? '' : 's'}, making it one of your lighter areas.`,
-    });
-  }
-
-  const nextWriting = pickUnderPracticed(writingCoverage);
-  if (nextWriting) {
-    addSuggestion({
-      title: `Cover Writing Task 2: ${nextWriting.topic}`,
-      reason: nextWriting.count === 0
-        ? 'No local attempts are recorded for this preparation category yet.'
-        : `This category has only ${nextWriting.count} local attempt${nextWriting.count === 1 ? '' : 's'}, making it one of your lighter areas.`,
+        : `This category has ${nextSpeaking.count} local attempt${nextSpeaking.count === 1 ? '' : 's'}.`,
     });
   }
 
@@ -257,51 +265,60 @@ const buildTrainingSuggestions = (
 export default function Progress() {
   const records = getPracticeRecords(80);
   const scoredSpeaking = records.filter(isScoredSpeaking);
-  const scoredWriting = records.filter(isScoredWriting);
+  const scoredWritingTask2 = records.filter(isScoredWritingTask2);
   const scoredWritingTask1 = records.filter(isScoredWritingTask1);
-  const speakingEstimate = average(scoredSpeaking.map(record => getSpeakingScore(record)).filter(isValidBand));
-  const writingEstimate = average(scoredWriting.map(record => getWritingScore(record)).filter(isValidBand));
+  const speakingEstimate = conservativeRecentEstimate(scoredSpeaking.map(record => getSpeakingScore(record)).filter(isValidBand));
+  const task1Estimate = conservativeRecentEstimate(scoredWritingTask1.map(record => getWritingTask1Score(record)).filter(isValidBand));
+  const task2Estimate = conservativeRecentEstimate(scoredWritingTask2.map(record => getWritingTask2Score(record)).filter(isValidBand));
+  const writingEstimate = combineWritingEstimates(task1Estimate, scoredWritingTask1.length, task2Estimate, scoredWritingTask2.length);
   const latestRecord = records[0];
   const recentSpeakingScores = scoredSpeaking.slice(0, 6);
   const speakingRecords = records.filter(record => record.module === 'speaking');
-  const writingRecords = records.filter(record =>
+  const writingTask2Records = records.filter((record): record is WritingTask2PracticeRecord =>
     record.module === 'writing' && (record as WritingTask2PracticeRecord).task === 'task2'
   );
   const writingTask1Records = records.filter((record): record is WritingTask1PracticeRecord =>
-    record.module === 'writing_task1'
+    record.module === 'writing_task1' && record.task === 'task1'
   );
-  const writingTask2Drafts = writingRecords.filter(record => record.status === 'draft').length;
+  const writingTask2Drafts = writingTask2Records.filter(record => record.status === 'draft').length;
   const writingTask1Drafts = writingTask1Records.filter(record => record.status === 'draft').length;
-  const recentWritingScores = [...scoredWriting, ...scoredWritingTask1]
+  const recentWritingScores = [...scoredWritingTask2, ...scoredWritingTask1]
     .sort((a, b) => getTimestamp(b).localeCompare(getTimestamp(a)))
     .slice(0, 6);
-  const speakingCoverage = countTopics(
+  const speakingCoverage = countCoverage(
     speakingTopicCategories,
     speakingRecords,
     record => getSpeakingTopic(record as SpeakingPracticeRecord),
   );
-  const writingCoverage = countTopics(
+  const task1Coverage = countCoverage(
+    task1VisualTypes,
+    writingTask1Records,
+    record => getTask1VisualType(record as WritingTask1PracticeRecord),
+  );
+  const task2Coverage = countCoverage(
     writingTask2TopicCategories,
-    [...writingRecords, ...writingTask1Records],
-    record => getWritingTopic(record as WritingTask2PracticeRecord | WritingTask1PracticeRecord),
+    writingTask2Records,
+    record => getWritingTask2Topic(record as WritingTask2PracticeRecord),
   );
   const unfinishedDrafts = records.filter(record => record.status === 'draft').length;
   const trainingSuggestions = buildTrainingSuggestions(
     scoredSpeaking,
-    scoredWriting,
+    scoredWritingTask1,
+    scoredWritingTask2,
     speakingCoverage,
-    writingCoverage,
+    task1Coverage,
+    task2Coverage,
     unfinishedDrafts,
   );
 
   return (
-    <PageShell>
+    <PageShell size="wide">
       <TopBar />
 
       <div className="mb-12 text-center max-w-2xl mx-auto">
         <h2 className="text-3xl mb-2">Your Training Snapshot</h2>
         <p className="text-sm italic text-paper-ink/60">
-          Based on local practice records. Not a mock exam score.
+          Based on local practice records. Not an official IELTS diagnosis.
         </p>
       </div>
 
@@ -309,19 +326,19 @@ export default function Progress() {
         <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
           <PaperCard className="text-center py-8">
             <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
-              Speaking Estimate
+              Speaking Training Estimate
             </div>
             <div className={speakingEstimate === null ? 'text-lg font-bold text-paper-ink/45 pt-2' : 'text-4xl font-bold text-accent-terracotta'}>
-              {formatBand(speakingEstimate)}
+              {formatApproxBandEstimate(speakingEstimate)}
             </div>
           </PaperCard>
 
           <PaperCard className="text-center py-8">
             <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
-              Writing Task 2 Estimate
+              Writing Training Estimate
             </div>
             <div className={writingEstimate === null ? 'text-lg font-bold text-paper-ink/45 pt-2' : 'text-4xl font-bold text-accent-terracotta'}>
-              {formatBand(writingEstimate)}
+              {formatApproxBandEstimate(writingEstimate)}
             </div>
           </PaperCard>
 
@@ -332,7 +349,7 @@ export default function Progress() {
             <div className="text-sm font-bold uppercase tracking-widest text-paper-ink pt-2 font-sans leading-7">
               Speaking {scoredSpeaking.length}
               <br />
-              Writing T2 {scoredWriting.length}
+              Writing T2 {scoredWritingTask2.length}
               <br />
               Writing T1 {scoredWritingTask1.length}
               <br />
@@ -371,11 +388,13 @@ export default function Progress() {
             records={recentWritingScores.map(record => ({
               id: record.id,
               date: formatDate(getTimestamp(record)),
-              label: record.module === 'writing_task1' ? `Writing Task 1 / ${record.taskType}` : 'Writing Task 2',
+              label: record.module === 'writing_task1'
+                ? `Writing Task 1 / ${getTask1VisualType(record) || record.taskType}`
+                : `Writing Task 2 / ${getWritingTask2Topic(record as WritingTask2PracticeRecord) || (record as WritingTask2PracticeRecord).questionData?.type || 'practice'}`,
               question: preview(record.question),
               score: record.module === 'writing_task1'
                 ? getWritingTask1Score(record)
-                : getWritingScore(record),
+                : getWritingTask2Score(record as WritingTask2PracticeRecord),
             }))}
           />
         </div>
@@ -396,13 +415,14 @@ export default function Progress() {
           )}
         </PaperCard>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          <TopicCoverage title="Speaking Topic Coverage" coverage={speakingCoverage} />
-          <TopicCoverage title="Writing Topic Coverage" coverage={writingCoverage} />
+        <div className="grid xl:grid-cols-3 gap-8">
+          <CoverageList title="Speaking Topic Coverage" coverage={speakingCoverage} />
+          <CoverageList title="Writing Task 1 Visual Type Coverage" coverage={task1Coverage} />
+          <CoverageList title="Writing Task 2 Topic Coverage" coverage={task2Coverage} />
         </div>
 
         <p className="text-xs italic text-paper-ink/45 text-center">
-          Topic coverage is based on IELTS preparation categories, not an official exam syllabus.
+          Coverage is based on local preparation records and prompt metadata, not an official IELTS syllabus.
         </p>
       </div>
     </PageShell>
@@ -448,20 +468,20 @@ const ScoreList: React.FC<ScoreListProps> = ({ title, empty, records }) => (
   </PaperCard>
 );
 
-interface TopicCoverageProps {
+interface CoverageListProps {
   title: string;
-  coverage: { topic: string; count: number }[];
+  coverage: { item: string; count: number }[];
 }
 
-const TopicCoverage: React.FC<TopicCoverageProps> = ({ title, coverage }) => (
+const CoverageList: React.FC<CoverageListProps> = ({ title, coverage }) => (
   <PaperCard>
     <h3 className="text-sm font-bold uppercase tracking-widest mb-5 border-b border-paper-ink/5 pb-2">
       {title}
     </h3>
-    <div className="grid sm:grid-cols-2 gap-2">
+    <div className="grid sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2 gap-2">
       {coverage.map(item => (
-        <div key={item.topic} className="flex items-center justify-between gap-3 border border-paper-ink/10 bg-paper-ink/[0.02] px-3 py-2">
-          <span className="text-sm text-paper-ink/75">{item.topic}</span>
+        <div key={item.item} className="flex items-center justify-between gap-3 border border-paper-ink/10 bg-paper-ink/[0.02] px-3 py-2">
+          <span className="text-sm text-paper-ink/75">{item.item}</span>
           <span className={item.count === 0
             ? 'text-[10px] font-sans uppercase tracking-widest text-paper-ink/35'
             : 'text-sm font-bold text-accent-terracotta'}

@@ -1,5 +1,24 @@
 # Decision Log
 
+## [2026-05-08] Conservative Training Estimates, Split Writing Coverage, and Shared Layout Shells
+- **Decision**: Treat all visible band values as local training estimates, rounded to whole/half bands and calculated conservatively.
+- **Reason**: The app should not imply official IELTS scoring precision, and one high local attempt should not dominate learner-facing estimates.
+- **Implemented**:
+  - Added shared band helpers for half-band display and conservative recent estimates.
+  - Progress combines Task 1 and Task 2 writing evidence separately, with Task 2 weighted more heavily when both exist.
+  - Mock/local guardrails cap extremely short and under-length Task 1/Task 2 responses so short samples do not receive high estimates.
+- **Decision**: Task 1 Progress coverage prioritizes visual type, not topic.
+- **Reason**: Academic Task 1 improvement depends strongly on visual genre coverage; Task 2 remains topic-driven.
+- **Implemented**:
+  - Progress now separates Writing Task 1 Visual Type Coverage from Writing Task 2 Topic Coverage.
+  - Recent writing estimate labels distinguish Task 1 visual type from Task 2 topic/type.
+- **Decision**: Use shared layout shells for page width and workspace consistency.
+- **Reason**: Navigation and practice pages should feel aligned without scattered max-width overrides.
+- **Implemented**:
+  - Added `.page-shell`, `.page-shell--medium`, `.page-shell--wide`, `.practice-workspace`, and `.reading-comfort`.
+  - Medium shells are used for landing pages; wide shells are used for dense practice, History, and Progress surfaces.
+- **Explicitly unchanged**: no provider-default change, no RAG, no database, no server/auth/API-key architecture changes, no new major routes, no interactive charts, no record auto-clearing, no merge, no push.
+
 ## [2026-05-08] Writing Task 1 Academic Before Mock Exam
 - **Decision**: Implement Academic Writing Task 1 Basic Practice before starting V2 Mock Exam.
 - **Reason**: Mock Exam should come after the core practice modules exist: Speaking, Writing Task 1 Academic, and Writing Task 2.

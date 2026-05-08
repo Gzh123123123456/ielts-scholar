@@ -7,7 +7,7 @@ import { History } from 'lucide-react';
 
 export default function Writing() {
   return (
-    <PageShell>
+    <PageShell size="medium">
       <TopBar />
       <div className="grid md:grid-cols-2 gap-8">
         <section>

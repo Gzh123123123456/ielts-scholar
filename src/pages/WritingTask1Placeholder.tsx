@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FileDown } from 'lucide-react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -55,16 +56,16 @@ const getRewriteActions = (feedback: WritingTask1Feedback): string[] => {
   const actions = providerActions.length > 1
     ? providerActions
     : [
-      'Rewrite the overview so it summarizes the whole visual in one clear sentence.',
-      'Group the body paragraphs by trend, size, stage, or category instead of listing points one by one.',
-      'Add direct comparisons between the most important figures, periods, groups, or locations.',
-      'Check every number, unit, and ranking against the visual information before resubmitting.',
+      '重写 overview：用一句话概括全图最大趋势、最高/最低项或流程终点。',
+      '重组主体段：按趋势、大小、阶段或类别分组，不要逐项流水账。',
+      '补充比较：加入 higher than, whereas, in contrast 等表达说明关键差异。',
+      '核对数据：检查每个数字、单位和排名是否与题目视觉信息一致。',
     ];
 
   return Array.from(new Set(actions));
 };
 
-const buildTask1ObsidianNote = (
+const buildTask1Markdown = (
   prompt: WritingTask1AcademicPrompt,
   quickPlan: WritingTask1QuickPlan,
   feedback: WritingTask1Feedback,
@@ -108,7 +109,7 @@ ${plan}
 ${feedback.report}
 
 ## Chinese Diagnosis
-- 概览: ${feedback.overviewFeedback}
+- 概览问题: ${feedback.overviewFeedback}
 - 关键信息: ${feedback.keyFeaturesFeedback}
 - 比较关系: ${feedback.comparisonFeedback}
 - 数据准确性: ${feedback.dataAccuracyFeedback}
@@ -150,7 +151,7 @@ export default function WritingTask1Placeholder() {
 
   const words = countWords(report);
   const status = providerErrorMessage ? 'provider_failed' : feedback ? 'analyzed' : 'draft';
-  const currentObsidianNote = feedback ? buildTask1ObsidianNote(prompt, quickPlan, feedback) : '';
+  const currentMarkdown = feedback ? buildTask1Markdown(prompt, quickPlan, feedback) : '';
 
   const buildRecord = (
     nextFeedback = feedback,
@@ -184,7 +185,7 @@ export default function WritingTask1Placeholder() {
       obsidianMarkdown: nextStatus === 'provider_failed'
         ? undefined
         : nextFeedback
-          ? buildTask1ObsidianNote(prompt, quickPlan, nextFeedback)
+          ? buildTask1Markdown(prompt, quickPlan, nextFeedback)
           : initialActiveRecordRef.current?.obsidianMarkdown,
     };
   };
@@ -250,12 +251,12 @@ export default function WritingTask1Placeholder() {
       upsertPracticeRecord({
         ...analyzedRecord,
         providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        obsidianMarkdown: buildTask1ObsidianNote(prompt, quickPlan, result.feedback),
+        obsidianMarkdown: buildTask1Markdown(prompt, quickPlan, result.feedback),
       });
       saveActiveWritingTask1({
         ...analyzedRecord,
         providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        obsidianMarkdown: buildTask1ObsidianNote(prompt, quickPlan, result.feedback),
+        obsidianMarkdown: buildTask1Markdown(prompt, quickPlan, result.feedback),
       });
     } finally {
       setIsAnalyzing(false);
@@ -263,8 +264,14 @@ export default function WritingTask1Placeholder() {
   };
 
   const exportMarkdown = () => {
-    if (!currentObsidianNote) return;
-    navigator.clipboard.writeText(currentObsidianNote).catch(() => undefined);
+    if (!currentMarkdown) return;
+    const blob = new Blob([currentMarkdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ielts-writing-task1-${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const rewriteThisTask = () => {
@@ -279,7 +286,7 @@ export default function WritingTask1Placeholder() {
   };
 
   return (
-    <PageShell>
+    <PageShell size="wide">
       <TopBar />
 
       <div className="mb-8 max-w-3xl">
@@ -422,8 +429,8 @@ export default function WritingTask1Placeholder() {
               <SerifButton onClick={rewriteThisTask} variant="outline" className="text-xs">
                 Rewrite This Task
               </SerifButton>
-              <SerifButton onClick={exportMarkdown} variant="outline" className="text-xs">
-                Copy Obsidian Note
+              <SerifButton onClick={exportMarkdown} variant="outline" className="text-xs flex items-center gap-2">
+                <FileDown className="w-4 h-4" /> Export Markdown
               </SerifButton>
             </div>
           </PaperCard>

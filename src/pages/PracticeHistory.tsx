@@ -116,7 +116,7 @@ export default function PracticeHistory() {
   };
 
   return (
-    <PageShell>
+    <PageShell size="wide">
       <TopBar />
 
       <div className="mb-10">

@@ -8,7 +8,7 @@ import { History, PlayCircle } from 'lucide-react';
 
 export default function Speaking() {
   return (
-    <PageShell>
+    <PageShell size="medium">
       <TopBar />
       
       <div className="grid md:grid-cols-2 gap-8 mb-12">

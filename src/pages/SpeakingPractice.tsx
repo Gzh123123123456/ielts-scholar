@@ -577,7 +577,7 @@ export default function SpeakingPractice() {
     : [];
 
   return (
-    <PageShell>
+    <PageShell size={step === 'results' ? 'wide' : 'medium'}>
       <TopBar />
       
       <div className="flex gap-4 p-1 bg-paper-ink/5 rounded-sm self-start mb-8 font-sans text-[10px] uppercase tracking-widest font-bold">

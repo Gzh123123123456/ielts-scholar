@@ -70,12 +70,15 @@ _Last updated: 2026-05-08_
 - Scope is Academic only; General Training letters are deferred.
 - Task 1 uses original text-based visual briefs and simple data cards for line graph, bar chart, table, pie chart, mixed chart, process, and map practice.
 - Task 1 feedback has its own schema and Mock Provider analysis path covering overview, key features, comparisons, data accuracy, coherence, must-fix items, rewrite task, reusable report patterns, improved report/model excerpt, and markdown export.
+- Task 1 diagnosis is Chinese-first in learner-facing sections, with English corrections/examples where useful; Improved Report / Model Excerpt remains English.
+- Task 1 under-length and extremely short answers receive conservative training estimates and explicit length feedback instead of high mock/local scores.
 - Task 1 reports save local-first records with module `writing_task1`, task type, topic/tags, instruction, visual brief, quick plan, report, feedback, status, and timestamps.
 - Task 1 retry/new prompt starts a new attempt without clearing unrelated saved records.
 - Text-based visual briefs are the V1.2 baseline; interactive charts and richer data-accuracy mapping remain later work.
 
 ## Export Behavior (Implemented)
 - Markdown export is attempt-level in V1.
+- Task 1 exports a downloaded `.md` file using the same pattern as other modules; if provider markdown is absent, the app generates a complete local note from structured feedback.
 - Session-level consolidated note export is not implemented yet.
 
 ## Practice History (Implemented)
@@ -93,15 +96,24 @@ _Last updated: 2026-05-08_
 
 ## Progress Snapshot (Implemented)
 - Progress is now a local training snapshot based on `ielts_practice_records_v1`, not a mock exam score.
-- Speaking and Writing Task 2 estimates use analyzed records with valid scores only; drafts are not counted as score 0.
-- Progress shows recent scored Speaking and Writing Task 2 attempts as simple lists instead of a chart.
+- Speaking and Writing estimates use analyzed records with valid scores only; drafts are not counted as score 0.
+- Training estimates are rounded to whole/half bands for display and are conservative by design: recent attempts are preferred, weak evidence rounds down, and one high record does not dominate.
+- Writing estimate combines Task 1 and Task 2 separately, weighting Task 2 more heavily when both exist.
+- Progress shows recent Speaking and Writing training estimates as simple lists instead of a chart.
 - Topic coverage is implemented with static IELTS-preparation categories attached to the prompt bank:
   - Speaking: 12 preparation categories.
   - Writing Task 2: 12 preparation categories.
+- Writing coverage is split:
+  - Writing Task 1 Visual Type Coverage: line graph, bar chart, table, pie chart, mixed chart, process, map.
+  - Writing Task 2 Topic Coverage: 12 preparation categories.
 - Progress resolves topic coverage by preferring stored record metadata, matching prompt-bank metadata, then using a small keyword fallback. Unknown topics are not counted as score 0.
-- Progress includes a rule-based **Suggested Training Plan** with up to 3 modest suggestions covering data sufficiency, module balance, Speaking part balance, topic coverage, and unfinished drafts when local records support them.
-- Progress minimally recognizes Writing Task 1 analyzed records and includes Task 1 topics in writing topic coverage when metadata is available.
+- Progress includes a rule-based **Suggested Training Plan** with up to 3 modest suggestions covering data sufficiency, Task 1 visual type coverage, Task 2 topic coverage, Speaking coverage, and unfinished drafts when local records support them.
 - Topic coverage is explicitly presented as IELTS preparation categories, not an official exam syllabus.
+
+## Layout Shells (Implemented)
+- Shared CSS layout shells now define medium and wide page widths with `.page-shell`, `.page-shell--medium`, `.page-shell--wide`, `.practice-workspace`, and `.reading-comfort`.
+- Home, Speaking, and Writing landing pages use the medium shell; Task 1, Task 2, History, and Progress use the wide shell where the workspace benefits from comparison space.
+- Top navigation placement is shared through `PageShell` instead of one-off page-width hacks, preserving the warm paper style.
 
 ## Practice Record Safety (Implemented)
 - New Speaking records persist static prompt metadata when available: topic, tags, and part.
@@ -128,7 +140,7 @@ _Last updated: 2026-05-08_
   - fallback-used status
   - timestamp
 - Framework extraction diagnostics are labeled with the `writing_framework_extraction` operation so they are distinguishable from final essay analysis.
-- Provider fallback warnings are shown near Speaking and Writing feedback when malformed output was normalized.
+- Provider normalization details remain available in Debug Panel; normal learner feedback no longer shows the yellow malformed/normalized warning unless the provider is truly unavailable and retry is needed.
 
 ## Scope Guards (Current)
 - Keep Practice mode and future Mock mode separate.

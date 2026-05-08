@@ -65,6 +65,27 @@
   @apply bg-paper-50 border border-paper-ink/10 rounded-sm p-7 shadow-sm transition-colors duration-200;
 }
 
+.page-shell {
+  @apply min-h-screen flex flex-col mx-auto px-4 py-8 md:px-8;
+  width: min(100%, var(--page-shell-width));
+}
+
+.page-shell--medium {
+  --page-shell-width: 72rem;
+}
+
+.page-shell--wide {
+  --page-shell-width: 100rem;
+}
+
+.practice-workspace {
+  @apply w-full mx-auto space-y-8;
+}
+
+.reading-comfort {
+  @apply text-base leading-8;
+}
+
 .paper-divider {
   @apply h-[1px] w-full bg-paper-ink/10 my-4;
 }

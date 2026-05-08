@@ -9,11 +9,12 @@ import { cn } from '@/src/lib/utils';
 interface PageShellProps {
   children: React.ReactNode;
   className?: string;
+  size?: 'medium' | 'wide';
 }
 
-export const PageShell: React.FC<PageShellProps> = ({ children, className }) => {
+export const PageShell: React.FC<PageShellProps> = ({ children, className, size = 'medium' }) => {
   return (
-    <div className={cn("min-h-screen flex flex-col max-w-6xl mx-auto px-4 py-8 md:px-8", className)}>
+    <div className={cn('page-shell', size === 'wide' ? 'page-shell--wide' : 'page-shell--medium', className)}>
       {children}
     </div>
   );
