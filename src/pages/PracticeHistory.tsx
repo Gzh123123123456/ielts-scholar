@@ -133,7 +133,7 @@ export default function PracticeHistory() {
           <h2 className="text-xl font-serif mb-4">Speaking Attempts</h2>
           <div className="space-y-4">
             {speakingAttempts.length === 0 ? (
-              <PaperCard className="text-sm italic text-paper-ink/50">No saved attempts yet.</PaperCard>
+              <PaperCard className="text-sm text-paper-ink/55">No saved attempts yet.</PaperCard>
             ) : speakingAttempts.map(record => (
               <PaperCard key={record.id} className="hover:border-accent-terracotta/25 transition-colors">
                 <div className="flex items-start justify-between gap-4 mb-3">
@@ -147,7 +147,7 @@ export default function PracticeHistory() {
                     {formatTimestamp(getTimestamp(record))}
                   </div>
                 </div>
-                <p className="text-sm text-paper-ink/60 italic mb-4">
+                <p className="text-sm text-paper-ink/65 mb-4 leading-7">
                   {preview(record.transcript, 'No transcript saved yet.')}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -177,7 +177,7 @@ export default function PracticeHistory() {
           <h2 className="text-xl font-serif mb-4">Writing Task 1 Attempts</h2>
           <div className="space-y-4">
             {writingTask1Attempts.length === 0 ? (
-              <PaperCard className="text-sm italic text-paper-ink/50">No saved attempts yet.</PaperCard>
+              <PaperCard className="text-sm text-paper-ink/55">No saved attempts yet.</PaperCard>
             ) : writingTask1Attempts.map(record => (
               <PaperCard key={record.id} className="hover:border-accent-terracotta/25 transition-colors">
                 <div className="flex items-start justify-between gap-4 mb-3">
@@ -191,7 +191,7 @@ export default function PracticeHistory() {
                     {formatTimestamp(getTimestamp(record))}
                   </div>
                 </div>
-                <p className="text-sm text-paper-ink/60 italic mb-4">
+                <p className="text-sm text-paper-ink/65 mb-4 leading-7">
                   {getWritingTask1Preview(record)}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -221,7 +221,7 @@ export default function PracticeHistory() {
           <h2 className="text-xl font-serif mb-4">Writing Task 2 Attempts</h2>
           <div className="space-y-4">
             {writingAttempts.length === 0 ? (
-              <PaperCard className="text-sm italic text-paper-ink/50">No saved attempts yet.</PaperCard>
+              <PaperCard className="text-sm text-paper-ink/55">No saved attempts yet.</PaperCard>
             ) : writingAttempts.map(record => (
               <PaperCard key={record.id} className="hover:border-accent-terracotta/25 transition-colors">
                 <div className="flex items-start justify-between gap-4 mb-3">
@@ -235,7 +235,7 @@ export default function PracticeHistory() {
                     {formatTimestamp(getTimestamp(record))}
                   </div>
                 </div>
-                <p className="text-sm text-paper-ink/60 italic mb-4">
+                <p className="text-sm text-paper-ink/65 mb-4 leading-7">
                   {getWritingPreview(record)}
                 </p>
                 <div className="flex flex-wrap gap-2">

@@ -44,6 +44,49 @@ const feedbackItems = (feedback: WritingTask1Feedback) => [
 const hasPlanContent = (plan: WritingTask1QuickPlan) =>
   Object.values(plan).some(value => value.trim());
 
+const hasCjk = (text: string) => /[\u3400-\u9fff]/.test(text);
+
+const readableText = (text: string | undefined, fallback: string) => {
+  const normalized = (text || '').replace(/\s+/g, ' ').trim();
+  if (!normalized || /Provider feedback was incomplete|normalized safely|incomplete feedback|锛|銆|€|绛|閲|鏍|姒|鍏|琛|涓/i.test(normalized)) {
+    return fallback;
+  }
+  return normalized;
+};
+
+const chineseFirst = (text: string | undefined, fallback: string) => {
+  const normalized = readableText(text, fallback);
+  return hasCjk(normalized) ? normalized : `${fallback} 原始反馈：${normalized}`;
+};
+
+const task1DiagnosisItems = (feedback: WritingTask1Feedback) => [
+  {
+    label: '总览 / Overview',
+    text: feedback.overviewFeedback,
+    fallback: '检查是否有清楚的 overview：用一句话概括全图的主要趋势、最高/最低项或流程结果，不要只重复某个数据点。',
+  },
+  {
+    label: '关键信息 / Key Features',
+    text: feedback.keyFeaturesFeedback,
+    fallback: '优先选择最重要的数据：最大变化、最高/最低值、主要阶段或最明显差异，避免逐项流水账。',
+  },
+  {
+    label: '比较关系 / Comparisons',
+    text: feedback.comparisonFeedback,
+    fallback: '需要把数据放在一起比较，例如 higher than, whereas, in contrast，并说明差异为什么重要。',
+  },
+  {
+    label: '数据准确性 / Data Accuracy',
+    text: feedback.dataAccuracyFeedback,
+    fallback: '核对数字、单位、排名和时间点是否与题目一致；Task 1 的分数很依赖准确引用数据。',
+  },
+  {
+    label: '结构连贯 / Coherence',
+    text: feedback.coherenceFeedback,
+    fallback: '建议保持 introduction、overview、主体段 1、主体段 2 的清晰结构，并按趋势、类别或阶段分组。',
+  },
+];
+
 const bulletList = (items: string[], empty: string) =>
   items.length ? items.map(item => `- ${item}`).join('\n') : `- ${empty}`;
 
@@ -64,6 +107,22 @@ const getRewriteActions = (feedback: WritingTask1Feedback): string[] => {
 
   return Array.from(new Set(actions));
 };
+
+const task1RewriteActions = (feedback: WritingTask1Feedback): string[] =>
+  getRewriteActions(feedback).map((item, index) => chineseFirst(
+    item,
+    [
+      '重写 overview：用一句话概括全图主要趋势或最突出差异。',
+      '重组主体段：按趋势、大小、阶段或类别分组，不要逐项罗列。',
+      '补充比较：加入 higher than, whereas, in contrast 等比较表达。',
+      '核对数据：检查数字、单位、排名和时间点是否准确。',
+    ][index] || '把这一项改成具体、可执行的 Task 1 修改动作。',
+  ));
+
+const task1MustFixItems = (feedback: WritingTask1Feedback): string[] =>
+  feedback.mustFix.length
+    ? feedback.mustFix.map(item => chineseFirst(item, '优先修复这个 Task 1 问题：检查 overview、关键数据、比较关系或结构是否缺失。'))
+    : ['没有返回必须修复项。请继续检查 overview 是否概括全图、主体段是否分组、数据是否准确。'];
 
 const buildTask1Markdown = (
   prompt: WritingTask1AcademicPrompt,
@@ -342,7 +401,7 @@ export default function WritingTask1Placeholder() {
         <div className="space-y-6">
           <PaperCard>
             <h3 className="text-sm font-bold uppercase tracking-widest mb-1">Quick Plan</h3>
-            <p className="text-xs italic text-paper-ink/45 mb-4">Optional scratchpad. Feedback diagnoses My Report below.</p>
+            <p className="text-xs text-paper-ink/55 mb-4">Optional scratchpad. Feedback diagnoses My Report below.</p>
             <div className="grid md:grid-cols-2 gap-4">
               <PlanBox label="Overview" value={quickPlan.overview} onChange={value => updatePlan('overview', value)} placeholder="Main trend, pattern, or sequence." />
               <PlanBox label="Key features" value={quickPlan.keyFeatures} onChange={value => updatePlan('keyFeatures', value)} placeholder="Largest changes, standout values, stages." />
@@ -366,7 +425,7 @@ export default function WritingTask1Placeholder() {
               className="w-full min-h-[320px] bg-transparent border border-paper-ink/15 p-4 text-base leading-8 resize-y focus:outline-none focus:border-accent-terracotta/70"
             />
             {report.trim() && words < 150 && (
-              <p className="text-xs italic text-paper-ink/45 mt-3">
+              <p className="text-xs text-paper-ink/55 mt-3">
                 Task 1 reports are expected to be at least 150 words.
               </p>
             )}
@@ -386,7 +445,7 @@ export default function WritingTask1Placeholder() {
         <div className="mt-8 space-y-6">
           <PaperCard>
             <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Report</h3>
-            <p className="whitespace-pre-wrap text-sm leading-7 text-paper-ink/75">{feedback.report}</p>
+            <p className="whitespace-pre-wrap text-base leading-8 text-paper-ink/80">{feedback.report}</p>
           </PaperCard>
 
           <PaperCard>
@@ -399,11 +458,11 @@ export default function WritingTask1Placeholder() {
               </div>
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Diagnosis of My Report</h3>
-                <div className="grid md:grid-cols-2 gap-3">
-                  {feedbackItems(feedback).map(([label, text]) => (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {task1DiagnosisItems(feedback).map(({ label, text, fallback }) => (
                     <div key={label} className="border-l-2 border-l-accent-terracotta/35 pl-4 py-1">
                       <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-1">{label}</p>
-                      <p className="text-sm leading-7 text-paper-ink/70">{text}</p>
+                      <p className="text-base leading-8 text-paper-ink/80">{chineseFirst(text, fallback)}</p>
                     </div>
                   ))}
                 </div>
@@ -412,15 +471,15 @@ export default function WritingTask1Placeholder() {
           </PaperCard>
 
           <div className="grid lg:grid-cols-2 gap-6">
-            <FeedbackList title="Must Fix" items={feedback.mustFix} empty="No critical Task 1 issue returned." />
+            <FeedbackList title="Must Fix" items={task1MustFixItems(feedback)} empty="没有返回必须修复项。请继续检查 overview、关键数据和分组结构。" />
             <FeedbackList title="Reusable Report Patterns" items={feedback.reusableReportPatterns} empty="No reusable patterns returned." />
           </div>
 
           <PaperCard>
             <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Rewrite Task</h3>
             <ul className="space-y-3">
-              {getRewriteActions(feedback).map((item, index) => (
-                <li key={`${item}-${index}`} className="text-sm leading-7 text-paper-ink/75 border-l-2 border-l-accent-terracotta/30 pl-4">
+              {task1RewriteActions(feedback).map((item, index) => (
+                <li key={`${item}-${index}`} className="text-base leading-8 text-paper-ink/80 border-l-2 border-l-accent-terracotta/30 pl-4">
                   {item}
                 </li>
               ))}
@@ -429,7 +488,7 @@ export default function WritingTask1Placeholder() {
 
           <PaperCard>
             <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Improved Report / Model Excerpt</h3>
-            <p className="whitespace-pre-wrap text-sm leading-7 text-paper-ink/75">{feedback.improvedReport || feedback.modelExcerpt}</p>
+            <p className="whitespace-pre-wrap text-base leading-8 text-paper-ink/80">{feedback.improvedReport || feedback.modelExcerpt}</p>
             <div className="flex flex-wrap gap-3 mt-5">
               <SerifButton onClick={rewriteThisTask} variant="outline" className="text-xs">
                 Rewrite This Task
@@ -478,13 +537,13 @@ const FeedbackList: React.FC<FeedbackListProps> = ({ title, items, empty }) => (
     {items.length ? (
       <ul className="space-y-3">
         {items.map((item, index) => (
-          <li key={`${item}-${index}`} className="text-sm leading-7 text-paper-ink/75 border-l-2 border-l-accent-terracotta/30 pl-4">
+          <li key={`${item}-${index}`} className="text-base leading-8 text-paper-ink/80 border-l-2 border-l-accent-terracotta/30 pl-4">
             {item}
           </li>
         ))}
       </ul>
     ) : (
-      <p className="text-sm italic text-paper-ink/45">{empty}</p>
+      <p className="text-sm text-paper-ink/55">{empty}</p>
     )}
   </PaperCard>
 );

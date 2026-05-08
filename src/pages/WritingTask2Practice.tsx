@@ -18,6 +18,26 @@ import {
 } from '@/src/lib/practiceRecords';
 import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
 
+const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+const hasLowSignalText = (text: string) => {
+  const normalized = text.toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return true;
+  const words = normalized.split(' ').filter(Boolean);
+  const uniqueWords = new Set(words);
+  return normalized.replace(/\s/g, '').length < 20 || (words.length >= 5 && uniqueWords.size <= 2);
+};
+
+const isInsufficientTask2Sample = (text: string) => {
+  const words = countWords(text);
+  return words <= 20 || (words < 60 && hasLowSignalText(text));
+};
+
+const isPlaceholderModelAnswer = (text: string) =>
+  !text.trim() ||
+  text === 'Sample Band 9 essay content...' ||
+  /too short for a high training estimate|provider returned incomplete|malformed or incomplete/i.test(text);
+
 export default function WritingTask2Practice() {
   const { addDebugLog, saveSession, setProviderDiagnostic } = useApp();
   const [question, setQuestion] = useState<WritingQuestion | null>(null);
@@ -304,7 +324,8 @@ export default function WritingTask2Practice() {
   const isMock = isMockProviderActive();
   const writingWorkspaceClass = 'practice-workspace';
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
-  const hasSubstantialModelAnswer = modelAnswerText.length > 24 && modelAnswerText !== 'Sample Band 9 essay content...';
+  const isInsufficientSample = isInsufficientTask2Sample(essay);
+  const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
 
   return (
     <PageShell size="wide">
@@ -369,7 +390,7 @@ export default function WritingTask2Practice() {
                           ? 'Prompt Guidance'
                           : 'Coach Feedback'}
                     </p>
-                    <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted italic'} text-[17px] leading-8`}>
+                    <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted'} text-[17px] leading-8`}>
                       {msg.text}
                     </p>
                   </div>
@@ -457,7 +478,7 @@ export default function WritingTask2Practice() {
                 />
               </PaperCard>
               <div className="flex justify-between items-center bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest">
-                <span>WORD COUNT: {essay.trim() ? essay.trim().split(/\s+/).length : 0}</span>
+                <span>WORD COUNT: {countWords(essay)}</span>
                 <div className="flex items-center gap-4">
                   <SerifButton onClick={analyzeEssay} disabled={isAnalyzing || !essay.trim()} className="flex items-center gap-2">
                     {isAnalyzing ? "Analyzing..." : "Submit for Analysis"} <Send className="w-4 h-4" />
@@ -470,6 +491,14 @@ export default function WritingTask2Practice() {
 
         {phase === 'results' && feedback && (
           <div className="space-y-8">
+            {isInsufficientSample && (
+              <PaperCard className="border-l-2 border-l-red-800 bg-red-50/40">
+                <h3 className="text-sm font-bold uppercase tracking-widest text-red-800 mb-3">Insufficient Sample</h3>
+                <p className="text-base leading-8 text-paper-ink/85">
+                  This essay is too short or too low-signal for reliable Task 2 feedback. Treat any old saved scores or model-answer text as non-diagnostic; first expand the response into a clear position, two developed body paragraphs, and a short conclusion.
+                </p>
+              </PaperCard>
+            )}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: 'Task Response', score: feedback.scores.taskResponse },
@@ -479,7 +508,9 @@ export default function WritingTask2Practice() {
               ].map((s) => (
                 <PaperCard key={s.label} className="text-center p-4">
                   <div className="text-[10px] font-sans font-bold text-paper-ink/40 uppercase mb-1">{s.label}</div>
-                  <div className="text-2xl font-bold text-accent-terracotta">{formatBandEstimate(s.score)}</div>
+                  <div className={isInsufficientSample ? 'text-sm font-bold text-paper-ink/50 uppercase tracking-widest font-sans pt-2' : 'text-2xl font-bold text-accent-terracotta'}>
+                    {isInsufficientSample ? 'Insufficient' : formatBandEstimate(s.score)}
+                  </div>
                 </PaperCard>
               ))}
             </div>
@@ -501,7 +532,7 @@ export default function WritingTask2Practice() {
                 <div className="space-y-4">
                   {feedback.sentenceFeedback.map((item, i) => (
                     <PaperCard key={i} className="border-l-2 border-l-paper-ink/20">
-                      <div className="text-sm text-paper-ink/45 italic line-through mb-2 leading-7">{item.original}</div>
+                      <div className="text-base text-paper-ink/60 line-through mb-2 leading-7">{item.original}</div>
                       <div className="text-[17px] font-bold mb-3 leading-8">{item.correction}</div>
                       <div className="flex items-center gap-2 mb-2 text-[10px] uppercase font-sans font-bold text-accent-terracotta">
                         <span>{item.dimension}</span>
@@ -524,7 +555,7 @@ export default function WritingTask2Practice() {
                       <div className={`w-2 h-2 rounded-full mt-1.5 ${f.severity === 'fatal' ? 'bg-red-800' : 'bg-accent-terracotta'}`} />
                       <div>
                         <h4 className="text-[17px] font-bold leading-7">{f.issue}</h4>
-                        <p className="text-sm italic leading-7 text-paper-ink/60 mt-1">{f.suggestionZh}</p>
+                        <p className="text-base leading-8 text-paper-ink/70 mt-1">{f.suggestionZh}</p>
                       </div>
                     </div>
                   ))}
@@ -536,12 +567,14 @@ export default function WritingTask2Practice() {
               <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Model Answer Excerpt</h3>
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                 {hasSubstantialModelAnswer ? (
-                  <div className="text-[17px] italic text-paper-ink/60 leading-8 whitespace-pre-wrap max-h-[420px] overflow-auto pr-1">
+                  <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap max-h-[420px] overflow-auto pr-1">
                     {modelAnswerText}
                   </div>
                 ) : (
-                  <p className="text-sm leading-7 text-paper-ink/50 italic">
-                    Mock provider did not return a substantial model answer excerpt for this attempt. When a real provider supplies a longer excerpt, it will appear here without covering the action buttons below.
+                  <p className="text-base leading-8 text-paper-ink/65">
+                    {isInsufficientSample
+                      ? 'Model-answer text is hidden for this insufficient sample so the saved record does not look more reliable than it is.'
+                      : 'No substantial model answer excerpt was returned for this attempt.'}
                   </p>
                 )}
               </div>
@@ -566,7 +599,7 @@ export default function WritingTask2Practice() {
 
             <div className="space-y-3">
               {isMock && (
-                <div className="flex items-center gap-2 p-3 bg-paper-ink/5 rounded text-[10px] text-paper-ink/40 italic uppercase tracking-wider border border-paper-ink/10 font-sans">
+                <div className="flex items-center gap-2 p-3 bg-paper-ink/5 rounded text-[10px] text-paper-ink/45 uppercase tracking-wider border border-paper-ink/10 font-sans">
                   <span>Prototype feedback shown using mock AI. Connect Gemini for training analysis.</span>
                 </div>
               )}

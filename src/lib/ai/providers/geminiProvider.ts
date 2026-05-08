@@ -188,9 +188,9 @@ Do not invent image details beyond the given brief.
 Do not explain causes unless the visual brief explicitly gives causes.
 Focus on overview quality, key feature selection, useful comparison, data accuracy, coherence, and concise academic reporting.
 Keep feedback concise and Task 1-specific.
-Write overviewFeedback, keyFeaturesFeedback, comparisonFeedback, dataAccuracyFeedback, coherenceFeedback, mustFix, rewriteTask, and language correction explanations mainly in Chinese, while including short English corrections or example phrases where useful.
+Write overviewFeedback, keyFeaturesFeedback, comparisonFeedback, dataAccuracyFeedback, coherenceFeedback, mustFix, rewriteTask, and language correction explanations Chinese-first. Start each explanation in Chinese, diagnose the learner's English problem in Chinese, and include short English corrections or example phrases only where useful.
 Keep improvedReport and modelExcerpt in English.
-Make rewriteTask a newline-separated bullet list of concrete actions, including overview rewriting, comparisons, data accuracy, and grouping when relevant.
+Make rewriteTask a newline-separated Chinese-first bullet list of concrete actions, including overview rewriting, comparisons, data accuracy, and grouping when relevant.
 
 ${writingTask1SchemaInstruction}
 

@@ -8,11 +8,11 @@ import { History, PlayCircle } from 'lucide-react';
 
 export default function Speaking() {
   return (
-    <PageShell size="wide">
+    <PageShell size="medium">
       <TopBar />
       
       <div className="landing-workspace landing-workspace--centered">
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="grid md:grid-cols-2 gap-6">
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-serif">Mode Selection</h2>

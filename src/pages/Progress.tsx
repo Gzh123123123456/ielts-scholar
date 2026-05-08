@@ -399,7 +399,7 @@ export default function Progress() {
         <PaperCard>
           <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Suggested Training Plan</h3>
           {trainingSuggestions.length === 0 ? (
-            <p className="text-sm italic text-paper-ink/45">No local practice records yet. Start with one Speaking attempt and one Writing Task 2 attempt.</p>
+            <p className="text-sm text-paper-ink/55">No local practice records yet. Start with one Speaking attempt and one Writing Task 2 attempt.</p>
           ) : (
             <div className="space-y-3">
               {trainingSuggestions.map((suggestion, index) => (
@@ -418,7 +418,7 @@ export default function Progress() {
           <CoverageList title="Writing Task 2 Topic Coverage" coverage={task2Coverage} />
         </div>
 
-        <p className="text-xs italic text-paper-ink/45 text-center">
+        <p className="text-xs text-paper-ink/50 text-center">
           Coverage is based on local preparation records and prompt metadata, not an official IELTS syllabus.
         </p>
       </div>
@@ -444,7 +444,7 @@ const ScoreList: React.FC<ScoreListProps> = ({ title, empty, records }) => (
       {title}
     </h3>
     {records.length === 0 ? (
-      <p className="text-sm italic text-paper-ink/45 py-8 text-center">{empty}</p>
+      <p className="text-sm text-paper-ink/55 py-8 text-center">{empty}</p>
     ) : (
       <div className="space-y-3">
         {records.map(record => (

@@ -84,12 +84,12 @@
 
 .landing-workspace {
   @apply w-full mx-auto;
-  max-width: 84rem;
+  max-width: 72rem;
 }
 
 .landing-workspace--centered {
-  @apply flex-1 flex flex-col justify-center;
-  padding-bottom: 4rem;
+  @apply flex flex-col justify-start;
+  padding-top: 2rem;
 }
 
 .reading-comfort {
@@ -117,7 +117,7 @@
 }
 
 .question-type-badge {
-  @apply text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/60 italic border border-accent-terracotta/15 rounded-sm px-2 py-0.5;
+  @apply text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70 border border-accent-terracotta/15 rounded-sm px-2 py-0.5;
 }
 
 .ink-link {

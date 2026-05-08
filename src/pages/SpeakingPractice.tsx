@@ -547,7 +547,7 @@ export default function SpeakingPractice() {
         <div className={`lg:col-span-12 ${step === 'results' ? 'xl:col-span-12 space-y-6' : 'xl:col-span-12 xl:grid xl:grid-cols-[minmax(360px,0.9fr)_minmax(460px,1.1fr)] xl:gap-6 xl:items-start space-y-6 xl:space-y-0'}`}>
           <PaperCard className="relative overflow-hidden">
             <div className="flex justify-between items-start mb-6">
-              <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/30 italic">
+              <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35">
                 {question?.topic} • Part {part}
               </span>
               <div className="flex items-center gap-3">
@@ -563,7 +563,7 @@ export default function SpeakingPractice() {
             <h2 className="text-2xl mb-8 leading-tight text-paper-ink">{question?.question}</h2>
             
             {question?.cueCard && (
-              <div className="bg-paper-ink/[0.03] p-5 rounded-sm mb-8 border-l-2 border-accent-terracotta/20 italic text-sm text-paper-ink-muted leading-relaxed">
+              <div className="bg-paper-ink/[0.03] p-5 rounded-sm mb-8 border-l-2 border-accent-terracotta/20 text-base text-paper-ink-muted leading-8">
                 {question.cueCard}
               </div>
             )}
@@ -623,17 +623,17 @@ export default function SpeakingPractice() {
                 </div>
                 <div className="flex items-center gap-2">
                   {statusMessage === 'No speech detected' && (
-                    <span className="text-[10px] text-accent-terracotta italic font-sans flex items-center gap-1">
+                    <span className="text-[10px] text-accent-terracotta font-sans flex items-center gap-1">
                       <Info className="w-3 h-3" /> No speech detected. Try speaking clearly.
                     </span>
                   )}
                   {statusMessage === 'Mic denied' && (
-                    <span className="text-[10px] text-red-800 italic flex items-center gap-1 font-sans">
+                    <span className="text-[10px] text-red-800 flex items-center gap-1 font-sans">
                       <Info className="w-3 h-3" /> Mic denied. Manual typing only.
                     </span>
                   )}
                   {statusMessage === 'Transcription unavailable' && (
-                    <span className="text-[10px] text-paper-ink/30 italic font-sans">Recognition unavailable in this browser.</span>
+                    <span className="text-[10px] text-paper-ink/40 font-sans">Recognition unavailable in this browser.</span>
                   )}
                 </div>
               </div>
@@ -653,7 +653,7 @@ export default function SpeakingPractice() {
           {step === 'analyzing' && (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
               <RefreshCcw className="w-6 h-6 animate-spin text-accent-terracotta/40" />
-              <p className="font-serif italic text-paper-ink/40 text-sm">Cross-referencing output with Band 9 descriptors...</p>
+              <p className="font-serif text-paper-ink/45 text-sm">Cross-referencing output with Band 9 descriptors...</p>
             </div>
           )}
         </div>
@@ -668,7 +668,7 @@ export default function SpeakingPractice() {
                   <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
                   <div className="flex flex-col pb-2">
                     <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">Training Estimate</span>
-                    <span className="text-xs text-paper-ink/40 italic">Pronunciation is not assessed in V1.</span>
+                    <span className="text-xs text-paper-ink/45">Pronunciation is not assessed in V1.</span>
                   </div>
                 </div>
                 
@@ -686,7 +686,7 @@ export default function SpeakingPractice() {
                 </div>
 
                 {isMock && (
-                  <div className="mt-6 flex items-center gap-2 p-2 bg-paper-ink/5 rounded text-xs text-paper-ink/40 italic">
+                  <div className="mt-6 flex items-center gap-2 p-2 bg-paper-ink/5 rounded text-xs text-paper-ink/45">
                     <Info className="w-3 h-3" /> Prototype feedback using mock AI.
                   </div>
                 )}
@@ -722,7 +722,7 @@ export default function SpeakingPractice() {
                     <div className="space-y-4">
                       {feedback.naturalnessHints.map((hint, i) => (
                         <PaperCard key={i} className="p-5 border-l-2 border-l-[#a64d32]/40">
-                          <div className="text-base text-paper-ink/60 mb-2 italic leading-7">"{hint.original}" </div>
+                          <div className="text-base text-paper-ink/65 mb-2 leading-7">"{hint.original}" </div>
                           <div className="text-xl font-bold text-[#a64d32] mb-3 leading-8">Better: {hint.better}</div>
                           <p className="text-[17px] leading-8 text-paper-ink/90 bg-paper-ink/[0.05] border border-paper-ink/10 p-4 rounded-sm">{hint.explanationZh}</p>
                         </PaperCard>
@@ -762,7 +762,7 @@ export default function SpeakingPractice() {
                   <div className="grid gap-3 md:grid-cols-2">
                     {feedback.preservedStyle.slice(0, 4).map((style, i) => (
                       <div key={i} className="border-l-2 border-l-accent-terracotta/30 pl-4 py-1">
-                        <p className="text-lg italic text-paper-ink leading-8">"{style.text}"</p>
+                        <p className="text-lg text-paper-ink leading-8">"{style.text}"</p>
                         <div className="text-base leading-8 mt-2 text-paper-ink/75">{style.reasonZh}</div>
                       </div>
                     ))}
@@ -771,13 +771,13 @@ export default function SpeakingPractice() {
               )}
 
               <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
-                <div className="mx-auto max-w-5xl text-center">
+                <div className="max-w-4xl">
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">High-Band Transformation</h4>
-                  <p className="text-2xl italic leading-10 text-paper-ink font-serif">
+                  <p className="text-xl md:text-2xl leading-10 text-paper-ink font-serif">
                     "{feedback.upgradedAnswer}"
                   </p>
                 </div>
-                <div className="mt-8 flex justify-center border-t border-paper-ink/10 pt-6">
+                <div className="mt-8 flex justify-start border-t border-paper-ink/10 pt-6">
                   <SerifButton onClick={exportMarkdown} className="w-full sm:w-auto text-xs flex items-center justify-center gap-2 py-3" variant="outline">
                     <FileDown className="w-4 h-4" /> Export Markdown
                   </SerifButton>

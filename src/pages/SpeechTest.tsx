@@ -380,7 +380,7 @@ export default function SpeechTest() {
 
       <div className="mb-8">
         <h1 className="text-2xl font-bold mb-2">Speech System Diagnostics</h1>
-        <p className="text-sm text-paper-ink/50 italic">
+        <p className="text-sm text-paper-ink/60">
           This page tests each speech subsystem independently. Use it to isolate issues before debugging the main Speaking Practice page.
         </p>
       </div>
@@ -529,7 +529,7 @@ export default function SpeechTest() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
           <div>
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Interim Transcript</h3>
-            <div className="min-h-[40px] p-2 bg-paper-ink/5 rounded border border-paper-ink/10 font-serif text-sm italic text-paper-ink/60">
+            <div className="min-h-[40px] p-2 bg-paper-ink/5 rounded border border-paper-ink/10 font-serif text-sm text-paper-ink/65">
               {interimTranscript || '(empty — speak to see interim results)'}
             </div>
           </div>
@@ -562,7 +562,7 @@ export default function SpeechTest() {
         }`}>
           Status: {synthStatus}
         </div>
-        <p className="text-[10px] text-paper-ink/30 italic mt-2">
+        <p className="text-[10px] text-paper-ink/40 mt-2">
           Test sentence: "This is a microphone and speech recognition test."
         </p>
       </PaperCard>
@@ -574,7 +574,7 @@ export default function SpeechTest() {
         </h2>
         <div className="max-h-[300px] overflow-auto font-mono text-[10px] space-y-0.5">
           {speechEvents.length === 0 ? (
-            <p className="text-paper-ink/20 italic">No events yet. Run a test above.</p>
+            <p className="text-paper-ink/35">No events yet. Run a test above.</p>
           ) : (
             speechEvents.map((ev, i) => (
               <div key={i} className="flex gap-2 py-0.5 border-b border-paper-ink/5 last:border-0">
