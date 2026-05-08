@@ -1,10 +1,107 @@
+export type SpeakingTopicCategory =
+  | 'Work & Study'
+  | 'Home & Hometown'
+  | 'Family & People'
+  | 'Daily Life'
+  | 'Hobbies & Free Time'
+  | 'Books & Reading'
+  | 'Technology'
+  | 'Travel & Places'
+  | 'Food & Health'
+  | 'Culture & Media'
+  | 'Nature & Environment'
+  | 'Objects & Memories';
+
+export type WritingTask2TopicCategory =
+  | 'Education'
+  | 'Technology'
+  | 'Work & Employment'
+  | 'Environment & Resources'
+  | 'Health'
+  | 'Government & Society'
+  | 'Crime & Law'
+  | 'Culture & Media'
+  | 'Family & Children'
+  | 'Globalization'
+  | 'Transport & Cities'
+  | 'Economy & Consumerism';
+
+export const speakingTopicCategories: SpeakingTopicCategory[] = [
+  'Work & Study',
+  'Home & Hometown',
+  'Family & People',
+  'Daily Life',
+  'Hobbies & Free Time',
+  'Books & Reading',
+  'Technology',
+  'Travel & Places',
+  'Food & Health',
+  'Culture & Media',
+  'Nature & Environment',
+  'Objects & Memories',
+];
+
+export const writingTask2TopicCategories: WritingTask2TopicCategory[] = [
+  'Education',
+  'Technology',
+  'Work & Employment',
+  'Environment & Resources',
+  'Health',
+  'Government & Society',
+  'Crime & Law',
+  'Culture & Media',
+  'Family & Children',
+  'Globalization',
+  'Transport & Cities',
+  'Economy & Consumerism',
+];
+
 export interface SpeakingQuestion {
   id: string;
   part: number;
   topic: string;
   question: string;
   cueCard?: string;
+  topicCategory?: SpeakingTopicCategory;
+  tags?: SpeakingTopicCategory[];
 }
+
+const addSpeakingMetadata = (question: Omit<SpeakingQuestion, 'topicCategory' | 'tags'>): SpeakingQuestion => {
+  const categoryByTopic: Record<string, SpeakingTopicCategory> = {
+    'Hometown': 'Home & Hometown',
+    'Work/Study': 'Work & Study',
+    'Daily Routine': 'Daily Life',
+    'Food': 'Food & Health',
+    'Travel': 'Travel & Places',
+    'Weather': 'Nature & Environment',
+    'Music': 'Hobbies & Free Time',
+    'Reading': 'Books & Reading',
+    'Technology': 'Technology',
+    'Friends': 'Family & People',
+    'Sports': 'Hobbies & Free Time',
+    'Person': 'Family & People',
+    'Place': 'Travel & Places',
+    'Object': 'Objects & Memories',
+    'Event': 'Culture & Media',
+    'Experience': 'Objects & Memories',
+    'Skill': 'Work & Study',
+    'Decision': 'Daily Life',
+    'Media': 'Culture & Media',
+    'Routine': 'Daily Life',
+    'Study/Work': 'Work & Study',
+    'Change': 'Daily Life',
+    'Helping Others': 'Family & People',
+    'Cities and Places': 'Travel & Places',
+    'Objects and Consumption': 'Objects & Memories',
+    'Events': 'Culture & Media',
+    'Skills and Learning': 'Work & Study',
+    'Decisions': 'Family & People',
+    'Routines': 'Daily Life',
+    'Work and Study': 'Work & Study',
+  };
+  const topicCategory = categoryByTopic[question.topic] || 'Daily Life';
+  return { ...question, topicCategory, tags: [topicCategory] };
+};
 
 export const speakingPart1: SpeakingQuestion[] = [
   { id: 'sp1_hometown_001', part: 1, topic: 'Hometown', question: 'Do you like your hometown?' },
@@ -53,7 +150,7 @@ export const speakingPart1: SpeakingQuestion[] = [
   { id: 'sp1_sports_001', part: 1, topic: 'Sports', question: 'Do you like playing or watching sports?' },
   { id: 'sp1_sports_002', part: 1, topic: 'Sports', question: 'What sport is popular in your country?' },
   { id: 'sp1_sports_003', part: 1, topic: 'Sports', question: 'Did you do any sports when you were younger?' },
-];
+].map(addSpeakingMetadata);
 
 export const speakingPart2: SpeakingQuestion[] = [
   {
@@ -140,7 +237,7 @@ export const speakingPart2: SpeakingQuestion[] = [
     question: 'Describe a positive change in your life.',
     cueCard: 'Describe a positive change in your life. You should say what the change was, when it happened, why it happened, and explain how it affected your life.',
   },
-];
+].map(addSpeakingMetadata);
 
 export const speakingPart3: SpeakingQuestion[] = [
   { id: 'sp3_person_001', part: 3, topic: 'Helping Others', question: 'Why do some people enjoy helping others?' },
@@ -190,13 +287,44 @@ export const speakingPart3: SpeakingQuestion[] = [
   { id: 'sp3_change_001', part: 3, topic: 'Change', question: 'Why do some people find change difficult?' },
   { id: 'sp3_change_002', part: 3, topic: 'Change', question: 'Are social changes happening faster now than in the past?' },
   { id: 'sp3_change_003', part: 3, topic: 'Change', question: 'What kinds of changes are usually positive for a community?' },
-];
+].map(addSpeakingMetadata);
 
 export interface WritingQuestion {
   id: string;
   type: string;
   question: string;
+  topicCategory?: WritingTask2TopicCategory;
+  tags?: WritingTask2TopicCategory[];
 }
+
+const addWritingMetadata = (question: Omit<WritingQuestion, 'topicCategory' | 'tags'>): WritingQuestion => {
+  const categoryById: Record<string, WritingTask2TopicCategory> = {
+    wt2_001: 'Education',
+    wt2_002: 'Education',
+    wt2_003: 'Work & Employment',
+    wt2_004: 'Transport & Cities',
+    wt2_005: 'Work & Employment',
+    wt2_006: 'Economy & Consumerism',
+    wt2_007: 'Transport & Cities',
+    wt2_008: 'Education',
+    wt2_009: 'Culture & Media',
+    wt2_010: 'Work & Employment',
+    wt2_011: 'Government & Society',
+    wt2_012: 'Culture & Media',
+    wt2_013: 'Technology',
+    wt2_014: 'Family & Children',
+    wt2_015: 'Health',
+    wt2_016: 'Environment & Resources',
+    wt2_017: 'Transport & Cities',
+    wt2_018: 'Technology',
+    wt2_019: 'Work & Employment',
+    wt2_020: 'Health',
+    wt2_021: 'Economy & Consumerism',
+    wt2_022: 'Family & Children',
+  };
+  const topicCategory = categoryById[question.id] || 'Government & Society';
+  return { ...question, topicCategory, tags: [topicCategory] };
+};
 
 export const writingTask2: WritingQuestion[] = [
   {
@@ -309,4 +437,4 @@ export const writingTask2: WritingQuestion[] = [
     type: 'advantages/disadvantages',
     question: 'More people are choosing to live alone than in the past. What are the advantages and disadvantages of this trend?',
   },
-];
+].map(addWritingMetadata);

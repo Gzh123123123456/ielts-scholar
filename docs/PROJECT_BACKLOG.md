@@ -54,10 +54,14 @@ _Last updated: 2026-05-07_
   - Speaking Part 2: 12 cue cards.
   - Speaking Part 3: 37 follow-up discussion questions.
   - Writing Task 2: 22 prompts across common IELTS Task 2 types.
+- **Done minimal V1.1**: static preparation topic metadata supports Progress topic coverage:
+  - Speaking: 12 preparation categories.
+  - Writing Task 2: 12 preparation categories.
 - Still pending:
   - larger curated prompt bank
-  - tagging/difficulty metadata
-  - source-quality review and deduplication
+  - richer topic taxonomy and difficulty metadata
+  - official-source review, source-quality review, and deduplication
+  - optional AI tagging later, clearly separated from static prep taxonomy and never treated as official syllabus coverage
   - prompt rotation analytics
 
 ### 2.5) Practice Persistence and History Access

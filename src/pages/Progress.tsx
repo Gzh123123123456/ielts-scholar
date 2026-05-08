@@ -3,6 +3,16 @@ import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import {
+  speakingPart1,
+  speakingPart2,
+  speakingPart3,
+  speakingTopicCategories,
+  writingTask2,
+  writingTask2TopicCategories,
+  SpeakingTopicCategory,
+  WritingTask2TopicCategory,
+} from '@/src/data/questions/bank';
+import {
   getPracticeRecords,
   PracticeRecord,
   SpeakingPracticeRecord,
@@ -31,6 +41,8 @@ const average = (values: number[]) =>
 const formatBand = (value: number | null) =>
   value === null ? 'Not enough data' : value.toFixed(1);
 
+const normalizeText = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+
 const getSpeakingScore = (record: SpeakingPracticeRecord) => {
   const score = record.feedback?.bandEstimateExcludingPronunciation;
   return isValidBand(score) ? score : null;
@@ -57,6 +69,93 @@ const isScoredWriting = (record: PracticeRecord): record is WritingTask2Practice
   record.status === 'analyzed' &&
   getWritingScore(record as WritingTask2PracticeRecord) !== null;
 
+const speakingBank = [...speakingPart1, ...speakingPart2, ...speakingPart3];
+
+const speakingKeywordFallback: Record<SpeakingTopicCategory, string[]> = {
+  'Work & Study': ['work', 'job', 'study', 'school', 'student', 'teacher', 'learn', 'skill', 'project', 'task'],
+  'Home & Hometown': ['hometown', 'home', 'where you live'],
+  'Family & People': ['family', 'friend', 'person', 'people', 'neighbor', 'children', 'adult'],
+  'Daily Life': ['routine', 'evening', 'daily', 'day', 'change', 'decision'],
+  'Hobbies & Free Time': ['music', 'sport', 'hobby', 'free time', 'enjoy'],
+  'Books & Reading': ['book', 'read', 'e-book'],
+  'Technology': ['technology', 'phone', 'app', 'device', 'online'],
+  'Travel & Places': ['travel', 'place', 'city', 'public space', 'visit'],
+  'Food & Health': ['food', 'cook', 'restaurant', 'health'],
+  'Culture & Media': ['media', 'film', 'tv', 'celebration', 'ceremony', 'event'],
+  'Nature & Environment': ['weather', 'environment', 'waste', 'nature'],
+  'Objects & Memories': ['object', 'thing', 'memory', 'experience', 'buy new things'],
+};
+
+const writingKeywordFallback: Record<WritingTask2TopicCategory, string[]> = {
+  Education: ['university', 'school', 'students', 'academic', 'teacher', 'language', 'exams'],
+  Technology: ['technology', 'artificial intelligence', 'digital', 'devices'],
+  'Work & Employment': ['work', 'office', 'jobs', 'careers', 'workers', 'workplaces'],
+  'Environment & Resources': ['environment', 'resources', 'waste', 'food waste'],
+  Health: ['health', 'stress', 'living longer', 'ageing'],
+  'Government & Society': ['government', 'society', 'communities', 'neighbors'],
+  'Crime & Law': ['crime', 'law', 'police', 'punishment'],
+  'Culture & Media': ['museums', 'art', 'social media', 'news', 'galleries'],
+  'Family & Children': ['children', 'parents', 'families', 'outdoors', 'live alone'],
+  Globalization: ['international', 'global', 'foreign'],
+  'Transport & Cities': ['transport', 'traffic', 'cities', 'city', 'towns'],
+  'Economy & Consumerism': ['buy', 'products', 'online', 'salaries', 'paid'],
+};
+
+const fromRecordMetadata = <T extends string>(record: PracticeRecord, validTopics: readonly T[]): T | null => {
+  const source = record as PracticeRecord & { topicCategory?: unknown; tags?: unknown[] };
+  const questionData = record.questionData as { topicCategory?: unknown; tags?: unknown[] } | undefined;
+  const candidates = [
+    source.topicCategory,
+    ...(Array.isArray(source.tags) ? source.tags : []),
+    questionData?.topicCategory,
+    ...(Array.isArray(questionData?.tags) ? questionData.tags : []),
+  ];
+  return candidates.find((candidate): candidate is T =>
+    typeof candidate === 'string' && validTopics.includes(candidate as T)
+  ) || null;
+};
+
+const fromQuestionText = <T extends string>(
+  text: string,
+  fallback: Record<T, string[]>,
+) => {
+  const normalized = normalizeText(text);
+  return (Object.entries(fallback) as [T, string[]][])
+    .find(([, keywords]) => keywords.some(keyword => normalized.includes(keyword)))?.[0] || null;
+};
+
+const getSpeakingTopic = (record: SpeakingPracticeRecord): SpeakingTopicCategory | null => {
+  const metadataTopic = fromRecordMetadata(record, speakingTopicCategories);
+  if (metadataTopic) return metadataTopic;
+
+  const matched = speakingBank.find(question =>
+    question.id === record.questionId || normalizeText(question.question) === normalizeText(record.question)
+  );
+  return matched?.topicCategory || fromQuestionText(record.question, speakingKeywordFallback);
+};
+
+const getWritingTopic = (record: WritingTask2PracticeRecord): WritingTask2TopicCategory | null => {
+  const metadataTopic = fromRecordMetadata(record, writingTask2TopicCategories);
+  if (metadataTopic) return metadataTopic;
+
+  const matched = writingTask2.find(question =>
+    question.id === record.questionId || normalizeText(question.question) === normalizeText(record.question)
+  );
+  return matched?.topicCategory || fromQuestionText(record.question, writingKeywordFallback);
+};
+
+const countTopics = <T extends string>(
+  topics: readonly T[],
+  records: PracticeRecord[],
+  resolveTopic: (record: PracticeRecord) => T | null,
+) => topics.map(topic => ({
+  topic,
+  count: records.reduce((total, record) => total + (resolveTopic(record) === topic ? 1 : 0), 0),
+}));
+
+const pickUnderPracticed = <T extends string>(coverage: { topic: T; count: number }[]) =>
+  [...coverage].sort((a, b) => a.count - b.count || a.topic.localeCompare(b.topic))[0];
+
 export default function Progress() {
   const records = getPracticeRecords(80);
   const scoredSpeaking = records.filter(isScoredSpeaking);
@@ -64,9 +163,25 @@ export default function Progress() {
   const speakingEstimate = average(scoredSpeaking.map(record => getSpeakingScore(record)).filter(isValidBand));
   const writingEstimate = average(scoredWriting.map(record => getWritingScore(record)).filter(isValidBand));
   const latestRecord = records[0];
-  const recentRecords = records.slice(0, 6);
   const recentSpeakingScores = scoredSpeaking.slice(0, 6);
   const recentWritingScores = scoredWriting.slice(0, 6);
+  const speakingRecords = records.filter(record => record.module === 'speaking');
+  const writingRecords = records.filter(record =>
+    record.module === 'writing' && (record as WritingTask2PracticeRecord).task === 'task2'
+  );
+  const speakingCoverage = countTopics(
+    speakingTopicCategories,
+    speakingRecords,
+    record => getSpeakingTopic(record as SpeakingPracticeRecord),
+  );
+  const writingCoverage = countTopics(
+    writingTask2TopicCategories,
+    writingRecords,
+    record => getWritingTopic(record as WritingTask2PracticeRecord),
+  );
+  const nextSpeaking = pickUnderPracticed(speakingCoverage);
+  const nextWriting = pickUnderPracticed(writingCoverage);
+  const unfinishedDrafts = records.filter(record => record.status === 'draft').length;
 
   return (
     <PageShell>
@@ -146,34 +261,33 @@ export default function Progress() {
           />
         </div>
 
-        <section>
-          <h3 className="text-xl font-serif mb-4 ml-1">Recent Practice Records</h3>
-          {recentRecords.length === 0 ? (
-            <PaperCard className="text-center py-12 bg-paper-ink/5 border-dashed">
-              <p className="text-paper-ink/40 italic">No records yet.</p>
-            </PaperCard>
-          ) : (
-            <div className="space-y-3">
-              {recentRecords.map(record => (
-                <PaperCard key={record.id} className="p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">
-                        {record.module === 'speaking'
-                          ? `Speaking Part ${(record as SpeakingPracticeRecord).part}`
-                          : 'Writing Task 2'} / {record.status}
-                      </div>
-                      <div className="text-sm font-semibold text-paper-ink leading-6">{preview(record.question)}</div>
-                    </div>
-                    <div className="text-xs text-paper-ink/40 font-sans whitespace-nowrap">
-                      {formatDate(getTimestamp(record))}
-                    </div>
-                  </div>
-                </PaperCard>
-              ))}
-            </div>
+        <PaperCard>
+          <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Recommended Next Focus</h3>
+          <div className="grid md:grid-cols-2 gap-4 text-sm leading-7 text-paper-ink/75">
+            <p>
+              Speaking: try <span className="font-bold text-paper-ink">{nextSpeaking.topic}</span>
+              {nextSpeaking.count > 0 ? ' again; it is still one of your lighter areas.' : ' first; no local attempts are recorded yet.'}
+            </p>
+            <p>
+              Writing Task 2: try <span className="font-bold text-paper-ink">{nextWriting.topic}</span>
+              {nextWriting.count > 0 ? ' again; it is still one of your lighter areas.' : ' first; no local attempts are recorded yet.'}
+            </p>
+          </div>
+          {unfinishedDrafts > 0 && (
+            <p className="mt-4 text-xs italic text-paper-ink/45">
+              You also have {unfinishedDrafts} unfinished draft{unfinishedDrafts === 1 ? '' : 's'} saved locally.
+            </p>
           )}
-        </section>
+        </PaperCard>
+
+        <div className="grid lg:grid-cols-2 gap-8">
+          <TopicCoverage title="Speaking Topic Coverage" coverage={speakingCoverage} />
+          <TopicCoverage title="Writing Task 2 Topic Coverage" coverage={writingCoverage} />
+        </div>
+
+        <p className="text-xs italic text-paper-ink/45 text-center">
+          Topic coverage is based on IELTS preparation categories, not an official exam syllabus.
+        </p>
       </div>
     </PageShell>
   );
@@ -215,5 +329,31 @@ const ScoreList: React.FC<ScoreListProps> = ({ title, empty, records }) => (
         ))}
       </div>
     )}
+  </PaperCard>
+);
+
+interface TopicCoverageProps {
+  title: string;
+  coverage: { topic: string; count: number }[];
+}
+
+const TopicCoverage: React.FC<TopicCoverageProps> = ({ title, coverage }) => (
+  <PaperCard>
+    <h3 className="text-sm font-bold uppercase tracking-widest mb-5 border-b border-paper-ink/5 pb-2">
+      {title}
+    </h3>
+    <div className="grid sm:grid-cols-2 gap-2">
+      {coverage.map(item => (
+        <div key={item.topic} className="flex items-center justify-between gap-3 border border-paper-ink/10 bg-paper-ink/[0.02] px-3 py-2">
+          <span className="text-sm text-paper-ink/75">{item.topic}</span>
+          <span className={item.count === 0
+            ? 'text-[10px] font-sans uppercase tracking-widest text-paper-ink/35'
+            : 'text-sm font-bold text-accent-terracotta'}
+          >
+            {item.count === 0 ? 'Not yet' : item.count}
+          </span>
+        </div>
+      ))}
+    </div>
   </PaperCard>
 );

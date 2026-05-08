@@ -80,6 +80,17 @@ _Last updated: 2026-05-08_
 - Practice History is linked from Home, TopBar, Speaking, and Writing.
 - No cross-attempt analytics, export, database, RAG, auth, server, Mock mode, or provider-default changes were added.
 
+## Progress Snapshot (Implemented)
+- Progress is now a local training snapshot based on `ielts_practice_records_v1`, not a mock exam score.
+- Speaking and Writing Task 2 estimates use analyzed records with valid scores only; drafts are not counted as score 0.
+- Progress shows recent scored Speaking and Writing Task 2 attempts as simple lists instead of a chart.
+- Topic coverage is implemented with static IELTS-preparation categories attached to the prompt bank:
+  - Speaking: 12 preparation categories.
+  - Writing Task 2: 12 preparation categories.
+- Progress resolves topic coverage by preferring stored record metadata, matching prompt-bank metadata, then using a small keyword fallback. Unknown topics are not counted as score 0.
+- Recommended Next Focus is rule-based and modest: it suggests one under-practiced Speaking category and one under-practiced Writing Task 2 category, and mentions unfinished drafts only when local draft records exist.
+- Topic coverage is explicitly presented as IELTS preparation categories, not an official exam syllabus.
+
 ## Debug / Provider Safety (Implemented)
 - Debug Panel remains globally available.
 - Debug Panel now includes a collapsible latest provider diagnostic section showing:

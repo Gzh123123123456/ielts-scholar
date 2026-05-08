@@ -1,5 +1,16 @@
 # Decision Log
 
+## [2026-05-08] Progress Topic Coverage Uses Static Prep Taxonomy
+- **Decision**: Add topic coverage to Progress using static preparation categories on the local prompt bank.
+- **Reason**: Learners need a simple view of which Speaking and Writing Task 2 areas they have practiced, without implying an official IELTS syllabus or adding AI auto-tagging.
+- **Implemented**:
+  - Added static topic-category metadata and tags to existing Speaking and Writing Task 2 prompt bank items.
+  - Progress topic matching prefers metadata stored on records, falls back to prompt-bank matching, then uses a small keyword fallback.
+  - Added Speaking Topic Coverage and Writing Task 2 Topic Coverage with practiced counts and `Not yet` markers.
+  - Added rule-based Recommended Next Focus for one under-practiced Speaking category and one under-practiced Writing Task 2 category.
+  - Removed Recent Practice Records from Progress to avoid duplicating History management.
+- **Explicitly unchanged**: no AI tagging, no official-syllabus claim, no provider changes, no RAG, no database, no server, no auth, no save/restore/delete/history behavior changes.
+
 ## [2026-05-08] Minimal Local-First Practice History Entry
 - **Decision**: Add a small Practice History entry point for existing localStorage practice records.
 - **Reason**: Users needed a way to review and restore saved Speaking Practice and Writing Task 2 attempts without entering a page that immediately feels like a new practice session.
