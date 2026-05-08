@@ -1,5 +1,19 @@
 # Decision Log
 
+## [2026-05-09] UI Closeout: Global Shells and Feedback Rendering
+- **Decision**: Keep one global TopBar width independent from page content width.
+- **Reason**: Switching between medium landing pages and wide practice/history/progress pages should not move the top navigation inward or outward.
+- **Implemented**:
+  - Added a TopBar shell class and constrained medium/wide content below it rather than constraining the nav itself.
+  - Kept landing pages medium and upper-aligned while restoring Speaking Practice to the wide practice workspace.
+- **Decision**: Treat insufficient Speaking samples as an answer-development problem at render time.
+- **Reason**: Very short or low-signal transcripts, including old restored records, should not display a full high-band rewrite just because one exists in stored feedback.
+- **Implemented**:
+  - Speaking feedback shows **Answer Development Plan** instead of full High-Band Transformation for insufficient samples.
+  - The transformation card stays aligned with the main wide feedback container while long text uses readable line length.
+  - Writing Task 2 correction labels are display-mapped from schema/provider keys to readable Chinese-first labels.
+- **Explicitly unchanged**: no provider-default changes, no scoring formula changes, no record mutation/migration, no exports/routing/RAG/database/server/auth/API-key changes.
+
 ## [2026-05-08] Practice Pages Focus on Current Work
 - **Decision**: Active practice pages should focus on the current Speaking or Writing attempt, not expanded record management panels.
 - **Reason**: Large Recent Attempts / Practice Records panels duplicated History and made the practice workspace feel cluttered.

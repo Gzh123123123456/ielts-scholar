@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-08_
+_Last updated: 2026-05-09_
 
 ## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -64,7 +64,8 @@ _Last updated: 2026-05-08_
 - Advanced pronunciation scoring integration after a reliable audio scoring path exists.
 
 ## Future UI Polish
-- Further Speaking UI polish may be considered later, but the active practice page already has larger Part tabs and clearer feedback readability.
+- Global TopBar shell consistency, medium landing shells, wide practice shells, Speaking transformation layout, and feedback label display mapping are complete for current V1 polish.
+- Further Speaking UI polish may be considered later, but the active practice page already has larger Part tabs, wide workspace alignment, insufficient-sample transformation suppression, and clearer feedback readability.
 - Keep Practice mode and Mock mode separate.
 
 ---

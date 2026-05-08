@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-08_
+_Last updated: 2026-05-09_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -36,8 +36,9 @@ _Last updated: 2026-05-08_
 - Require user edit/confirm before moving to Phase 2.
 
 ### 2b) Future UI Consistency Notes
-- Speaking Practice should not automatically inherit the full Writing Task 2 wide workspace.
-- Speaking may later receive a moderate-width layout adjustment only if transcript + feedback comparison requires it.
+- **Done closeout**: Speaking Practice now uses the shared wide practice workspace consistently with Writing Task 1 / Task 2, while the High-Band Transformation text itself keeps a readable inner width.
+- **Done closeout**: global TopBar width is independent from medium/wide page content widths.
+- **Done closeout**: learner-facing feedback labels should render readable Chinese-first labels instead of provider/schema enum keys.
 - **Done basic V1.2**: Writing Task 1 Academic now inherits the Writing workspace design language in a minimal two-column practice page:
   - wider desktop workspace
   - prompt/chart context area
