@@ -1,4 +1,4 @@
-# Current State (V1)
+# Current State (V1.1 closing)
 
 _Last updated: 2026-05-08_
 
@@ -64,6 +64,16 @@ _Last updated: 2026-05-08_
   - Slightly larger feedback-card/paper-card spacing and phase-tab readability.
   - Improved line-height/spacing in Final Analysis sections (My Framework, My Essay, Key Corrections, Framework Logic Review, Model Answer Excerpt).
 
+## Writing Task 1 Academic Practice (Implemented)
+- V1.2 product direction is now Writing Task 1 Academic Basic Practice before Mock Exam.
+- `/writing/task1` is a usable Academic Task 1 practice page instead of a placeholder.
+- Scope is Academic only; General Training letters are deferred.
+- Task 1 uses original text-based visual briefs and simple data cards for line graph, bar chart, table, pie chart, mixed chart, process, and map practice.
+- Task 1 feedback has its own schema and Mock Provider analysis path covering overview, key features, comparisons, data accuracy, coherence, must-fix items, rewrite task, reusable report patterns, improved report/model excerpt, and markdown export.
+- Task 1 reports save local-first records with module `writing_task1`, task type, topic/tags, instruction, visual brief, quick plan, report, feedback, status, and timestamps.
+- Task 1 retry/new prompt starts a new attempt without clearing unrelated saved records.
+- Text-based visual briefs are the V1.2 baseline; interactive charts and richer data-accuracy mapping remain later work.
+
 ## Export Behavior (Implemented)
 - Markdown export is attempt-level in V1.
 - Session-level consolidated note export is not implemented yet.
@@ -72,6 +82,7 @@ _Last updated: 2026-05-08_
 - A lightweight `/practice-history` page lists existing localStorage practice records without starting a new attempt.
 - Speaking attempts show part, question, timestamp, transcript preview, and status when available.
 - Writing Task 2 attempts show prompt, timestamp, essay/framework preview, and status when available.
+- Writing Task 1 attempts are recognized minimally with prompt, timestamp, report/plan preview, status, and Open / Restore.
 - Opening a history item writes it into the existing active practice restore path, then navigates to the matching Practice page without making an AI call.
 - Practice History supports deleting individual Speaking and Writing Task 2 attempts from localStorage without affecting unrelated records.
 - Writing Task 2 Recent Attempts now supports View, Export, and Delete, and the visible list updates immediately after deletion.
@@ -89,11 +100,13 @@ _Last updated: 2026-05-08_
   - Writing Task 2: 12 preparation categories.
 - Progress resolves topic coverage by preferring stored record metadata, matching prompt-bank metadata, then using a small keyword fallback. Unknown topics are not counted as score 0.
 - Progress includes a rule-based **Suggested Training Plan** with up to 3 modest suggestions covering data sufficiency, module balance, Speaking part balance, topic coverage, and unfinished drafts when local records support them.
+- Progress minimally recognizes Writing Task 1 analyzed records and includes Task 1 topics in writing topic coverage when metadata is available.
 - Topic coverage is explicitly presented as IELTS preparation categories, not an official exam syllabus.
 
 ## Practice Record Safety (Implemented)
 - New Speaking records persist static prompt metadata when available: topic, tags, and part.
 - New Writing Task 2 records persist static prompt metadata when available: topic, tags, task type, and task.
+- New Writing Task 1 records persist static prompt metadata when available: topic, tags, task type, and task.
 - Old records without topic metadata remain readable; Progress falls back to prompt-bank matching and then minimal keyword matching.
 - Practice records use the stable `ielts_practice_records_v1` key.
 - Malformed or unknown old record entries are ignored for display but preserved in storage; they are not automatically deleted.
@@ -120,3 +133,6 @@ _Last updated: 2026-05-08_
 ## Scope Guards (Current)
 - Keep Practice mode and future Mock mode separate.
 - Keep UI polish work separate from API connection work.
+- V2 Mock Exam comes after Speaking, Writing Task 1 Academic, and Writing Task 2 basic practice modules exist.
+- V3 keeps advanced visualization and interactive chart work.
+- Session-level notes are deferred until user value and scope are clearer.

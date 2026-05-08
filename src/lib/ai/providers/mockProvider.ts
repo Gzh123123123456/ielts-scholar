@@ -1,5 +1,5 @@
 import { AIProvider } from './base';
-import { SpeakingFeedback, WritingFeedback, WritingFrameworkSummary } from '../schemas';
+import { SpeakingFeedback, WritingFeedback, WritingFrameworkSummary, WritingTask1Feedback } from '../schemas';
 
 const firstNonEmptyLine = (text: string, fallback: string): string => {
   const line = text
@@ -119,6 +119,92 @@ export class MockProvider implements AIProvider {
         }
       ],
       obsidianMarkdown: "# IELTS Writing Note\n..."
+    };
+  }
+
+  async analyzeWritingTask1(params: {
+    task: 'task1';
+    taskType: string;
+    instruction: string;
+    visualBrief: string;
+    dataSummary: string;
+    report: string;
+    expectedOverview?: string;
+    expectedKeyFeatures?: string[];
+    expectedComparisons?: string[];
+    commonTraps?: string[];
+    reusablePatterns?: string[];
+  }): Promise<WritingTask1Feedback> {
+    await new Promise(r => setTimeout(r, 900));
+
+    const words = params.report.trim().split(/\s+/).filter(Boolean).length;
+    const lower = params.report.toLowerCase();
+    const hasOverview = /\b(overall|in general|it is clear|it can be seen|the main trend|broadly)\b/.test(lower);
+    const hasNumbers = /\d|percent|percentage|million|thousand|km|tonnes|units/.test(lower);
+    const comparisonExpected = !['process'].includes(params.taskType.toLowerCase());
+    const hasComparison = /\b(compared|whereas|while|than|higher|lower|largest|smallest|respectively|in contrast)\b/.test(lower);
+    const mustFix = [
+      words < 150 ? 'Reach at least 150 words before treating this as a complete Task 1 response.' : '',
+      !hasOverview ? 'Add a clear overview paragraph that summarizes the main trend, pattern, or stage.' : '',
+      !hasNumbers ? 'Include precise data references from the visual instead of only general descriptions.' : '',
+      comparisonExpected && !hasComparison ? 'Add direct comparisons between categories, periods, or locations.' : '',
+      'Do not explain causes unless the visual brief explicitly gives causes.',
+    ].filter(Boolean);
+
+    const estimatedBand = words < 120 ? 5.5 : hasOverview && hasNumbers && (!comparisonExpected || hasComparison) ? 7 : 6.5;
+    const patterns = params.reusablePatterns?.length
+      ? params.reusablePatterns
+      : [
+        'Start the overview with "Overall, ..." and describe only the biggest pattern.',
+        'Group details by trend or size instead of listing every number.',
+        'Use comparison language before adding exact figures.',
+      ];
+
+    const improvedReport = `Overall, the visual shows a clear main pattern, with the most important changes concentrated in the largest categories. The strongest body paragraph should group the leading figures together, while a second paragraph can compare the smaller or less dramatic figures. Exact numbers should support each point, but the report should avoid explaining why the changes happened unless the visual provides that information.`;
+
+    return {
+      mode: 'practice',
+      module: 'writing_task1',
+      task: 'task1',
+      taskType: params.taskType,
+      instruction: params.instruction,
+      visualBrief: params.visualBrief,
+      report: params.report,
+      estimatedBand,
+      taskAchievement: {
+        score: estimatedBand,
+        feedback: words < 150
+          ? 'The response is under-length, so Task Achievement is limited even if the ideas are relevant.'
+          : 'The report addresses the visual, but the score depends on overview clarity and data selection.',
+      },
+      overviewFeedback: hasOverview
+        ? 'A broad overview signal is present. Make sure it summarizes the whole visual, not just one data point.'
+        : 'No clear overview signal was detected. Add one concise overview before detailed figures.',
+      keyFeaturesFeedback: hasNumbers
+        ? 'The report refers to measurable information. Keep selecting only the largest changes and standout figures.'
+        : 'The report needs clearer key features with figures or concrete values from the visual.',
+      comparisonFeedback: comparisonExpected
+        ? (hasComparison
+          ? 'Comparison language is present. Use it to group categories, not just connect sentences.'
+          : 'Add comparison language such as higher than, whereas, in contrast, or the largest proportion.')
+        : 'For a process, focus on sequence and transformation rather than category comparison.',
+      dataAccuracyFeedback: hasNumbers
+        ? 'Numbers are included; check that every figure matches the brief and has a unit where needed.'
+        : 'No data reference was detected, so the report may sound too general for Academic Task 1.',
+      coherenceFeedback: 'Use four compact paragraphs: introduction, overview, key details group 1, key details group 2.',
+      languageCorrections: [
+        {
+          original: 'The chart explains why...',
+          correction: 'The chart shows that...',
+          explanation: 'Task 1 reports describe visible information; they should not invent causes.',
+        },
+      ],
+      mustFix,
+      rewriteTask: 'Rewrite the report with one overview sentence, two grouped detail paragraphs, and at least three accurate data references.',
+      reusableReportPatterns: patterns,
+      improvedReport,
+      modelExcerpt: improvedReport,
+      obsidianMarkdown: `# IELTS Writing Task 1 Note\n\n## Prompt\n${params.instruction}\n\n## Estimated Band\n${estimatedBand}\n\n## Must Fix\n${mustFix.map(item => `- ${item}`).join('\n')}\n\n## Reusable Patterns\n${patterns.map(item => `- ${item}`).join('\n')}`,
     };
   }
 

@@ -1,8 +1,12 @@
-export type IELTSModule = 'speaking' | 'writing';
+export type IELTSModule = 'speaking' | 'writing' | 'writing_task1';
 export type IELTSMode = 'practice' | 'mock';
 export type SpeakingPart = 1 | 2 | 3;
 export type WritingTask = 'task1' | 'task2';
-export type ProviderOperation = 'speaking_analysis' | 'writing_analysis' | 'writing_framework_extraction';
+export type ProviderOperation =
+  | 'speaking_analysis'
+  | 'writing_analysis'
+  | 'writing_task1_analysis'
+  | 'writing_framework_extraction';
 export type ProviderFailureKind = 'provider_unavailable' | 'parse_or_schema';
 
 export interface ProviderDiagnostic {
@@ -106,6 +110,37 @@ export interface WritingFeedback {
     canBeReusedFor: string[];
     explanationZh: string;
   }[];
+  obsidianMarkdown: string;
+}
+
+export interface WritingTask1Feedback {
+  mode: IELTSMode;
+  module: 'writing_task1';
+  task: 'task1';
+  taskType: string;
+  instruction: string;
+  visualBrief: string;
+  report: string;
+  estimatedBand: number;
+  taskAchievement: {
+    score: number;
+    feedback: string;
+  };
+  overviewFeedback: string;
+  keyFeaturesFeedback: string;
+  comparisonFeedback: string;
+  dataAccuracyFeedback: string;
+  coherenceFeedback: string;
+  languageCorrections: {
+    original: string;
+    correction: string;
+    explanation: string;
+  }[];
+  mustFix: string[];
+  rewriteTask: string;
+  reusableReportPatterns: string[];
+  improvedReport: string;
+  modelExcerpt?: string;
   obsidianMarkdown: string;
 }
 

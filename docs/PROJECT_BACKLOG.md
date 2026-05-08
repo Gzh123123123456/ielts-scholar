@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-08_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -38,13 +38,18 @@ _Last updated: 2026-05-07_
 ### 2b) Future UI Consistency Notes
 - Speaking Practice should not automatically inherit the full Writing Task 2 wide workspace.
 - Speaking may later receive a moderate-width layout adjustment only if transcript + feedback comparison requires it.
-- Future Writing Task 1 should inherit the Writing workspace design language from Writing Task 2:
+- **Done basic V1.2**: Writing Task 1 Academic now inherits the Writing workspace design language in a minimal two-column practice page:
   - wider desktop workspace
   - prompt/chart context area
   - writing editor
   - feedback area
   - reduced unnecessary vertical scrolling
-- Do not implement Writing Task 1 now.
+- Still pending for Task 1:
+  - General Training letters later
+  - interactive charts later
+  - richer Task 1 data accuracy mapping later
+  - official-source review of topic taxonomy and prompt coverage
+  - optional AI tagging later, kept separate from static prep taxonomy
 
 ## P1 — Learning Loop Depth
 
@@ -67,6 +72,7 @@ _Last updated: 2026-05-07_
 
 ### 2.5) Practice Persistence and History Access
 - **Done minimal V1.1**: local-first active attempts and recent records for Speaking Practice and Writing Task 2 Practice.
+- **Done basic V1.2**: local-first active attempts and history recognition for Writing Task 1 Academic Practice.
 - **Done minimal V1.1**: Speaking records are filtered by current part and can be deleted individually.
 - **Done minimal V1.1**: empty Speaking question loads are not saved as noisy drafts.
 - Still pending:
@@ -121,6 +127,7 @@ _Last updated: 2026-05-07_
 ## P2 — Mock Exam Productization
 
 ### 6) V2 Mock Exam
+- Starts after Speaking, Writing Task 1 Academic, and Writing Task 2 basic practice modules exist.
 - Strict timers.
 - Sequential Speaking Part 1/2/3 flow.
 - Writing Task 2 40-minute mock mode.

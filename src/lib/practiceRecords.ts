@@ -1,5 +1,5 @@
-import { SpeakingQuestion, WritingQuestion } from '@/src/data/questions/bank';
-import { ProviderDiagnostic, SpeakingFeedback, WritingFeedback } from '@/src/lib/ai/schemas';
+import { SpeakingQuestion, WritingQuestion, WritingTask1AcademicPrompt } from '@/src/data/questions/bank';
+import { ProviderDiagnostic, SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from '@/src/lib/ai/schemas';
 
 export type PracticeRecordStatus = 'draft' | 'analyzed' | 'provider_failed';
 
@@ -16,7 +16,7 @@ export interface ProviderDiagnosticSummary {
 
 interface PracticeRecordBase {
   id: string;
-  module: 'speaking' | 'writing';
+  module: 'speaking' | 'writing' | 'writing_task1';
   mode: 'practice';
   status: PracticeRecordStatus;
   question: string;
@@ -53,7 +53,29 @@ export interface WritingTask2PracticeRecord extends PracticeRecordBase {
   feedbackFallbackUsed?: boolean;
 }
 
-export type PracticeRecord = SpeakingPracticeRecord | WritingTask2PracticeRecord;
+export interface WritingTask1QuickPlan {
+  overview: string;
+  keyFeatures: string;
+  comparisons: string;
+  paragraphPlan: string;
+}
+
+export interface WritingTask1PracticeRecord extends PracticeRecordBase {
+  module: 'writing_task1';
+  task: 'task1';
+  questionData?: WritingTask1AcademicPrompt;
+  taskType: string;
+  topic: string;
+  tags: string[];
+  instruction: string;
+  visualBrief: string;
+  dataSummary: string[];
+  quickPlan: WritingTask1QuickPlan;
+  report: string;
+  feedback?: WritingTask1Feedback;
+}
+
+export type PracticeRecord = SpeakingPracticeRecord | WritingTask2PracticeRecord | WritingTask1PracticeRecord;
 
 export interface ActiveSpeakingPracticeSession {
   id: string;
@@ -65,6 +87,7 @@ export interface ActiveSpeakingPracticeSession {
 const RECORDS_KEY = 'ielts_practice_records_v1';
 const ACTIVE_SPEAKING_KEY = 'ielts_active_speaking_practice_v1';
 const ACTIVE_WRITING_TASK2_KEY = 'ielts_active_writing_task2_practice_v1';
+const ACTIVE_WRITING_TASK1_KEY = 'ielts_active_writing_task1_practice_v1';
 
 const nowIso = () => new Date().toISOString();
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -95,6 +118,18 @@ const asFrameworkChat = (value: unknown): WritingTask2PracticeRecord['frameworkC
 
 const asStringArray = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined;
+
+const asRequiredStringArray = (value: unknown) => asStringArray(value) || [];
+
+const asTask1QuickPlan = (value: unknown): WritingTask1QuickPlan => {
+  const source = isObject(value) ? value : {};
+  return {
+    overview: asString(source.overview),
+    keyFeatures: asString(source.keyFeatures),
+    comparisons: asString(source.comparisons),
+    paragraphPlan: asString(source.paragraphPlan),
+  };
+};
 
 const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined => {
   if (!isObject(value)) return undefined;
@@ -195,10 +230,78 @@ const sanitizeWritingTask2Record = (value: unknown): WritingTask2PracticeRecord 
   };
 };
 
+const sanitizeWritingTask1Feedback = (value: unknown): WritingTask1Feedback | undefined => {
+  if (!isObject(value)) return undefined;
+  const taskAchievement = isObject(value.taskAchievement) ? value.taskAchievement : {};
+  return {
+    ...(value as Partial<WritingTask1Feedback>),
+    mode: 'practice',
+    module: 'writing_task1',
+    task: 'task1',
+    taskType: asString(value.taskType),
+    instruction: asString(value.instruction),
+    visualBrief: asString(value.visualBrief),
+    report: asString(value.report),
+    estimatedBand: typeof value.estimatedBand === 'number' ? value.estimatedBand : 0,
+    taskAchievement: {
+      score: typeof taskAchievement.score === 'number' ? taskAchievement.score : 0,
+      feedback: asString(taskAchievement.feedback),
+    },
+    overviewFeedback: asString(value.overviewFeedback),
+    keyFeaturesFeedback: asString(value.keyFeaturesFeedback),
+    comparisonFeedback: asString(value.comparisonFeedback),
+    dataAccuracyFeedback: asString(value.dataAccuracyFeedback),
+    coherenceFeedback: asString(value.coherenceFeedback),
+    languageCorrections: Array.isArray(value.languageCorrections)
+      ? value.languageCorrections as WritingTask1Feedback['languageCorrections']
+      : [],
+    mustFix: asRequiredStringArray(value.mustFix),
+    rewriteTask: asString(value.rewriteTask),
+    reusableReportPatterns: asRequiredStringArray(value.reusableReportPatterns),
+    improvedReport: asString(value.improvedReport),
+    modelExcerpt: asOptionalString(value.modelExcerpt),
+    obsidianMarkdown: asString(value.obsidianMarkdown),
+  };
+};
+
+const sanitizeWritingTask1Record = (value: unknown): WritingTask1PracticeRecord | null => {
+  if (!isObject(value) || value.module !== 'writing_task1') return null;
+  const id = asString(value.id);
+  const instruction = asString(value.instruction, asString(value.question));
+  if (!id || !instruction) return null;
+  const timestamp = asString(value.updatedAt, asString(value.createdAt, nowIso()));
+
+  return {
+    ...(value as Partial<WritingTask1PracticeRecord>),
+    id,
+    module: 'writing_task1',
+    mode: 'practice',
+    status: asStatus(value.status),
+    task: 'task1',
+    question: asString(value.question, instruction),
+    questionId: asOptionalString(value.questionId),
+    topic: asString(value.topic, 'Academic Task 1'),
+    tags: asRequiredStringArray(value.tags),
+    taskType: asString(value.taskType, 'Academic Task 1'),
+    createdAt: asString(value.createdAt, timestamp),
+    updatedAt: timestamp,
+    analyzedAt: asOptionalString(value.analyzedAt),
+    instruction,
+    visualBrief: asString(value.visualBrief),
+    dataSummary: asRequiredStringArray(value.dataSummary),
+    quickPlan: asTask1QuickPlan(value.quickPlan),
+    report: asString(value.report),
+    feedback: sanitizeWritingTask1Feedback(value.feedback),
+    obsidianMarkdown: asOptionalString(value.obsidianMarkdown),
+  };
+};
+
 const sanitizePracticeRecord = (value: unknown): PracticeRecord | null =>
   isObject(value) && value.module === 'speaking'
     ? sanitizeSpeakingRecord(value)
-    : sanitizeWritingTask2Record(value);
+    : isObject(value) && value.module === 'writing_task1'
+      ? sanitizeWritingTask1Record(value)
+      : sanitizeWritingTask2Record(value);
 
 const sortTimestamp = (record: PracticeRecord) =>
   record.analyzedAt || record.updatedAt || record.createdAt || '';
@@ -315,4 +418,11 @@ export const deleteActiveWritingTask2 = (recordId: string) => {
   if (active?.id === recordId) {
     removeJson(ACTIVE_WRITING_TASK2_KEY);
   }
+};
+
+export const getActiveWritingTask1 = (): WritingTask1PracticeRecord | null =>
+  sanitizeWritingTask1Record(readJson<unknown>(ACTIVE_WRITING_TASK1_KEY, null));
+
+export const saveActiveWritingTask1 = (attempt: WritingTask1PracticeRecord) => {
+  writeJson(ACTIVE_WRITING_TASK1_KEY, { ...attempt, updatedAt: nowIso() });
 };

@@ -1,6 +1,11 @@
 import { MockProvider } from './providers/mockProvider';
 import { GeminiProvider } from './providers/geminiProvider';
-export { safeAnalyzeSpeaking, safeAnalyzeWriting, safeExtractWritingFramework } from './safety';
+export {
+  safeAnalyzeSpeaking,
+  safeAnalyzeWriting,
+  safeAnalyzeWritingTask1,
+  safeExtractWritingFramework,
+} from './safety';
 
 type ProviderConfig = 'mock' | 'gemini';
 

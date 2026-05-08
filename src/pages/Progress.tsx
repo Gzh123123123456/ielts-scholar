@@ -16,6 +16,7 @@ import {
   getPracticeRecords,
   PracticeRecord,
   SpeakingPracticeRecord,
+  WritingTask1PracticeRecord,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
 
@@ -60,6 +61,11 @@ const getWritingScore = (record: WritingTask2PracticeRecord) => {
   return values.every(isValidBand) ? average(values) : null;
 };
 
+const getWritingTask1Score = (record: WritingTask1PracticeRecord) => {
+  const score = record.feedback?.estimatedBand;
+  return isValidBand(score) ? score : null;
+};
+
 const isScoredSpeaking = (record: PracticeRecord): record is SpeakingPracticeRecord =>
   record.module === 'speaking' && record.status === 'analyzed' && getSpeakingScore(record as SpeakingPracticeRecord) !== null;
 
@@ -68,6 +74,11 @@ const isScoredWriting = (record: PracticeRecord): record is WritingTask2Practice
   (record as WritingTask2PracticeRecord).task === 'task2' &&
   record.status === 'analyzed' &&
   getWritingScore(record as WritingTask2PracticeRecord) !== null;
+
+const isScoredWritingTask1 = (record: PracticeRecord): record is WritingTask1PracticeRecord =>
+  record.module === 'writing_task1' &&
+  record.status === 'analyzed' &&
+  getWritingTask1Score(record as WritingTask1PracticeRecord) !== null;
 
 const speakingBank = [...speakingPart1, ...speakingPart2, ...speakingPart3];
 
@@ -134,9 +145,13 @@ const getSpeakingTopic = (record: SpeakingPracticeRecord): SpeakingTopicCategory
   return matched?.topicCategory || fromQuestionText(record.question, speakingKeywordFallback);
 };
 
-const getWritingTopic = (record: WritingTask2PracticeRecord): WritingTask2TopicCategory | null => {
+const getWritingTopic = (record: WritingTask2PracticeRecord | WritingTask1PracticeRecord): WritingTask2TopicCategory | null => {
   const metadataTopic = fromRecordMetadata(record, writingTask2TopicCategories);
   if (metadataTopic) return metadataTopic;
+
+  if (record.module === 'writing_task1') {
+    return fromQuestionText(`${record.topic} ${record.instruction} ${record.visualBrief}`, writingKeywordFallback);
+  }
 
   const matched = writingTask2.find(question =>
     question.id === record.questionId || normalizeText(question.question) === normalizeText(record.question)
@@ -242,6 +257,7 @@ export default function Progress() {
   const records = getPracticeRecords(80);
   const scoredSpeaking = records.filter(isScoredSpeaking);
   const scoredWriting = records.filter(isScoredWriting);
+  const scoredWritingTask1 = records.filter(isScoredWritingTask1);
   const speakingEstimate = average(scoredSpeaking.map(record => getSpeakingScore(record)).filter(isValidBand));
   const writingEstimate = average(scoredWriting.map(record => getWritingScore(record)).filter(isValidBand));
   const latestRecord = records[0];
@@ -251,6 +267,9 @@ export default function Progress() {
   const writingRecords = records.filter(record =>
     record.module === 'writing' && (record as WritingTask2PracticeRecord).task === 'task2'
   );
+  const writingTask1Records = records.filter((record): record is WritingTask1PracticeRecord =>
+    record.module === 'writing_task1'
+  );
   const speakingCoverage = countTopics(
     speakingTopicCategories,
     speakingRecords,
@@ -258,8 +277,8 @@ export default function Progress() {
   );
   const writingCoverage = countTopics(
     writingTask2TopicCategories,
-    writingRecords,
-    record => getWritingTopic(record as WritingTask2PracticeRecord),
+    [...writingRecords, ...writingTask1Records],
+    record => getWritingTopic(record as WritingTask2PracticeRecord | WritingTask1PracticeRecord),
   );
   const unfinishedDrafts = records.filter(record => record.status === 'draft').length;
   const trainingSuggestions = buildTrainingSuggestions(
@@ -308,7 +327,9 @@ export default function Progress() {
             <div className="text-sm font-bold uppercase tracking-widest text-paper-ink pt-2 font-sans leading-7">
               Speaking {scoredSpeaking.length}
               <br />
-              Writing {scoredWriting.length}
+              Writing T2 {scoredWriting.length}
+              <br />
+              Writing T1 {scoredWritingTask1.length}
             </div>
           </PaperCard>
 
@@ -366,7 +387,7 @@ export default function Progress() {
 
         <div className="grid lg:grid-cols-2 gap-8">
           <TopicCoverage title="Speaking Topic Coverage" coverage={speakingCoverage} />
-          <TopicCoverage title="Writing Task 2 Topic Coverage" coverage={writingCoverage} />
+          <TopicCoverage title="Writing Topic Coverage" coverage={writingCoverage} />
         </div>
 
         <p className="text-xs italic text-paper-ink/45 text-center">

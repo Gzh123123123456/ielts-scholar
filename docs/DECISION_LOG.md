@@ -1,5 +1,25 @@
 # Decision Log
 
+## [2026-05-08] Writing Task 1 Academic Before Mock Exam
+- **Decision**: Implement Academic Writing Task 1 Basic Practice before starting V2 Mock Exam.
+- **Reason**: Mock Exam should come after the core practice modules exist: Speaking, Writing Task 1 Academic, and Writing Task 2.
+- **Implemented**:
+  - Replaced the Writing Task 1 placeholder with a minimal Academic Task 1 practice page.
+  - Added a small original Academic Task 1 prompt bank with task type, topic/tags, instruction, text visual brief, data details, expected overview/key features/comparisons, common traps, and reusable report patterns.
+  - Added Task 1-specific feedback schema, provider interface support, safe wrapper diagnostics, and Mock Provider analysis.
+  - Saved Task 1 local-first records under the stable practice-record list without clearing old records.
+  - Practice History and Progress recognize Writing Task 1 records minimally.
+- **Explicitly unchanged**: no GT letters, no interactive charts, no OCR/image upload, no RAG, no database, no server, no auth, no provider-default change, no Mock Exam.
+
+## [2026-05-08] Text-Based Visual Briefs First
+- **Decision**: Use text-based visual briefs and simple data cards for Academic Task 1 V1.2.
+- **Reason**: This keeps the module usable locally without chart rendering complexity, upload/OCR scope, or visual-interaction work.
+- **Later**: interactive chart rendering, richer data accuracy mapping, and official-source review remain future roadmap items.
+
+## [2026-05-08] Reusable Report Patterns, Not Memorized Templates
+- **Decision**: Task 1 feedback should provide reusable report moves/patterns rather than fixed memorized templates.
+- **Reason**: Learners need transferable structure for overview, grouping, comparison, sequence, and map description without producing formulaic reports.
+
 ## [2026-05-08] Persist Prep Topic Metadata and Protect Local Records
 - **Decision**: Persist static preparation topic metadata on new practice records and protect the local-first record store from automatic cleanup.
 - **Reason**: Progress recommendations should work from stable local evidence, while local practice records must not disappear during app start, route navigation, dev-server restart, or malformed-data handling.

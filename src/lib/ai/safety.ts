@@ -2,6 +2,7 @@ import {
   AIProvider,
   SpeakingAnalysisRequest,
   WritingAnalysisRequest,
+  WritingTask1AnalysisRequest,
   WritingFrameworkRequest,
 } from './providers/base';
 import {
@@ -10,11 +11,13 @@ import {
   SpeakingPart,
   WritingFeedback,
   WritingFrameworkSummary,
+  WritingTask1Feedback,
   WritingTask,
 } from './schemas';
 
 type SpeakingRequest = SpeakingAnalysisRequest;
 type WritingRequest = WritingAnalysisRequest;
+type WritingTask1Request = WritingTask1AnalysisRequest;
 type FrameworkRequest = WritingFrameworkRequest;
 
 interface SafeAnalyzeResult<T> {
@@ -478,6 +481,155 @@ const normalizeWritingFeedback = (
   };
 };
 
+const buildWritingTask1Markdown = (feedback: Omit<WritingTask1Feedback, 'obsidianMarkdown'>): string =>
+  `# IELTS Writing Task 1 Note
+
+## Prompt
+${feedback.instruction}
+
+## Visual Brief
+${feedback.visualBrief}
+
+## Estimated Band
+${feedback.estimatedBand}
+
+## Must Fix
+${feedback.mustFix.length ? feedback.mustFix.map(item => `- ${item}`).join('\n') : '- No critical Task 1 issue returned.'}
+
+## Rewrite Task
+${feedback.rewriteTask}
+
+## Reusable Report Patterns
+${feedback.reusableReportPatterns.length ? feedback.reusableReportPatterns.map(item => `- ${item}`).join('\n') : '- No reusable pattern returned.'}
+
+## Improved Report / Model Excerpt
+${feedback.improvedReport || feedback.modelExcerpt || FALLBACK_TEXT}`;
+
+const normalizeTaskAchievement = (
+  value: unknown,
+  estimatedBand: number,
+  errors: string[],
+): WritingTask1Feedback['taskAchievement'] => {
+  const record = isRecord(value) ? value : {};
+  if (!isRecord(value)) errors.push('taskAchievement missing or invalid object');
+  return {
+    score: asNumber(record.score, 'taskAchievement.score', errors, estimatedBand),
+    feedback: asString(
+      record.feedback,
+      'Task Achievement feedback was incomplete and normalized safely.',
+      'taskAchievement.feedback',
+      errors,
+    ),
+  };
+};
+
+const normalizeLanguageCorrections = (
+  value: unknown,
+  errors: string[],
+): WritingTask1Feedback['languageCorrections'] =>
+  asArray(value, 'languageCorrections', errors).map((item, index) => {
+    const record = isRecord(item) ? item : {};
+    if (!isRecord(item)) errors.push(`languageCorrections[${index}] missing or invalid object`);
+    return {
+      original: asString(record.original, FALLBACK_TEXT, `languageCorrections[${index}].original`, errors),
+      correction: asString(record.correction, FALLBACK_TEXT, `languageCorrections[${index}].correction`, errors),
+      explanation: asString(
+        record.explanation,
+        'Provider feedback was incomplete; this item was normalized safely.',
+        `languageCorrections[${index}].explanation`,
+        errors,
+      ),
+    };
+  });
+
+const normalizeWritingTask1Feedback = (
+  value: unknown,
+  request: WritingTask1Request,
+  validationErrors: string[],
+  normalizedFields: string[],
+): WritingTask1Feedback => {
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+  const estimatedBand = asNumber(source.estimatedBand, 'estimatedBand', validationErrors);
+  const improvedReportFallback = typeof source.modelExcerpt === 'string' && source.modelExcerpt.trim()
+    ? source.modelExcerpt
+    : 'The provider returned incomplete feedback. Please retry analysis.';
+
+  const feedbackWithoutMarkdown: Omit<WritingTask1Feedback, 'obsidianMarkdown'> = {
+    mode: source.mode === 'mock' ? 'mock' : 'practice',
+    module: 'writing_task1',
+    task: 'task1',
+    taskType: asString(source.taskType, request.taskType || 'Academic Task 1', 'taskType', validationErrors),
+    instruction: asString(source.instruction, request.instruction || FALLBACK_TEXT, 'instruction', validationErrors),
+    visualBrief: asString(source.visualBrief, request.visualBrief || FALLBACK_TEXT, 'visualBrief', validationErrors),
+    report: asString(source.report, request.report || FALLBACK_TEXT, 'report', validationErrors),
+    estimatedBand,
+    taskAchievement: normalizeTaskAchievement(source.taskAchievement, estimatedBand, validationErrors),
+    overviewFeedback: asString(
+      source.overviewFeedback,
+      'Overview feedback was incomplete and normalized safely.',
+      'overviewFeedback',
+      validationErrors,
+    ),
+    keyFeaturesFeedback: asString(
+      source.keyFeaturesFeedback,
+      'Key features feedback was incomplete and normalized safely.',
+      'keyFeaturesFeedback',
+      validationErrors,
+    ),
+    comparisonFeedback: asString(
+      source.comparisonFeedback,
+      'Comparison feedback was incomplete and normalized safely.',
+      'comparisonFeedback',
+      validationErrors,
+    ),
+    dataAccuracyFeedback: asString(
+      source.dataAccuracyFeedback,
+      'Data accuracy feedback was incomplete and normalized safely.',
+      'dataAccuracyFeedback',
+      validationErrors,
+    ),
+    coherenceFeedback: asString(
+      source.coherenceFeedback,
+      'Coherence feedback was incomplete and normalized safely.',
+      'coherenceFeedback',
+      validationErrors,
+    ),
+    languageCorrections: normalizeLanguageCorrections(source.languageCorrections, validationErrors),
+    mustFix: normalizeStringArray(source.mustFix, 'mustFix', validationErrors),
+    rewriteTask: asString(
+      source.rewriteTask,
+      'Rewrite the report with a clear overview, grouped key features, and accurate data references.',
+      'rewriteTask',
+      validationErrors,
+    ),
+    reusableReportPatterns: normalizeStringArray(
+      source.reusableReportPatterns,
+      'reusableReportPatterns',
+      validationErrors,
+    ),
+    improvedReport: asString(
+      source.improvedReport,
+      improvedReportFallback,
+      'improvedReport',
+      validationErrors,
+    ),
+    modelExcerpt: typeof source.modelExcerpt === 'string' && source.modelExcerpt.trim()
+      ? source.modelExcerpt
+      : undefined,
+  };
+
+  return {
+    ...feedbackWithoutMarkdown,
+    obsidianMarkdown: typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()
+      ? source.obsidianMarkdown
+      : (() => {
+          normalizedFields.push('obsidianMarkdown');
+          return buildWritingTask1Markdown(feedbackWithoutMarkdown);
+        })(),
+  };
+};
+
 const buildEditableFrameworkSummary = (summary: Omit<WritingFrameworkSummary, 'editableSummary'>): string =>
   `Position:\n${summary.position}\n\nView A:\n${summary.viewA}\n\nView B:\n${summary.viewB}\n\nMy opinion:\n${summary.myOpinion}\n\nParagraph plan:\n${summary.paragraphPlan}\n\nPossible example:\n${summary.possibleExample}`;
 
@@ -623,6 +775,53 @@ export const safeAnalyzeWriting = async (
       validationErrors,
       fallbackUsed,
       failureKind,
+      timestamp: new Date().toISOString(),
+    },
+  };
+};
+
+export const safeAnalyzeWritingTask1 = async (
+  provider: AIProvider,
+  providerName: string,
+  requestPayload: WritingTask1Request,
+): Promise<SafeAnalyzeResult<WritingTask1Feedback>> => {
+  let rawResponse: unknown = null;
+  let parsedJson: unknown = null;
+  let parseError: string | undefined;
+  const validationErrors: string[] = [];
+  const normalizedFields: string[] = [];
+
+  try {
+    if (!provider.analyzeWritingTask1) {
+      throw new Error('Provider does not implement analyzeWritingTask1');
+    }
+
+    rawResponse = await provider.analyzeWritingTask1(requestPayload);
+    const parsed = parseRawResponse(rawResponse);
+    parsedJson = parsed.parsedJson;
+    parseError = parsed.parseError;
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const feedback = normalizeWritingTask1Feedback(parsedJson, requestPayload, validationErrors, normalizedFields);
+  const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
+
+  return {
+    feedback,
+    diagnostic: {
+      module: 'writing_task1',
+      operation: 'writing_task1_analysis',
+      providerName,
+      requestPayload,
+      rawResponse,
+      parsedJson,
+      parseError,
+      validationErrors,
+      fallbackUsed,
+      failureKind,
+      normalizedFields,
       timestamp: new Date().toISOString(),
     },
   };

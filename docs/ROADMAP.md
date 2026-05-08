@@ -1,11 +1,11 @@
 # Roadmap
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-08_
 
-## V1.1 — API Readiness + Framework Intelligence
+## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
-- Add Gemini provider as optional path.
-  - Done in Slice 1 as env-configured local-development path.
+- Add Gemini provider as an optional local-development path.
+  - Done as env-configured local-development support.
   - Mock Provider remains default.
   - No UI provider toggle or production key management yet.
 - Add Debug Panel diagnostics for raw response, parsed JSON, and parse errors.
@@ -13,10 +13,11 @@ _Last updated: 2026-05-07_
 - Add local-first practice reliability for current practice modules.
   - Done: Speaking and Writing Task 2 active attempts and recent records.
   - Done: Speaking records filtered by part and individual Speaking record deletion.
-- Add a small original V1 prompt bank for local testing.
+- Add a small original prompt bank for local testing.
   - Done: Speaking Part 1/2/3 and Writing Task 2 prompt coverage sufficient for local QA.
 - Improve Speaking feedback readability and high-band usefulness.
   - Done: wider result layout, prominent upgraded answer, and Band 9 Refinement section.
+- Current stage: V1.1 closing.
 
 ### Writing Task 2 Framework Intelligence
 - Add **Generate Framework Summary** / **Extract Final Framework**.
@@ -29,43 +30,37 @@ _Last updated: 2026-05-07_
   - Possible example
 - Require user edit/confirmation before entering Phase 2.
 
-## V1.2 — Session-Level Note System
-- Add **Finish Session / Export Session Note**.
-- Aggregate multi-attempt learning across a full study session.
-- Include repeated error patterns, improvements, best upgraded answers, reusable expressions, and review cards.
-- Add **Speaking Stuck-Point Assist / Chinese Idea Support** (post-review optional note):
-  - Learner can add a Chinese note after Stop & Review to explain intended meaning.
-  - AI converts intended meaning into natural IELTS Speaking English.
-  - AI provides reusable expressions and a suggested continuation from the stuck point.
-  - No real-time bilingual speech recognition in this phase.
+## V1.2 - Writing Task 1 Academic Basic Practice
+- Add a minimal Academic Task 1 practice page.
+- Use text-based visual briefs and simple data cards, not interactive charts.
+- Cover line graph, bar chart, table, pie chart, mixed chart, process, and map prompts.
+- Add Task 1-specific feedback, reusable report patterns, and local-first Task 1 records.
+- Defer General Training letters.
+- Session-level notes are deferred until their user value and scope are clearer.
 
-## V1.3 — Feedback Granularity Upgrade
+## V1.3 - Feedback Granularity Upgrade
 - Sentence numbering and correction-to-source mapping.
 - Click-to-locate correction.
-- Inline annotation later (not full editor yet).
+- Inline annotation later, not a full editor yet.
 
-## V2 — Mock Exam Update
-- Dedicated Speaking and Writing Task 2 mock flows.
+## V2 - Mock Exam Update
+- Dedicated Speaking, Writing Task 1, and Writing Task 2 mock flows after the three basic practice modules exist.
 - Strict timers and sequential Speaking Part 1/2/3.
 - Writing Task 2 40-minute mock mode.
 - End-of-session report.
 - Practice and Mock modes remain separate.
 
-## V3 — Data & Visualization
-- Task 1 Academic charts with interaction.
-- Writing Task 1 should follow the established Writing workspace system when implemented:
-  - wider desktop workspace
-  - prompt/chart context area
-  - writing editor
-  - feedback area
-  - reduced unnecessary vertical scrolling
+## V3 - Data & Visualization
+- Task 1 Academic charts with interaction and richer data accuracy mapping.
 - Task 1 General Training letter prompts.
-- Audio recording storage (MediaRecorder) and simple playback.
+- Optional richer topic taxonomy review, official-source review, and optional AI tagging later.
+- Optional manual backup/export for local practice records before any future storage migration.
+- Audio recording storage with MediaRecorder and simple playback.
 
-## V4 — Knowledge & RAG (Later)
+## V4 - Knowledge & RAG (Later)
 - PDF RAG for personal IELTS materials.
 - Local filesystem access options.
-- Advanced pronunciation scoring integration (after reliable audio scoring path).
+- Advanced pronunciation scoring integration after a reliable audio scoring path exists.
 
 ## Future UI Polish
 - Speaking UI polish may be considered later, but should remain lighter than Writing because Speaking has lower simultaneous information density.

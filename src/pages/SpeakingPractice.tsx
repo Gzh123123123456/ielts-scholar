@@ -169,12 +169,18 @@ export default function SpeakingPractice() {
     persistCurrentSpeakingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
   }, [part, question, step, transcript, feedback, providerErrorMessage]);
 
-  const loadRandomQuestion = (p: 1 | 2 | 3, excludeQuestionId?: string) => {
+  const getQuestionTopicKey = (item: SpeakingQuestion) => item.topicCategory || item.topic;
+
+  const loadRandomQuestion = (p: 1 | 2 | 3, excludeQuestionId?: string, avoidTopicKey?: string) => {
     const bank = p === 1 ? speakingPart1 : p === 2 ? speakingPart2 : speakingPart3;
     const available = excludeQuestionId
       ? bank.filter(item => item.id !== excludeQuestionId)
       : bank;
-    const random = (available.length ? available : bank)[Math.floor(Math.random() * (available.length ? available.length : bank.length))];
+    const differentTopicAvailable = avoidTopicKey
+      ? available.filter(item => getQuestionTopicKey(item) !== avoidTopicKey)
+      : [];
+    const candidates = differentTopicAvailable.length ? differentTopicAvailable : available.length ? available : bank;
+    const random = candidates[Math.floor(Math.random() * candidates.length)];
     activeAttemptIdRef.current = createRecordId('sp');
     setQuestion(random);
     setPart(p);
@@ -234,7 +240,7 @@ export default function SpeakingPractice() {
       saveActiveSpeakingSession(activeSessionRef.current);
     }
 
-    loadRandomQuestion(part, question?.id);
+    loadRandomQuestion(part, question?.id, question ? getQuestionTopicKey(question) : undefined);
   };
 
   const practiceThisQuestionAgain = () => {

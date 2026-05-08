@@ -29,13 +29,13 @@ export default function Writing() {
             </Link>
 
             <Link to="/writing/task1">
-              <PaperCard className="hover:border-accent-terracotta/30 transition-all cursor-pointer opacity-80 group">
-                <h3 className="text-lg mb-2">Task 1: Data / Letter</h3>
+              <PaperCard className="hover:border-accent-terracotta/30 transition-all cursor-pointer group">
+                <h3 className="text-lg mb-2">Task 1: Academic Visual Report</h3>
                 <p className="text-sm text-paper-ink/60 italic">
-                  Summarize charts, diagrams or write a formal letter. 150+ words.
+                  Summarize text-based charts, tables, processes, and maps. 150+ words.
                 </p>
                 <div className="mt-4 text-[10px] uppercase font-sans tracking-widest text-paper-ink/40">
-                  Planned for V3
+                  Implemented: Basic Academic Practice
                 </div>
               </PaperCard>
             </Link>

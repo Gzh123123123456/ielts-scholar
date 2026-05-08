@@ -57,6 +57,31 @@ const writingSchemaInstruction = `The JSON object must match this exact key stru
   "obsidianMarkdown": "string"
 }`;
 
+const writingTask1SchemaInstruction = `The JSON object must match this exact key structure:
+{
+  "mode": "practice",
+  "module": "writing_task1",
+  "task": "task1",
+  "taskType": "string",
+  "instruction": "string",
+  "visualBrief": "string",
+  "report": "string",
+  "estimatedBand": 0,
+  "taskAchievement": { "score": 0, "feedback": "string" },
+  "overviewFeedback": "string",
+  "keyFeaturesFeedback": "string",
+  "comparisonFeedback": "string",
+  "dataAccuracyFeedback": "string",
+  "coherenceFeedback": "string",
+  "languageCorrections": [{ "original": "string", "correction": "string", "explanation": "string" }],
+  "mustFix": ["string"],
+  "rewriteTask": "string",
+  "reusableReportPatterns": ["string"],
+  "improvedReport": "string",
+  "modelExcerpt": "string",
+  "obsidianMarkdown": "string"
+}`;
+
 const frameworkSchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
@@ -134,6 +159,35 @@ Keep Chinese explanations concise and practical.
 Set "task" to the exact input task value. For this V1 flow it is normally "task2".
 
 ${writingSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`);
+  }
+
+  async analyzeWritingTask1(params: {
+    task: 'task1';
+    taskType: string;
+    instruction: string;
+    visualBrief: string;
+    dataSummary: string;
+    report: string;
+    expectedOverview?: string;
+    expectedKeyFeatures?: string[];
+    expectedComparisons?: string[];
+    commonTraps?: string[];
+    reusablePatterns?: string[];
+  }): Promise<string> {
+    return this.generateJson(`${strictJsonInstruction}
+
+You are an IELTS Academic Writing Task 1 feedback engine for a local-first practice app.
+Assess only the user's report against the supplied text visual brief and data.
+Do not implement General Training letters.
+Do not invent image details beyond the given brief.
+Do not explain causes unless the visual brief explicitly gives causes.
+Focus on overview quality, key feature selection, useful comparison, data accuracy, coherence, and concise academic reporting.
+Keep feedback concise and Task 1-specific.
+
+${writingTask1SchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);
