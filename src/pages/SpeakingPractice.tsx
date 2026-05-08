@@ -569,7 +569,7 @@ export default function SpeakingPractice() {
   const developmentPlan = answerDevelopmentPlan(part, question?.question);
 
   return (
-    <PageShell size={step === 'results' ? 'wide' : 'medium'}>
+    <PageShell size="wide">
       <TopBar />
       
       <div className="flex flex-col gap-3 mb-8 sm:flex-row sm:items-center sm:justify-center">
@@ -599,7 +599,7 @@ export default function SpeakingPractice() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-12 gap-8 items-start mb-12">
+      <div className="practice-workspace grid lg:grid-cols-12 gap-8 items-start mb-12">
         <div className={`lg:col-span-12 ${step === 'results' ? 'xl:col-span-12 space-y-6' : 'xl:col-span-12 xl:grid xl:grid-cols-[minmax(360px,0.9fr)_minmax(460px,1.1fr)] xl:gap-6 xl:items-start space-y-6 xl:space-y-0'}`}>
           <PaperCard className="relative overflow-hidden">
             <div className="flex justify-between items-start mb-6">
@@ -717,7 +717,7 @@ export default function SpeakingPractice() {
         {step === 'results' && feedback && (
         <div className="lg:col-span-12">
           
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto">
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">Language Performance</h3>
                 <div className="flex flex-wrap items-end gap-4 mb-8">
