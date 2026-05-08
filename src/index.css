@@ -87,6 +87,11 @@
   max-width: 84rem;
 }
 
+.landing-workspace--centered {
+  @apply flex-1 flex flex-col justify-center;
+  padding-bottom: 4rem;
+}
+
 .reading-comfort {
   @apply text-base leading-8;
 }

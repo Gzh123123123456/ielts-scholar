@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileDown, History } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { FileDown } from 'lucide-react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -136,6 +135,7 @@ ${feedback.improvedReport || feedback.modelExcerpt || 'No improved report return
 export default function WritingTask1Placeholder() {
   const activeRecord = useMemo(() => getActiveWritingTask1(), []);
   const initialActiveRecordRef = useRef(activeRecord);
+  const isInitialRestoreRef = useRef(Boolean(activeRecord));
   const initialPrompt = writingTask1Academic.find(prompt => prompt.id === activeRecord?.questionId) || writingTask1Academic[0];
 
   const [recordId, setRecordId] = useState(activeRecord?.id || createRecordId('writing_task1'));
@@ -192,6 +192,10 @@ export default function WritingTask1Placeholder() {
   };
 
   useEffect(() => {
+    if (isInitialRestoreRef.current) {
+      isInitialRestoreRef.current = false;
+      return;
+    }
     const record = buildRecord();
     saveActiveWritingTask1(record);
     upsertPracticeRecord(record);
@@ -295,12 +299,6 @@ export default function WritingTask1Placeholder() {
           Academic Writing Task 1
         </p>
         <h2 className="text-3xl mb-2">Describe the Visual Brief</h2>
-      </div>
-
-      <div className="mb-8 flex justify-end">
-        <Link to="/practice-history" className="inline-flex items-center gap-2 text-sm italic text-paper-ink/45 hover:text-accent-terracotta">
-          View history <History className="w-4 h-4" />
-        </Link>
       </div>
 
       {providerErrorMessage && (

@@ -137,6 +137,7 @@ Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 Avoid endless sentence-level nitpicking. If the answer is already strong, return an empty fatalErrors array and say no critical correction is needed through naturalnessHints or upgradedAnswer.
 Do not cap upgraded answers at Band 7; make the upgradedAnswer genuinely high-band while preserving the learner's core idea.
+If the transcript is extremely short, nonsensical, or too thin for the part, do not write a long upgradedAnswer. Return an insufficient-sample message with a short starter outline instead. Be stricter for Part 2 and Part 3 than Part 1.
 Use fatalErrors only for true mistakes. Use band9Refinements for high-level examiner-friendly refinements, especially when fatalErrors is empty or short.
 Band 9 refinements should cover over-formal or AI-like phrasing, unnatural spoken rhythm, overlong Part 1 answers, missed chances for concise natural development, and ways to sound more spontaneous.
 For Part 1, prefer concise natural spoken answers over long academic answers. For Part 2 and Part 3, allow more development but still check spoken delivery.

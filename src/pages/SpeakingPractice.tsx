@@ -17,8 +17,7 @@ import {
   summarizeDiagnostic,
   upsertPracticeRecord,
 } from '@/src/lib/practiceRecords';
-import { Link } from 'react-router-dom';
-import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Volume2, Info, History } from 'lucide-react';
+import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Volume2, Info } from 'lucide-react';
 
 export default function SpeakingPractice() {
   const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
@@ -63,6 +62,9 @@ export default function SpeakingPractice() {
   const buildCurrentSpeakingRecord = (status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft'): SpeakingPracticeRecord | null => {
     if (!question) return null;
     const timestamp = new Date().toISOString();
+    const existing = activeSessionRef.current?.attemptsByPart[part]?.id === activeAttemptIdRef.current
+      ? activeSessionRef.current.attemptsByPart[part]
+      : undefined;
     return {
       id: activeAttemptIdRef.current,
       module: 'speaking',
@@ -74,9 +76,9 @@ export default function SpeakingPractice() {
       topic: question.topicCategory || question.topic,
       tags: question.tags || (question.topicCategory ? [question.topicCategory] : undefined),
       questionData: question,
-      createdAt: timestamp,
+      createdAt: existing?.createdAt || timestamp,
       updatedAt: timestamp,
-      analyzedAt: status === 'analyzed' ? timestamp : undefined,
+      analyzedAt: status === 'analyzed' ? existing?.analyzedAt || timestamp : existing?.analyzedAt,
       transcript,
       transcriptOrigin: transcriptOriginRef.current,
       feedback: status === 'provider_failed' ? undefined : feedback || undefined,
@@ -184,7 +186,7 @@ export default function SpeakingPractice() {
     persistCurrentSpeakingAttempt();
     const existing = activeSessionRef.current?.attemptsByPart[p];
     if (existing) {
-      restoreSpeakingRecord(existing, `Restored saved Part ${p} attempt.`);
+      restoreSpeakingRecord(existing);
       activeSessionRef.current = {
         ...activeSessionRef.current,
         currentPart: p,
@@ -514,8 +516,8 @@ export default function SpeakingPractice() {
     <PageShell size={step === 'results' ? 'wide' : 'medium'}>
       <TopBar />
       
-      <div className="flex flex-col gap-3 mb-8 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-3 p-1.5 bg-paper-ink/5 rounded-sm self-start font-sans text-sm uppercase tracking-widest font-bold">
+      <div className="flex flex-col gap-3 mb-8 sm:flex-row sm:items-center sm:justify-center">
+        <div className="flex gap-3 p-1.5 bg-paper-ink/5 rounded-sm self-start sm:self-auto font-sans text-sm uppercase tracking-widest font-bold">
           {[1, 2, 3].map((p) => (
             <button
               key={p}
@@ -531,23 +533,13 @@ export default function SpeakingPractice() {
             </button>
           ))}
         </div>
-        <Link to="/practice-history" className="inline-flex items-center gap-2 text-sm italic text-paper-ink/45 hover:text-accent-terracotta">
-          View history <History className="w-4 h-4" />
-        </Link>
       </div>
 
-      {(restoreMessage || providerErrorMessage) && (
+      {providerErrorMessage && (
         <div className="mb-6 space-y-2">
-          {restoreMessage && (
-            <div className="inline-flex p-2 bg-paper-ink/5 border border-paper-ink/10 rounded-sm text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
-              {restoreMessage}
-            </div>
-          )}
-          {providerErrorMessage && (
-            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
-              {providerErrorMessage}
-            </div>
-          )}
+          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
+            {providerErrorMessage}
+          </div>
         </div>
       )}
 
@@ -711,7 +703,7 @@ export default function SpeakingPractice() {
                     <div className="space-y-4">
                       {feedback.fatalErrors.map((err, i) => (
                         <PaperCard key={i} className="p-5 border-l-2 border-l-red-800">
-                          <div className="text-sm line-through text-paper-ink/45 mb-2 leading-6">{err.original}</div>
+                          <div className="text-base line-through text-paper-ink/60 mb-2 leading-7">{err.original}</div>
                           <div className="text-xl font-bold text-red-800 mb-3 leading-8">{err.correction}</div>
                           <p className="text-[17px] leading-8 text-paper-ink/90 bg-paper-ink/[0.05] border border-paper-ink/10 p-4 rounded-sm">{err.explanationZh}</p>
                         </PaperCard>
@@ -730,7 +722,7 @@ export default function SpeakingPractice() {
                     <div className="space-y-4">
                       {feedback.naturalnessHints.map((hint, i) => (
                         <PaperCard key={i} className="p-5 border-l-2 border-l-[#a64d32]/40">
-                          <div className="text-sm text-paper-ink/45 mb-2 italic leading-6">"{hint.original}" </div>
+                          <div className="text-base text-paper-ink/60 mb-2 italic leading-7">"{hint.original}" </div>
                           <div className="text-xl font-bold text-[#a64d32] mb-3 leading-8">Better: {hint.better}</div>
                           <p className="text-[17px] leading-8 text-paper-ink/90 bg-paper-ink/[0.05] border border-paper-ink/10 p-4 rounded-sm">{hint.explanationZh}</p>
                         </PaperCard>
@@ -771,7 +763,7 @@ export default function SpeakingPractice() {
                     {feedback.preservedStyle.slice(0, 4).map((style, i) => (
                       <div key={i} className="border-l-2 border-l-accent-terracotta/30 pl-4 py-1">
                         <p className="text-lg italic text-paper-ink leading-8">"{style.text}"</p>
-                        <div className="text-[10px] mt-1 opacity-60">— {style.reasonZh}</div>
+                        <div className="text-base leading-8 mt-2 text-paper-ink/75">{style.reasonZh}</div>
                       </div>
                     ))}
                   </div>
@@ -779,18 +771,16 @@ export default function SpeakingPractice() {
               )}
 
               <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
-                <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-                  <div>
-                    <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">High-Band Transformation</h4>
-                    <p className="text-2xl italic leading-10 text-paper-ink font-serif max-w-4xl">
-                      "{feedback.upgradedAnswer}"
-                    </p>
-                  </div>
-                  <div className="lg:pt-12">
-                    <SerifButton onClick={exportMarkdown} className="w-full lg:w-auto text-xs flex items-center justify-center gap-2 py-3 whitespace-nowrap" variant="outline">
-                      <FileDown className="w-4 h-4" /> Export to Obsidian (.md)
-                    </SerifButton>
-                  </div>
+                <div className="mx-auto max-w-5xl text-center">
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">High-Band Transformation</h4>
+                  <p className="text-2xl italic leading-10 text-paper-ink font-serif">
+                    "{feedback.upgradedAnswer}"
+                  </p>
+                </div>
+                <div className="mt-8 flex justify-center border-t border-paper-ink/10 pt-6">
+                  <SerifButton onClick={exportMarkdown} className="w-full sm:w-auto text-xs flex items-center justify-center gap-2 py-3" variant="outline">
+                    <FileDown className="w-4 h-4" /> Export Markdown
+                  </SerifButton>
                 </div>
               </PaperCard>
             </div>

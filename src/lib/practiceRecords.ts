@@ -306,7 +306,7 @@ const sanitizePracticeRecord = (value: unknown): PracticeRecord | null =>
       : sanitizeWritingTask2Record(value);
 
 const sortTimestamp = (record: PracticeRecord) =>
-  record.analyzedAt || record.updatedAt || record.createdAt || '';
+  record.analyzedAt || record.createdAt || record.updatedAt || '';
 
 const readJson = <T>(key: string, fallback: T): T => {
   try {
@@ -361,7 +361,7 @@ export const upsertPracticeRecord = (record: PracticeRecord) => {
     ...existing,
     ...record,
     createdAt: record.createdAt || existing?.createdAt || nowIso(),
-    updatedAt: record.updatedAt || nowIso(),
+    updatedAt: record.updatedAt || existing?.updatedAt || nowIso(),
     analyzedAt: record.analyzedAt || existing?.analyzedAt,
     providerDiagnostic: record.providerDiagnostic || existing?.providerDiagnostic,
     obsidianMarkdown: record.obsidianMarkdown || existing?.obsidianMarkdown,
@@ -412,7 +412,7 @@ export const getActiveWritingTask2 = (): WritingTask2PracticeRecord | null =>
   sanitizeWritingTask2Record(readJson<unknown>(ACTIVE_WRITING_TASK2_KEY, null));
 
 export const saveActiveWritingTask2 = (attempt: WritingTask2PracticeRecord) => {
-  writeJson(ACTIVE_WRITING_TASK2_KEY, { ...attempt, updatedAt: nowIso() });
+  writeJson(ACTIVE_WRITING_TASK2_KEY, attempt);
 };
 
 export const deleteActiveWritingTask2 = (recordId: string) => {
@@ -426,7 +426,7 @@ export const getActiveWritingTask1 = (): WritingTask1PracticeRecord | null =>
   sanitizeWritingTask1Record(readJson<unknown>(ACTIVE_WRITING_TASK1_KEY, null));
 
 export const saveActiveWritingTask1 = (attempt: WritingTask1PracticeRecord) => {
-  writeJson(ACTIVE_WRITING_TASK1_KEY, { ...attempt, updatedAt: nowIso() });
+  writeJson(ACTIVE_WRITING_TASK1_KEY, attempt);
 };
 
 export const deleteActiveWritingTask1 = (recordId: string) => {

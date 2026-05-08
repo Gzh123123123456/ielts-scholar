@@ -11,8 +11,8 @@ export default function Speaking() {
     <PageShell size="wide">
       <TopBar />
       
-      <div className="landing-workspace">
-        <div className="grid md:grid-cols-2 gap-8 mb-12">
+      <div className="landing-workspace landing-workspace--centered">
+        <div className="grid md:grid-cols-2 gap-8">
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-serif">Mode Selection</h2>
@@ -29,9 +29,6 @@ export default function Speaking() {
                     </div>
                     <StatusPill status="active" label="Active" />
                   </div>
-                  <p className="text-sm text-paper-ink/50">
-                    Transcript editing, structured feedback, markdown export.
-                  </p>
                 </PaperCard>
               </Link>
 
@@ -46,9 +43,6 @@ export default function Speaking() {
                     </div>
                     <StatusPill status="upcoming" label="V2 Planned" />
                   </div>
-                  <p className="text-sm text-paper-ink/40 italic">
-                    Real exam conditions: strict timers, no editing, end-of-session report.
-                  </p>
                 </PaperCard>
               </div>
             </div>
@@ -69,15 +63,6 @@ export default function Speaking() {
               ))}
             </div>
           </section>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-          <Link to="/speaking/practice" className="font-serif italic text-accent-terracotta hover:underline decoration-accent-terracotta/30 flex items-center gap-2">
-            Start a new practice session <PlayCircle className="w-4 h-4" />
-          </Link>
-          <Link to="/practice-history" className="font-serif italic text-paper-ink/45 hover:text-accent-terracotta hover:underline decoration-accent-terracotta/30 flex items-center gap-2">
-            Open practice history <History className="w-4 h-4" />
-          </Link>
         </div>
       </div>
     </PageShell>

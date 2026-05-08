@@ -3,18 +3,15 @@ import { Link } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
-import { Mic, PenTool, ArrowRight, History } from 'lucide-react';
+import { Mic, PenTool } from 'lucide-react';
 
 export default function Home() {
   return (
     <PageShell size="wide">
       <TopBar />
-      <div className="landing-workspace">
-        <div className="text-center mb-12 mt-6">
-          <h1 className="text-5xl mb-3 text-paper-ink tracking-tighter">IELTS Scholar</h1>
-          <p className="text-paper-ink-muted italic font-serif opacity-60">
-            Local IELTS practice for Speaking and Writing.
-          </p>
+      <div className="landing-workspace landing-workspace--centered">
+        <div className="text-center mb-10">
+          <h1 className="text-5xl text-paper-ink tracking-tighter">IELTS Scholar</h1>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 w-full">
@@ -23,10 +20,7 @@ export default function Home() {
               <div className="w-16 h-16 rounded-full bg-accent-terracotta/10 flex items-center justify-center mb-6 text-accent-terracotta group-hover:scale-110 transition-transform">
                 <Mic className="w-8 h-8" />
               </div>
-              <h2 className="text-2xl mb-2">Speaking</h2>
-              <p className="text-sm text-paper-ink/50 px-8">
-                Practice Part 1, Part 2, and Part 3 with structured feedback.
-              </p>
+              <h2 className="text-2xl">Speaking</h2>
             </PaperCard>
           </Link>
 
@@ -35,22 +29,11 @@ export default function Home() {
               <div className="w-16 h-16 rounded-full bg-accent-terracotta/10 flex items-center justify-center mb-6 text-accent-terracotta group-hover:scale-110 transition-transform">
                 <PenTool className="w-8 h-8" />
               </div>
-              <h2 className="text-2xl mb-2">Writing</h2>
-              <p className="text-sm text-paper-ink/50 px-8">
-                Train Academic Task 1 reports and Task 2 essays.
-              </p>
+              <h2 className="text-2xl">Writing</h2>
             </PaperCard>
           </Link>
         </div>
 
-        <div className="mt-16 flex flex-col sm:flex-row items-center justify-center gap-6">
-          <Link to="/practice-history" className="flex items-center gap-2 text-paper-ink/50 hover:text-accent-terracotta transition-colors group text-sm italic">
-            Practice history <History className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </Link>
-          <Link to="/progress" className="flex items-center gap-2 text-paper-ink/40 hover:text-accent-terracotta transition-colors group text-sm italic">
-            View your progress <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </Link>
-        </div>
       </div>
     </PageShell>
   );

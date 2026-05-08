@@ -47,6 +47,34 @@ const applyLengthCap = (score: number, words: number, minimumWords: number): num
 const speakingMinimumWords = (part: SpeakingPart): number =>
   part === 1 ? 18 : part === 2 ? 90 : 45;
 
+const hasLowSignalSpeakingText = (text: string): boolean => {
+  const normalized = text.toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return true;
+  const words = normalized.split(' ').filter(Boolean);
+  const uniqueWords = new Set(words);
+  const letterCount = normalized.replace(/\s/g, '').length;
+  return letterCount < 12 || (words.length >= 4 && uniqueWords.size <= 2);
+};
+
+const shouldLimitSpeakingTransformation = (text: string, words: number, part: SpeakingPart): boolean => {
+  if (hasLowSignalSpeakingText(text)) return true;
+  if (part === 1) return words <= 8;
+  if (part === 2) return words < 60;
+  return words < 35;
+};
+
+const buildInsufficientSpeakingTransformation = (part: SpeakingPart): string => {
+  if (part === 1) {
+    return 'Insufficient sample for a full high-band transformation. Starter: give a direct answer, add one personal detail, and close with a natural reason.';
+  }
+
+  if (part === 2) {
+    return 'Insufficient sample for a full Part 2 model answer. Starter outline: introduce the person/place/event, describe two concrete details, explain why it mattered, and finish with one personal reflection.';
+  }
+
+  return 'Insufficient sample for a full Part 3 model answer. Starter outline: state a clear opinion, compare two sides, add one real-world example, and explain the wider consequence.';
+};
+
 const applySpeakingLengthCap = (score: number, words: number, part: SpeakingPart): number => {
   if (!Number.isFinite(score) || score <= 0) return score;
   if (words <= 6) return floorToHalfBand(capBand(score, 3.0));
@@ -312,6 +340,7 @@ const normalizeSpeakingFeedback = (
   const part = asSpeakingPart(source.part, request.part, validationErrors);
   const transcriptWords = countWords(request.transcript || '');
   const lengthMustFix = buildSpeakingLengthMustFix(transcriptWords, part);
+  const limitTransformation = shouldLimitSpeakingTransformation(request.transcript || '', transcriptWords, part);
 
   const feedbackWithoutMarkdown: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -427,12 +456,14 @@ const normalizeSpeakingFeedback = (
         ),
       };
     }),
-    upgradedAnswer: asString(
-      source.upgradedAnswer,
-      'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
-      'upgradedAnswer',
-      validationErrors,
-    ),
+    upgradedAnswer: limitTransformation
+      ? buildInsufficientSpeakingTransformation(part)
+      : asString(
+          source.upgradedAnswer,
+          'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
+          'upgradedAnswer',
+          validationErrors,
+        ),
     reusableExample: isRecord(source.reusableExample)
       ? {
           example: asString(source.reusableExample.example, FALLBACK_TEXT, 'reusableExample.example', validationErrors),

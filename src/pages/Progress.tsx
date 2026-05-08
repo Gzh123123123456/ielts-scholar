@@ -315,11 +315,8 @@ export default function Progress() {
     <PageShell size="wide">
       <TopBar />
 
-      <div className="mb-12 text-center max-w-2xl mx-auto">
-        <h2 className="text-3xl mb-2">Your Training Snapshot</h2>
-        <p className="text-sm italic text-paper-ink/60">
-          Based on local practice records. Not an official IELTS diagnosis.
-        </p>
+      <div className="mb-10 text-center max-w-2xl mx-auto">
+        <h2 className="text-3xl">Your Training Snapshot</h2>
       </div>
 
       <div className="space-y-8">

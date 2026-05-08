@@ -4,7 +4,6 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
-import { Link } from 'react-router-dom';
 import { getAIProvider, getAIProviderName, isMockProviderActive, safeAnalyzeWriting, safeExtractWritingFramework } from '@/src/lib/ai';
 import { formatBandEstimate } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
@@ -17,7 +16,7 @@ import {
   upsertPracticeRecord,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
-import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles, History } from 'lucide-react';
+import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
 
 export default function WritingTask2Practice() {
   const { addDebugLog, saveSession, setProviderDiagnostic } = useApp();
@@ -37,6 +36,8 @@ export default function WritingTask2Practice() {
   const discussionRef = useRef<HTMLDivElement | null>(null);
   const isFrameworkInputComposingRef = useRef(false);
   const activeAttemptIdRef = useRef(createRecordId('wt2'));
+  const restoredRecordRef = useRef<WritingTask2PracticeRecord | null>(null);
+  const isRestoringRecordRef = useRef(false);
 
   useEffect(() => {
     const active = getActiveWritingTask2();
@@ -48,6 +49,10 @@ export default function WritingTask2Practice() {
   }, []);
 
   useEffect(() => {
+    if (isRestoringRecordRef.current) {
+      isRestoringRecordRef.current = false;
+      return;
+    }
     if (!question || isAnalyzing || isExtractingFramework) return;
     persistWritingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
   }, [question, phase, frameworkChat, frameworkInput, finalFrameworkSummary, essay, feedback, feedbackFallbackUsed, providerErrorMessage]);
@@ -55,6 +60,7 @@ export default function WritingTask2Practice() {
   const buildWritingRecord = (status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft'): WritingTask2PracticeRecord | null => {
     if (!question) return null;
     const timestamp = new Date().toISOString();
+    const existing = restoredRecordRef.current?.id === activeAttemptIdRef.current ? restoredRecordRef.current : null;
     return {
       id: activeAttemptIdRef.current,
       module: 'writing',
@@ -67,8 +73,9 @@ export default function WritingTask2Practice() {
       tags: question.tags,
       taskType: question.type,
       questionData: question,
-      createdAt: timestamp,
+      createdAt: existing?.createdAt || timestamp,
       updatedAt: timestamp,
+      analyzedAt: status === 'analyzed' ? existing?.analyzedAt || timestamp : existing?.analyzedAt,
       phase,
       frameworkChat,
       frameworkInput,
@@ -88,6 +95,8 @@ export default function WritingTask2Practice() {
   };
 
   const restoreWritingAttempt = (record: WritingTask2PracticeRecord, message = '') => {
+    isRestoringRecordRef.current = true;
+    restoredRecordRef.current = record;
     activeAttemptIdRef.current = record.id;
     setQuestion(record.questionData || writingTask2.find(item => item.id === record.questionId) || {
       id: record.questionId || record.id,
@@ -109,6 +118,7 @@ export default function WritingTask2Practice() {
   const loadRandomQuestion = () => {
     const random = writingTask2[Math.floor(Math.random() * writingTask2.length)];
     activeAttemptIdRef.current = createRecordId('wt2');
+    restoredRecordRef.current = null;
     setQuestion(random);
     setPhase('framework');
     setEssay('');
@@ -333,26 +343,13 @@ export default function WritingTask2Practice() {
       </div>
 
       <div className={writingWorkspaceClass}>
-        {(restoreMessage || providerErrorMessage) && (
+        {providerErrorMessage && (
           <div className="mb-6 space-y-2">
-            {restoreMessage && (
-              <div className="inline-flex p-2 bg-paper-ink/5 border border-paper-ink/10 rounded-sm text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
-                {restoreMessage}
-              </div>
-            )}
-            {providerErrorMessage && (
-              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
-                {providerErrorMessage}
-              </div>
-            )}
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
+              {providerErrorMessage}
+            </div>
           </div>
         )}
-
-        <div className="mb-8 flex justify-end">
-          <Link to="/practice-history" className="inline-flex items-center gap-2 text-sm italic text-paper-ink/45 hover:text-accent-terracotta">
-            View history <History className="w-4 h-4" />
-          </Link>
-        </div>
       </div>
 
       <div className={writingWorkspaceClass}>
@@ -578,7 +575,7 @@ export default function WritingTask2Practice() {
 
             <div className="flex justify-between gap-4 border-t border-paper-ink/10 pt-6">
               <SerifButton onClick={exportMarkdown} variant="outline" className="flex-1 text-xs flex items-center justify-center gap-2">
-                <FileDown className="w-4 h-4" /> Download Complete Note
+                <FileDown className="w-4 h-4" /> Export Markdown
               </SerifButton>
               <SerifButton onClick={loadRandomQuestion} className="flex-1 text-xs">New Question</SerifButton>
             </div>

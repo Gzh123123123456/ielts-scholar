@@ -119,16 +119,13 @@ export default function PracticeHistory() {
     <PageShell size="wide">
       <TopBar />
 
-      <div className="mb-10">
+      <div className="mb-8">
         <div className="flex items-center gap-3 mb-3">
           <div className="p-2 bg-accent-terracotta/10 text-accent-terracotta rounded">
             <History className="w-5 h-5" />
           </div>
           <h1 className="text-3xl text-paper-ink">Practice History</h1>
         </div>
-        <p className="text-sm text-paper-ink/55 italic max-w-2xl">
-          Open a saved local practice attempt without starting a new Speaking or Writing session.
-        </p>
       </div>
 
       <div className="grid xl:grid-cols-3 gap-8">
