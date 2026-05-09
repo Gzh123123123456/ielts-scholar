@@ -4,15 +4,21 @@ _Last updated: 2026-05-09_
 
 ## P0 — Provider Safety + API Readiness
 
-### 1) API / Gemini Provider (Optional, Mock still default)
+### 1) API / Provider Router (Optional, Mock still default)
 - Keep Mock Provider as default.
 - **Done in V1.1 Slice 1**: Add Gemini as an optional env-configured provider path for local development.
+- **Done in Provider Router v1**: Add `VITE_AI_PROVIDER=auto` for personal local development.
 - Gemini configuration:
   - `VITE_AI_PROVIDER=gemini`
   - `VITE_GEMINI_API_KEY=...`
 - Missing Gemini API key safely falls back to Mock Provider.
 - `VITE_GEMINI_API_KEY` is exposed to browser/client code and is suitable only for local/personal prototype use.
 - No production key management exists yet.
+- Auto-mode configuration includes Gemini local quota estimates and DeepSeek fallback env vars.
+- Gemini is quota-aware and used mainly for high-value final feedback.
+- DeepSeek V4 Flash is the cheap fallback and framework-extraction provider.
+- DeepSeek V4 Pro is the Task 2 high-quality fallback before `2026-05-31T15:59:00Z`; it is disabled after that unless `VITE_DEEPSEEK_ALLOW_PRO_AFTER_DISCOUNT=true`.
+- API Status panel shows local estimates only; official Gemini remaining quota must be checked in Google AI Studio.
 - **Done in V1.1 scaffolding**: provider safety wrappers normalize malformed Speaking/Writing feedback and prevent invalid provider output from crashing feedback UI.
 - **Done in V1.1 scaffolding**: Debug Panel visibility for latest provider diagnostic:
   - raw provider response
@@ -22,7 +28,7 @@ _Last updated: 2026-05-09_
   - fallback-used status
 - Ensure invalid JSON never crashes UI. *(Scaffolded via safe wrappers; real provider connection still pending.)*
 - Add resilient fallback path when provider output is malformed. *(Scaffolded for existing provider interface.)*
-- Still pending: UI provider toggle, browser-side key input decision, and production-safe server-side key management.
+- Still pending: UI provider toggle, browser-side key input decision, production-safe server-side key management, and future hidden OpenAI-compatible/OpenRouter UI.
 
 ### 2) Framework Intelligence (Writing Task 2)
 - **Done mock-safe in V1.1**: Add **Generate Framework Summary** / **Extract Final Framework** action using Mock Provider by default.
@@ -83,6 +89,7 @@ _Last updated: 2026-05-09_
   - session-level consolidated note export
   - optional manual backup/export for local practice records before any future storage migration
   - storage migration from localStorage to IndexedDB or a local file/database layer if records grow large
+  - optional backup/export before bulk local reset if reset becomes common
 
 ### 3) Session-level Obsidian Notes
 - Current V1: attempt-level export only.

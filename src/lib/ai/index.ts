@@ -1,37 +1,56 @@
 import { MockProvider } from './providers/mockProvider';
 import { GeminiProvider } from './providers/geminiProvider';
+import { DeepSeekProvider } from './providers/deepseekProvider';
+import {
+  getDeepSeekFlashModel,
+  getDeepSeekProModel,
+  getDeepSeekStatus,
+  getGeminiApiKey,
+  getGeminiLimits,
+  getGeminiModel,
+  getProviderRouterMode,
+  readEnv,
+  routedAnalyzeSpeaking,
+  routedAnalyzeWriting,
+  routedAnalyzeWritingTask1,
+  routedExtractWritingFramework,
+} from './router';
 export {
   safeAnalyzeSpeaking,
   safeAnalyzeWriting,
   safeAnalyzeWritingTask1,
   safeExtractWritingFramework,
 } from './safety';
-
-type ProviderConfig = 'mock' | 'gemini';
-
-const readEnv = (key: string): string | undefined => {
-  const viteValue = import.meta.env[key];
-  if (typeof viteValue === 'string') return viteValue;
-
-  if (typeof process !== 'undefined') {
-    const processValue = process.env?.[key];
-    if (typeof processValue === 'string') return processValue;
-  }
-
-  return undefined;
+export {
+  getApiUsageState,
+  getGeminiLocalUsage,
+  getRouterState,
+  clearApiUsageState,
+  API_USAGE_KEY,
+  ROUTER_STATE_KEY,
+} from './usage';
+export {
+  getDeepSeekFlashModel,
+  getDeepSeekProModel,
+  getDeepSeekStatus,
+  getGeminiLimits,
+  getGeminiModel,
+  getProviderRouterMode,
+  routedAnalyzeSpeaking,
+  routedAnalyzeWriting,
+  routedAnalyzeWritingTask1,
+  routedExtractWritingFramework,
 };
+
+type ProviderConfig = 'mock' | 'gemini' | 'auto';
 
 const normalizeProviderName = (value: string | undefined): ProviderConfig => {
   const normalized = value?.trim().toLowerCase();
-  return normalized === 'gemini' ? 'gemini' : 'mock';
+  return normalized === 'gemini' || normalized === 'auto' ? normalized : 'mock';
 };
 
 export function getConfiguredAIProviderName(): ProviderConfig {
   return normalizeProviderName(readEnv('VITE_AI_PROVIDER') || readEnv('AI_PROVIDER'));
-}
-
-export function getGeminiApiKey() {
-  return readEnv('VITE_GEMINI_API_KEY') || readEnv('GEMINI_API_KEY') || '';
 }
 
 export function getAIProvider() {
@@ -39,7 +58,15 @@ export function getAIProvider() {
   const geminiApiKey = getGeminiApiKey();
 
   if (configuredProvider === 'gemini' && geminiApiKey) {
-    return new GeminiProvider(geminiApiKey);
+    return new GeminiProvider(geminiApiKey, getGeminiModel());
+  }
+
+  if (configuredProvider === 'auto' && readEnv('VITE_DEEPSEEK_API_KEY')) {
+    return new DeepSeekProvider(
+      readEnv('VITE_DEEPSEEK_API_KEY') || '',
+      getDeepSeekFlashModel(),
+      readEnv('VITE_DEEPSEEK_BASE_URL') || 'https://api.deepseek.com/v1',
+    );
   }
 
   return new MockProvider();
@@ -50,10 +77,17 @@ export function getAIProviderName() {
   if (configuredProvider === 'gemini') {
     return getGeminiApiKey() ? 'gemini' : 'mock (gemini configured without VITE_GEMINI_API_KEY)';
   }
+  if (configuredProvider === 'auto') {
+    const gemini = getGeminiApiKey() ? 'gemini' : '';
+    const deepseek = readEnv('VITE_DEEPSEEK_API_KEY') ? 'deepseek' : '';
+    return [gemini, deepseek].filter(Boolean).length
+      ? `auto (${[gemini, deepseek].filter(Boolean).join(' + ')})`
+      : 'mock (auto configured without real provider keys)';
+  }
 
   return 'mock';
 }
 
 export function isMockProviderActive() {
-  return getAIProviderName() !== 'gemini';
+  return getAIProviderName().startsWith('mock');
 }

@@ -10,6 +10,13 @@ _Last updated: 2026-05-09_
   - If Gemini is configured without a key, the app safely falls back to Mock Provider.
   - `VITE_GEMINI_API_KEY` is exposed to browser/client code and is suitable only for local/personal prototype use.
   - No production key management exists yet.
+- Provider Router v1 is implemented for personal local development with `VITE_AI_PROVIDER=auto`.
+  - Gemini 2.5 Flash is quota-aware and reserved for high-value final feedback when local estimates permit.
+  - DeepSeek V4 Flash is the cheap fallback and default for framework extraction.
+  - DeepSeek V4 Pro is the default Task 2 high-quality fallback before `2026-05-31T15:59:00Z`; after that UTC time it is disabled unless `VITE_DEEPSEEK_ALLOW_PRO_AFTER_DISCOUNT=true`.
+  - Google official remaining quota cannot be read reliably from the browser; API Status shows only local estimates.
+  - OpenAI-compatible/OpenRouter UI is not implemented and remains a future hidden direction.
+  - Vite/client API keys are local-personal prototype only and are not production-safe.
 - No RAG pipeline is connected.
 - V1 pronunciation is **not formally assessed**.
 - V1.1 provider safety scaffolding is implemented:
@@ -148,6 +155,13 @@ _Last updated: 2026-05-09_
   - timestamp
 - Framework extraction diagnostics are labeled with the `writing_framework_extraction` operation so they are distinguishable from final essay analysis.
 - Provider normalization details remain available in Debug Panel; normal learner feedback no longer shows the yellow malformed/normalized warning unless the provider is truly unavailable and retry is needed.
+- API Status is available beside Debug Panel and shows router mode, last effective provider/model, Gemini local quota estimate/cooldown, DeepSeek configured/balance-unavailable status, and the latest fallback reason.
+- Provider diagnostics and debug exports redact API-key-like values.
+
+## Local Data Reset (Implemented)
+- Progress includes a bottom danger section, **清空所有个人数据**.
+- The reset clears IELTS Scholar local browser data only: practice records, active attempts, sessions/profile snapshots, provider diagnostics through reload/state reset, and API usage/router state.
+- Env files and non-app browser storage are not touched.
 
 ## Scope Guards (Current)
 - Keep Practice mode and future Mock mode separate.

@@ -7,6 +7,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { DebugPanel } from './components/ui/DebugPanel';
+import { ApiStatusPanel } from './components/ui/ApiStatusPanel';
 import Home from './pages/Home';
 import Speaking from './pages/Speaking';
 import SpeakingPractice from './pages/SpeakingPractice';
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/speech-test" element={<SpeechTest />} />
           </Routes>
           <DebugPanel />
+          <ApiStatusPanel />
         </div>
       </Router>
     </AppProvider>

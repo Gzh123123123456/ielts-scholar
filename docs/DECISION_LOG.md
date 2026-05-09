@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-09] Personal Provider Router v1, API Status, and Local Reset
+- **Decision**: Keep Mock Provider as default, while adding `VITE_AI_PROVIDER=auto` for personal local development.
+- **Reason**: Real-provider experimentation should be useful without making the prototype depend on paid APIs or browser-entered keys.
+- **Implemented**:
+  - Added DeepSeek provider through OpenAI-compatible chat completions.
+  - Added quota-aware routing: Gemini is used for high-value final feedback when local estimates allow; DeepSeek V4 Flash handles lower-cost fallback and framework extraction.
+  - Added Task 2 Pro fallback protection: DeepSeek V4 Pro is allowed before `2026-05-31T15:59:00Z`, then disabled unless explicitly allowed by env.
+  - Added local API usage/router state in `localStorage`, API Status panel, Gemini cooldown handling, and one automatic DeepSeek retry after Gemini quota/rate failures.
+  - Added Progress local-data reset for IELTS Scholar browser data only.
+- **Security note**: Vite/client env keys remain local-personal prototype only. API keys must not appear in Debug Panel, diagnostics, markdown exports, console logs, or usage records.
+- **Future direction**: OpenAI-compatible/OpenRouter UI remains hidden/future and is not implemented.
+
 ## [2026-05-09] UI Closeout: Global Shells and Feedback Rendering
 - **Decision**: Keep one global TopBar width independent from page content width.
 - **Reason**: Switching between medium landing pages and wide practice/history/progress pages should not move the top navigation inward or outward.

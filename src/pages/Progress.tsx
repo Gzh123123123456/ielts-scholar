@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
+import { SerifButton } from '@/src/components/ui/SerifButton';
 import {
   speakingPart1,
   speakingPart2,
@@ -20,6 +21,7 @@ import {
   SpeakingPracticeRecord,
   WritingTask1PracticeRecord,
   WritingTask2PracticeRecord,
+  clearAllIeltsLocalData,
 } from '@/src/lib/practiceRecords';
 import {
   combineWritingEstimates,
@@ -263,6 +265,7 @@ const buildTrainingSuggestions = (
 };
 
 export default function Progress() {
+  const [, setResetVersion] = useState(0);
   const records = getPracticeRecords(80);
   const scoredSpeaking = records.filter(isScoredSpeaking);
   const scoredWritingTask2 = records.filter(isScoredWritingTask2);
@@ -310,6 +313,13 @@ export default function Progress() {
     task2Coverage,
     unfinishedDrafts,
   );
+
+  const clearAllPersonalData = () => {
+    const confirmed = window.confirm('清空所有个人数据？这会删除本浏览器里的练习记录、草稿、反馈、调试诊断和 API 使用估算。这个操作不能撤销。');
+    if (!confirmed) return;
+    clearAllIeltsLocalData();
+    setResetVersion(value => value + 1);
+  };
 
   return (
     <PageShell size="wide">
@@ -421,6 +431,20 @@ export default function Progress() {
         <p className="text-xs text-paper-ink/50 text-center">
           Coverage is based on local preparation records and prompt metadata, not an official IELTS syllabus.
         </p>
+
+        <PaperCard className="border-l-2 border-l-red-800/70">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-widest text-red-900 mb-2">清空所有个人数据</h3>
+              <p className="text-sm leading-7 text-paper-ink/60">
+                只清除 IELTS Scholar 在本浏览器保存的练习记录、草稿、反馈、调试信息和 API 使用估算；不会触碰 env 文件或其他网站数据。
+              </p>
+            </div>
+            <SerifButton onClick={clearAllPersonalData} variant="outline" className="border-red-800/40 text-red-900 hover:bg-red-50">
+              清空本地数据
+            </SerifButton>
+          </div>
+        </PaperCard>
       </div>
     </PageShell>
   );

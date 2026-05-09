@@ -4,7 +4,7 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
-import { getAIProvider, getAIProviderName, safeAnalyzeSpeaking } from '@/src/lib/ai';
+import { getAIProviderName, routedAnalyzeSpeaking } from '@/src/lib/ai';
 import { formatBandEstimate } from '@/src/lib/bands';
 import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/questions/bank';
 import { SpeakingFeedback } from '@/src/lib/ai/schemas';
@@ -86,6 +86,7 @@ export default function SpeakingPractice() {
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
+  const [apiStatusMessage, setApiStatusMessage] = useState('');
   const [statusMessage, setStatusMessage] = useState<'Ready' | 'Requesting microphone...' | 'Listening...' | 'No speech detected' | 'Transcription unavailable' | 'Mic denied'>('Ready');
 
   const recognitionRef = useRef<any>(null);
@@ -483,15 +484,16 @@ export default function SpeakingPractice() {
     if (!transcript.trim()) return;
     setStep('analyzing');
     setProviderErrorMessage('');
+    setApiStatusMessage('');
     addDebugLog("Starting AI analysis flow...");
     try {
-      const provider = getAIProvider();
-      const { feedback: result, diagnostic } = await safeAnalyzeSpeaking(provider, getAIProviderName(), {
+      const { feedback: result, diagnostic, route } = await routedAnalyzeSpeaking({
         part,
         question: question?.question || '',
         transcript
-      });
+      }, isInsufficientSpeakingSample(transcript, part));
       setProviderDiagnostic(diagnostic);
+      setApiStatusMessage(route.fallbackReason || route.learnerReason);
 
       if (diagnostic.failureKind === 'provider_unavailable') {
         setFeedbackFallbackUsed(false);
@@ -544,6 +546,7 @@ export default function SpeakingPractice() {
       addDebugLog(`Analysis Error: ${error}`);
       setFeedbackFallbackUsed(false);
       setStep('editing');
+      setApiStatusMessage('');
     }
   };
 
@@ -596,6 +599,11 @@ export default function SpeakingPractice() {
           <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
             {providerErrorMessage}
           </div>
+        </div>
+      )}
+      {apiStatusMessage && (
+        <div className="mb-6 p-3 bg-paper-ink/5 border border-paper-ink/10 text-paper-ink/65 text-sm rounded-sm font-sans">
+          {apiStatusMessage}
         </div>
       )}
 

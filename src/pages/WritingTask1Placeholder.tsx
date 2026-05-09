@@ -5,7 +5,8 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { writingTask1Academic, WritingTask1AcademicPrompt } from '@/src/data/questions/bank';
-import { getAIProvider, getAIProviderName, safeAnalyzeWritingTask1 } from '@/src/lib/ai';
+import { routedAnalyzeWritingTask1 } from '@/src/lib/ai';
+import { useApp } from '@/src/context/AppContext';
 import { ProviderDiagnostic, WritingTask1Feedback } from '@/src/lib/ai/schemas';
 import { formatBandEstimate } from '@/src/lib/bands';
 import {
@@ -192,6 +193,7 @@ ${feedback.improvedReport || feedback.modelExcerpt || 'No improved report return
 };
 
 export default function WritingTask1Placeholder() {
+  const { setProviderDiagnostic } = useApp();
   const activeRecord = useMemo(() => getActiveWritingTask1(), []);
   const initialActiveRecordRef = useRef(activeRecord);
   const isInitialRestoreRef = useRef(Boolean(activeRecord));
@@ -208,6 +210,7 @@ export default function WritingTask1Placeholder() {
   const [providerErrorMessage, setProviderErrorMessage] = useState(
     activeRecord?.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your report is preserved.' : '',
   );
+  const [apiStatusMessage, setApiStatusMessage] = useState('');
 
   const words = countWords(report);
   const status = providerErrorMessage ? 'provider_failed' : feedback ? 'analyzed' : 'draft';
@@ -274,6 +277,7 @@ export default function WritingTask1Placeholder() {
     setFeedback(undefined);
     setDiagnostic(null);
     setProviderErrorMessage('');
+    setApiStatusMessage('');
     initialActiveRecordRef.current = null;
   };
 
@@ -281,8 +285,9 @@ export default function WritingTask1Placeholder() {
     if (!report.trim()) return;
     setIsAnalyzing(true);
     setProviderErrorMessage('');
+    setApiStatusMessage('');
     try {
-      const result = await safeAnalyzeWritingTask1(getAIProvider(), getAIProviderName(), {
+      const result = await routedAnalyzeWritingTask1({
         task: 'task1',
         taskType: prompt.taskType,
         instruction: prompt.instruction,
@@ -294,7 +299,9 @@ export default function WritingTask1Placeholder() {
         expectedComparisons: prompt.expectedComparisons,
         commonTraps: prompt.commonTraps,
         reusablePatterns: prompt.reusablePatterns,
-      });
+      }, words < 80);
+      setApiStatusMessage(result.route.fallbackReason || result.route.learnerReason);
+      setProviderDiagnostic(result.diagnostic);
       if (result.diagnostic.failureKind === 'provider_unavailable') {
         setDiagnostic(result.diagnostic);
         setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your report is preserved.');
@@ -346,6 +353,7 @@ export default function WritingTask1Placeholder() {
     setFeedback(undefined);
     setDiagnostic(null);
     setProviderErrorMessage('');
+    setApiStatusMessage('');
     initialActiveRecordRef.current = null;
   };
 
@@ -363,6 +371,11 @@ export default function WritingTask1Placeholder() {
       {providerErrorMessage && (
         <div className="mb-6 p-3 border border-accent-terracotta/20 bg-accent-terracotta/5 text-sm text-paper-ink/70">
           {providerErrorMessage}
+        </div>
+      )}
+      {apiStatusMessage && (
+        <div className="mb-6 p-3 bg-paper-ink/5 border border-paper-ink/10 text-paper-ink/65 text-sm rounded-sm font-sans">
+          {apiStatusMessage}
         </div>
       )}
 

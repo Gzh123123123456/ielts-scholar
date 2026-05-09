@@ -1,10 +1,13 @@
 # Known Limitations (V1)
 
 1. **AI Feedback**: V1 defaults to a Mock AI provider for prototyping. Real API keys are required for actual feedback.
-2. **Optional Gemini Provider**: Gemini can be enabled for local development with `VITE_AI_PROVIDER=gemini` and `VITE_GEMINI_API_KEY=...`. Because Vite exposes `VITE_*` variables to browser/client code, this is suitable only for local/personal prototype use. No production key management, server-side proxy, or UI provider toggle exists yet.
-3. **Transcription**: Relies on browser Web Speech API. Works reliably in Chrome and Edge. Safari and AI Studio preview environments may be unreliable. Users should verify Chrome is using the correct microphone device.
-4. **no-speech Recovery**: Speaking Practice auto-restarts recognition on `no-speech` errors (up to 2 retries). This covers brief silence, but if the wrong microphone device is selected in Chrome, recognition will not work regardless.
-5. **Storage**: Data is stored in `localStorage`. Active attempts and recent practice records are recoverable in the same browser, but clearing browser data will lose history. No IndexedDB/database migration exists yet.
-6. **Pronunciation**: No formal pronunciation score is provided as transcript-based analysis is insufficient for IELTS prosody marking.
-7. **Real-time Feedback**: Intentional exclusion of real-time correction in Speaking to preserve user fluency.
-8. **Export**: Obsidian export is via manual download of `.md` files.
+2. **Optional Gemini / Auto Provider Modes**: Gemini can be enabled with `VITE_AI_PROVIDER=gemini`; personal local routing can be enabled with `VITE_AI_PROVIDER=auto`. Because Vite exposes `VITE_*` variables to browser/client code, this is suitable only for local/personal prototype use. No production key management, server-side proxy, browser key input, or UI provider toggle exists yet.
+3. **Quota Estimates**: Gemini official remaining quota cannot be read reliably from this browser app. API Status shows local estimates only: requests today, current-minute requests, estimated current-minute input tokens, and cooldown.
+4. **DeepSeek Fallback**: DeepSeek V4 Flash is used as the cheap fallback. DeepSeek V4 Pro is used for Task 2 high-quality fallback only before `2026-05-31T15:59:00Z`, unless `VITE_DEEPSEEK_ALLOW_PRO_AFTER_DISCOUNT=true`. Balance check is best-effort only and currently shown as unavailable if it cannot be read safely.
+5. **Transcription**: Relies on browser Web Speech API. Works reliably in Chrome and Edge. Safari and AI Studio preview environments may be unreliable. Users should verify Chrome is using the correct microphone device.
+6. **no-speech Recovery**: Speaking Practice auto-restarts recognition on `no-speech` errors (up to 2 retries). This covers brief silence, but if the wrong microphone device is selected in Chrome, recognition will not work regardless.
+7. **Storage**: Data is stored in `localStorage`. Active attempts, practice records, provider usage estimates, and router cooldown state are recoverable in the same browser, but clearing browser data will lose history. No IndexedDB/database migration exists yet.
+8. **Pronunciation**: No formal pronunciation score is provided as transcript-based analysis is insufficient for IELTS prosody marking.
+9. **Real-time Feedback**: Intentional exclusion of real-time correction in Speaking to preserve user fluency.
+10. **Export**: Obsidian export is via manual download of `.md` files.
+11. **Future Providers**: OpenAI-compatible/OpenRouter configuration UI is a future hidden direction and is not implemented.

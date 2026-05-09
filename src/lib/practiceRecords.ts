@@ -89,6 +89,16 @@ const RECORDS_KEY = 'ielts_practice_records_v1';
 const ACTIVE_SPEAKING_KEY = 'ielts_active_speaking_practice_v1';
 const ACTIVE_WRITING_TASK2_KEY = 'ielts_active_writing_task2_practice_v1';
 const ACTIVE_WRITING_TASK1_KEY = 'ielts_active_writing_task1_practice_v1';
+export const IELTS_LOCAL_STORAGE_KEYS = [
+  RECORDS_KEY,
+  ACTIVE_SPEAKING_KEY,
+  ACTIVE_WRITING_TASK2_KEY,
+  ACTIVE_WRITING_TASK1_KEY,
+  'ielts_profile',
+  'ielts_sessions',
+  'ielts_api_usage_v1',
+  'ielts_provider_router_state_v1',
+];
 
 const nowIso = () => new Date().toISOString();
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -434,4 +444,8 @@ export const deleteActiveWritingTask1 = (recordId: string) => {
   if (active?.id === recordId) {
     removeJson(ACTIVE_WRITING_TASK1_KEY);
   }
+};
+
+export const clearAllIeltsLocalData = () => {
+  IELTS_LOCAL_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
 };

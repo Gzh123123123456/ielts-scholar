@@ -10,6 +10,13 @@ _Last updated: 2026-05-09_
   - No UI provider toggle or production key management yet.
 - Add Debug Panel diagnostics for raw response, parsed JSON, and parse errors.
 - Ensure invalid JSON does not crash UI.
+- Add personal local-first Provider Router v1.
+  - Done: `VITE_AI_PROVIDER=auto`, DeepSeek provider, API Status panel, local usage/router state, Gemini cooldown/retry, and Progress local-data reset.
+  - Gemini is quota-aware and reserved for high-value final feedback when local estimates permit.
+  - DeepSeek V4 Flash is cheap fallback and framework-extraction default.
+  - DeepSeek V4 Pro is Task 2 high-quality fallback before `2026-05-31T15:59:00Z`, then disabled unless explicitly allowed.
+  - Official Gemini remaining quota is not readable; UI shows local estimates only.
+  - OpenAI-compatible/OpenRouter UI remains a future hidden direction.
 - Add local-first practice reliability for current practice modules.
   - Done: Speaking and Writing Task 2 active attempts and recent records.
   - Done: Speaking records filtered by part and individual Speaking record deletion.
@@ -56,6 +63,8 @@ _Last updated: 2026-05-09_
 - Stronger scoring calibration using real provider data and larger local attempt samples.
 - Optional richer topic taxonomy review, official-source review, and optional AI tagging later.
 - Optional manual backup/export for local practice records before any future storage migration.
+- Production-safe provider key management through a server-side proxy before any non-personal deployment.
+- Future hidden OpenAI-compatible/OpenRouter routing UI after provider architecture settles.
 - Audio recording storage with MediaRecorder and simple playback.
 
 ## V4 - Knowledge & RAG (Later)

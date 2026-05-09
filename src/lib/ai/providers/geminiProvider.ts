@@ -1,9 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { AIProvider } from './base';
 
-const MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
-
-const strictJsonInstruction = `Return one valid JSON object only.
+export const strictJsonInstruction = `Return one valid JSON object only.
 Do not wrap it in Markdown.
 Do not use code fences.
 Do not include commentary before or after the JSON.
@@ -14,7 +12,7 @@ Use strings for every string field.
 Use numbers for every score field.
 All user-facing band estimates and criterion scores must use whole or half bands only, such as 5.0, 5.5, 6.0, or 6.5.`;
 
-const speakingSchemaInstruction = `The JSON object must match this exact key structure:
+export const speakingSchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
   "module": "speaking",
@@ -38,7 +36,7 @@ const speakingSchemaInstruction = `The JSON object must match this exact key str
   "obsidianMarkdown": "string"
 }`;
 
-const writingSchemaInstruction = `The JSON object must match this exact key structure:
+export const writingSchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
   "module": "writing",
@@ -58,7 +56,7 @@ const writingSchemaInstruction = `The JSON object must match this exact key stru
   "obsidianMarkdown": "string"
 }`;
 
-const writingTask1SchemaInstruction = `The JSON object must match this exact key structure:
+export const writingTask1SchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
   "module": "writing_task1",
@@ -83,7 +81,7 @@ const writingTask1SchemaInstruction = `The JSON object must match this exact key
   "obsidianMarkdown": "string"
 }`;
 
-const frameworkSchemaInstruction = `The JSON object must match this exact key structure:
+export const frameworkSchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
   "module": "writing",
@@ -101,14 +99,16 @@ const frameworkSchemaInstruction = `The JSON object must match this exact key st
 
 export class GeminiProvider implements AIProvider {
   private ai: GoogleGenAI;
+  private model: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, model = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash') {
     this.ai = new GoogleGenAI({ apiKey });
+    this.model = model;
   }
 
   private async generateJson(prompt: string): Promise<string> {
     const response = await this.ai.models.generateContent({
-      model: MODEL,
+      model: this.model,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

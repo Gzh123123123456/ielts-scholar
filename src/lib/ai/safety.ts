@@ -257,7 +257,13 @@ const isProviderUnavailableError = (parseError?: string): boolean => {
   if (!parseError) return false;
   const normalized = parseError.toLowerCase();
   return [
+    '402',
+    '429',
+    '500',
     '503',
+    'insufficient balance',
+    'resource_exhausted',
+    'quota',
     'unavailable',
     'high demand',
     'try again later',
@@ -273,6 +279,34 @@ const getFailureKind = (parseError: string | undefined, validationErrors: string
   if (parseError || validationErrors.length > 0) return 'parse_or_schema' as const;
   return undefined;
 };
+
+const redactSecrets = (value: unknown): unknown => {
+  if (typeof value === 'string') {
+    return value
+      .replace(/(api[_-]?key|authorization|bearer)\s*[:=]\s*["']?[^"',\s]+/gi, '$1: [REDACTED]')
+      .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[REDACTED_GEMINI_KEY]')
+      .replace(/sk-[0-9A-Za-z_-]{16,}/g, '[REDACTED_API_KEY]');
+  }
+  if (Array.isArray(value)) return value.map(redactSecrets);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      /key|secret|token|authorization/i.test(key) ? '[REDACTED]' : redactSecrets(item),
+    ]));
+  }
+  return value;
+};
+
+const buildDiagnostic = (diagnostic: ProviderDiagnostic): ProviderDiagnostic => ({
+  ...diagnostic,
+  requestPayload: redactSecrets(diagnostic.requestPayload),
+  rawResponse: redactSecrets(diagnostic.rawResponse),
+  parsedJson: redactSecrets(diagnostic.parsedJson),
+  parseError: typeof diagnostic.parseError === 'string'
+    ? redactSecrets(diagnostic.parseError) as string
+    : diagnostic.parseError,
+  validationErrors: diagnostic.validationErrors.map(error => redactSecrets(error) as string),
+});
 
 const buildSpeakingObsidianMarkdown = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): string => {
   const mustFix = feedback.fatalErrors.length
@@ -851,7 +885,7 @@ export const safeAnalyzeSpeaking = async (
 
   return {
     feedback,
-    diagnostic: {
+    diagnostic: buildDiagnostic({
       module: 'speaking',
       operation: 'speaking_analysis',
       providerName,
@@ -864,7 +898,7 @@ export const safeAnalyzeSpeaking = async (
       failureKind,
       normalizedFields,
       timestamp: new Date().toISOString(),
-    },
+    }),
   };
 };
 
@@ -893,7 +927,7 @@ export const safeAnalyzeWriting = async (
 
   return {
     feedback,
-    diagnostic: {
+    diagnostic: buildDiagnostic({
       module: 'writing',
       operation: 'writing_analysis',
       providerName,
@@ -905,7 +939,7 @@ export const safeAnalyzeWriting = async (
       fallbackUsed,
       failureKind,
       timestamp: new Date().toISOString(),
-    },
+    }),
   };
 };
 
@@ -939,7 +973,7 @@ export const safeAnalyzeWritingTask1 = async (
 
   return {
     feedback,
-    diagnostic: {
+    diagnostic: buildDiagnostic({
       module: 'writing_task1',
       operation: 'writing_task1_analysis',
       providerName,
@@ -952,7 +986,7 @@ export const safeAnalyzeWritingTask1 = async (
       failureKind,
       normalizedFields,
       timestamp: new Date().toISOString(),
-    },
+    }),
   };
 };
 
@@ -985,7 +1019,7 @@ export const safeExtractWritingFramework = async (
 
   return {
     feedback,
-    diagnostic: {
+    diagnostic: buildDiagnostic({
       module: 'writing',
       operation: 'writing_framework_extraction',
       providerName,
@@ -997,6 +1031,6 @@ export const safeExtractWritingFramework = async (
       fallbackUsed,
       failureKind,
       timestamp: new Date().toISOString(),
-    },
+    }),
   };
 };

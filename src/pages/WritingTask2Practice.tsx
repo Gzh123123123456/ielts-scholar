@@ -4,7 +4,7 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
-import { getAIProvider, getAIProviderName, isMockProviderActive, safeAnalyzeWriting, safeExtractWritingFramework } from '@/src/lib/ai';
+import { isMockProviderActive, routedAnalyzeWriting, routedExtractWritingFramework } from '@/src/lib/ai';
 import { formatBandEstimate } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
@@ -87,6 +87,7 @@ export default function WritingTask2Practice() {
   const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
+  const [apiStatusMessage, setApiStatusMessage] = useState('');
   const discussionRef = useRef<HTMLDivElement | null>(null);
   const isFrameworkInputComposingRef = useRef(false);
   const activeAttemptIdRef = useRef(createRecordId('wt2'));
@@ -165,6 +166,7 @@ export default function WritingTask2Practice() {
     setFeedback(record.feedback || null);
     setFeedbackFallbackUsed(Boolean(record.feedbackFallbackUsed || record.providerDiagnostic?.fallbackUsed));
     setProviderErrorMessage(record.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your draft is preserved.' : '');
+    setApiStatusMessage('');
     setFrameworkExtractMessage('');
     setRestoreMessage(message);
   };
@@ -182,6 +184,7 @@ export default function WritingTask2Practice() {
     setFinalFrameworkSummary('');
     setFrameworkExtractMessage('');
     setProviderErrorMessage('');
+    setApiStatusMessage('');
     setRestoreMessage('');
     addDebugLog(`Loaded writing question: ${random.id}`);
   };
@@ -229,6 +232,7 @@ export default function WritingTask2Practice() {
   const extractFinalFramework = async () => {
     const notes = buildFrameworkNotes();
     setFrameworkExtractMessage('');
+    setApiStatusMessage('');
 
     if (!notes.trim()) {
       const message = 'Add a few Coach Discussion notes first, then extract a framework summary.';
@@ -241,14 +245,14 @@ export default function WritingTask2Practice() {
     addDebugLog('Extracting Writing Task 2 framework summary...');
 
     try {
-      const provider = getAIProvider();
-      const { feedback: result, diagnostic } = await safeExtractWritingFramework(provider, getAIProviderName(), {
+      const { feedback: result, diagnostic, route } = await routedExtractWritingFramework({
         task: 'task2',
         question: question?.question || '',
         notes,
       });
 
       setProviderDiagnostic(diagnostic);
+      setApiStatusMessage(route.fallbackReason || route.learnerReason);
       if (diagnostic.failureKind === 'provider_unavailable') {
         setFrameworkExtractMessage('AI provider temporarily unavailable. Please retry later. You can keep editing the framework manually.');
         addDebugLog('Provider unavailable for framework extraction.');
@@ -280,15 +284,16 @@ export default function WritingTask2Practice() {
   const analyzeEssay = async () => {
     setIsAnalyzing(true);
     setProviderErrorMessage('');
+    setApiStatusMessage('');
     addDebugLog("Analyzing essay...");
     try {
-      const provider = getAIProvider();
-      const { feedback: result, diagnostic } = await safeAnalyzeWriting(provider, getAIProviderName(), {
+      const { feedback: result, diagnostic, route } = await routedAnalyzeWriting({
         task: 'task2',
         question: question?.question || '',
         essay
-      });
+      }, isInsufficientTask2Sample(essay));
       setProviderDiagnostic(diagnostic);
+      setApiStatusMessage(route.fallbackReason || route.learnerReason);
 
       if (diagnostic.failureKind === 'provider_unavailable') {
         setFeedbackFallbackUsed(false);
@@ -403,6 +408,11 @@ export default function WritingTask2Practice() {
             <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
               {providerErrorMessage}
             </div>
+          </div>
+        )}
+        {apiStatusMessage && (
+          <div className="mb-6 p-3 bg-paper-ink/5 border border-paper-ink/10 text-paper-ink/65 text-sm rounded-sm font-sans">
+            {apiStatusMessage}
           </div>
         )}
       </div>
