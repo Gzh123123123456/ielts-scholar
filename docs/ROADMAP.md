@@ -44,6 +44,9 @@ _Last updated: 2026-05-09_
   - Paragraph plan
   - Possible example
 - The current extraction format is a bilingual grounded summary; missing learner decisions are marked instead of invented.
+- Framework Summary now includes reusable sentence frames/transitions and uses clear bullet sections rather than a dense block.
+- Phase 3 feedback now separates **Logic & Structure Review** from **Sentence-level Corrections**, with logic issues linked to numbered corrections where possible.
+- Phase tab root cause repaired: nowrap labels were visually overflowing equal grid cells.
 - Require user edit/confirmation before entering Phase 2.
 - Framework Summary must summarize the learner's notes and coach discussion, not generate a full model plan from the prompt alone.
 - Task 2 provider banner has been removed; provider notices appear only when routing/fallback events actually occur.

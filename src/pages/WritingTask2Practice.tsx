@@ -89,17 +89,17 @@ const routeNotice = (
 };
 
 const readinessLabels: Record<WritingFrameworkReadiness, string> = {
-  not_ready: '还不能写 / Not ready',
-  almost_ready: '接近可写 / Almost ready',
-  ready_to_write: '可以开始写 / Ready to write',
+  not_ready: 'Not ready',
+  almost_ready: 'Almost ready',
+  ready_to_write: 'Ready to write',
 };
 
 const checklistLabels: Record<keyof WritingFrameworkCoachFeedback['checklist'], string> = {
-  taskTypeAnswered: '题型要求已回应',
-  clearPosition: '立场清楚',
-  bothViewsCovered: '需要时已覆盖双方观点',
-  supportExists: '有可用例子或支撑',
-  paragraphPlanClear: '段落计划够清楚',
+  taskTypeAnswered: 'Task type answered',
+  clearPosition: 'Clear position',
+  bothViewsCovered: 'Both required views covered',
+  supportExists: 'Usable examples or support',
+  paragraphPlanClear: 'Paragraph plan is clear',
 };
 
 const formatCoachFeedback = (feedback: WritingFrameworkCoachFeedback, isMock: boolean) => {
@@ -113,14 +113,46 @@ const formatCoachFeedback = (feedback: WritingFrameworkCoachFeedback, isMock: bo
     .join('\n');
 
   if (checklist) lines.push(`Checklist:\n${checklist}`);
-  if (feedback.mainGaps.length) lines.push(`主要缺口:\n${feedback.mainGaps.map(item => `- ${item}`).join('\n')}`);
-  if (feedback.finalFixes.length) lines.push(`最后小修:\n${feedback.finalFixes.map(item => `- ${item}`).join('\n')}`);
-  if (feedback.nextQuestions.length) lines.push(`下一步问题:\n${feedback.nextQuestions.map(item => `- ${item}`).join('\n')}`);
+  if (feedback.mainGaps.length) lines.push(`Main gaps:\n${feedback.mainGaps.map(item => `- ${item}`).join('\n')}`);
+  if (feedback.finalFixes.length) lines.push(`Final small fixes:\n${feedback.finalFixes.map(item => `- ${item}`).join('\n')}`);
+  if (feedback.nextQuestions.length) lines.push(`Next questions:\n${feedback.nextQuestions.map(item => `- ${item}`).join('\n')}`);
   if (feedback.readiness === 'ready_to_write' && feedback.readySummary) {
     lines.push(`Ready reason:\n${feedback.readySummary}`);
   }
 
   return lines.join('\n\n');
+};
+
+const Task2PhaseTabs = ({
+  phase,
+  hasFeedback,
+  onChange,
+}: {
+  phase: 'framework' | 'writing' | 'results';
+  hasFeedback: boolean;
+  onChange: (phase: 'framework' | 'writing' | 'results') => void;
+}) => {
+  const tabs: { id: 'framework' | 'writing' | 'results'; label: string; disabled?: boolean }[] = [
+    { id: 'framework', label: 'Phase 1: Framework' },
+    { id: 'writing', label: 'Phase 2: Essay Editor' },
+    { id: 'results', label: 'Phase 3: Final Analysis', disabled: !hasFeedback },
+  ];
+
+  return (
+    <div className="practice-workspace phase-tabs gap-2 p-1 bg-paper-ink/5 rounded-sm mb-8 font-sans uppercase tracking-widest font-bold">
+      {tabs.map(tab => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          disabled={tab.disabled}
+          className={phase === tab.id ? 'phase-tab phase-tab-active' : 'phase-tab'}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
 };
 
 export default function WritingTask2Practice() {
@@ -132,6 +164,7 @@ export default function WritingTask2Practice() {
   const [frameworkReadiness, setFrameworkReadiness] = useState<WritingFrameworkReadiness>('not_ready');
   const [latestFrameworkCoach, setLatestFrameworkCoach] = useState<WritingFrameworkCoachFeedback | null>(null);
   const [finalFrameworkSummary, setFinalFrameworkSummary] = useState('');
+  const [frameworkSummaryGenerated, setFrameworkSummaryGenerated] = useState(false);
   const [essay, setEssay] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCoachingFramework, setIsCoachingFramework] = useState(false);
@@ -174,6 +207,7 @@ export default function WritingTask2Practice() {
     frameworkReadiness,
     latestFrameworkCoach,
     finalFrameworkSummary,
+    frameworkSummaryGenerated,
     essay,
     feedback,
     feedbackFallbackUsed,
@@ -205,6 +239,7 @@ export default function WritingTask2Practice() {
       frameworkReadiness,
       latestFrameworkCoach: latestFrameworkCoach || undefined,
       finalFrameworkSummary,
+      frameworkSummaryGenerated,
       essay,
       feedback: status === 'provider_failed' ? undefined : feedback || undefined,
       feedbackFallbackUsed,
@@ -234,6 +269,7 @@ export default function WritingTask2Practice() {
     setFrameworkReadiness(record.frameworkReadiness || record.latestFrameworkCoach?.readiness || 'not_ready');
     setLatestFrameworkCoach(record.latestFrameworkCoach || null);
     setFinalFrameworkSummary(record.finalFrameworkSummary);
+    setFrameworkSummaryGenerated(Boolean(record.frameworkSummaryGenerated));
     setEssay(record.essay);
     setFeedback(record.feedback || null);
     setFeedbackFallbackUsed(Boolean(record.feedbackFallbackUsed || record.providerDiagnostic?.fallbackUsed));
@@ -256,6 +292,7 @@ export default function WritingTask2Practice() {
     setFrameworkReadiness('not_ready');
     setLatestFrameworkCoach(null);
     setFinalFrameworkSummary('');
+    setFrameworkSummaryGenerated(false);
     setFrameworkExtractMessage('');
     setProviderErrorMessage('');
     setApiStatusMessage('');
@@ -408,6 +445,7 @@ export default function WritingTask2Practice() {
       }
 
       setFinalFrameworkSummary(result.editableSummary);
+      setFrameworkSummaryGenerated(true);
       setFrameworkExtractMessage(
         diagnostic.fallbackUsed
           ? 'A safe fallback framework was generated. Please review and edit it before writing.'
@@ -500,7 +538,42 @@ export default function WritingTask2Practice() {
 
   const exportMarkdown = () => {
     if (!feedback) return;
-    const blob = new Blob([feedback.obsidianMarkdown], { type: 'text/markdown' });
+    const logicItems = feedback.frameworkFeedback.length
+      ? feedback.frameworkFeedback.map((item, index) => {
+          const related = item.relatedCorrectionIds?.length
+            ? item.relatedCorrectionIds.map(id => `Correction #${id.replace(/^C/i, '')}`).join(', ')
+            : 'No sentence-level correction covers this issue. This needs paragraph-level revision.';
+          return `### Logic Issue ${index + 1}: ${item.issue}
+- Why it matters: ${item.suggestionZh}
+- Big-picture fix: ${item.paragraphFixZh || item.suggestionZh}
+- Related: ${related}${item.exampleFrame ? `\n- Example frame: ${item.exampleFrame}` : ''}`;
+        }).join('\n\n')
+      : '- No logic-level issue returned.';
+    const sentenceItems = feedback.sentenceFeedback.length
+      ? feedback.sentenceFeedback.map((item, index) => `### Correction #${item.correctionNumber || index + 1}
+- Original: ${item.original}
+- Correction: ${item.correction}
+- Dimension: ${item.dimension}
+- Focus: ${item.tag}
+- Explanation: ${item.explanationZh}`).join('\n\n')
+      : '- No sentence-level correction returned.';
+    const markdown = `# IELTS Writing Task 2 Note
+
+## Prompt
+${feedback.question}
+
+## Logic & Structure Review
+${logicItems}
+
+## Sentence-level Corrections
+${sentenceItems}
+
+## Model Answer Excerpt
+${feedback.modelAnswer}
+
+## Essay
+${feedback.essay}`;
+    const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -529,27 +602,7 @@ export default function WritingTask2Practice() {
         </PaperCard>
       </div>
 
-      <div className={`${writingWorkspaceClass} phase-tabs gap-2 p-1 bg-paper-ink/5 rounded-sm mb-8 font-sans uppercase tracking-widest font-bold`}>
-        <button
-          onClick={() => setPhase('framework')}
-          className={phase === 'framework' ? 'phase-tab phase-tab-active' : 'phase-tab'}
-        >
-          Phase 1: Framework
-        </button>
-        <button
-          onClick={() => setPhase('writing')}
-          className={phase === 'writing' ? 'phase-tab phase-tab-active' : 'phase-tab'}
-        >
-          Phase 2: Essay Editor
-        </button>
-        <button
-          onClick={() => setPhase('results')}
-          disabled={!feedback}
-          className={phase === 'results' ? 'phase-tab phase-tab-active' : 'phase-tab'}
-        >
-          Phase 3: Final Analysis
-        </button>
-      </div>
+      <Task2PhaseTabs phase={phase} hasFeedback={Boolean(feedback)} onChange={setPhase} />
 
       <div className={writingWorkspaceClass}>
         {providerErrorMessage && (
@@ -652,10 +705,18 @@ export default function WritingTask2Practice() {
                 onChange={(e) => setFinalFrameworkSummary(e.target.value)}
                 placeholder="Final Framework Summary (Chinese or English)..."
                 rows={12}
-                className="w-full min-h-[360px] md:min-h-[440px] xl:min-h-[520px] xl:h-[60vh] xl:max-h-[calc(100vh-14rem)] xl:flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y overflow-auto placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                className="w-full min-h-[420px] md:min-h-[520px] xl:min-h-[640px] xl:h-[68vh] xl:max-h-[calc(100vh-10rem)] xl:flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y overflow-auto placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
               />
               <div className="flex flex-col gap-3 border-t border-paper-ink/10 pt-4 mt-4 shrink-0">
-                {frameworkReadiness === 'ready_to_write' ? (
+                {frameworkSummaryGenerated ? (
+                  <SerifButton
+                    type="button"
+                    onClick={() => setPhase('writing')}
+                    className="w-full justify-center flex items-center gap-2"
+                  >
+                    Use This Framework &mdash; Start Writing <ArrowRight className="w-4 h-4" />
+                  </SerifButton>
+                ) : frameworkReadiness === 'ready_to_write' ? (
                   <SerifButton
                     type="button"
                     variant="outline"
@@ -664,21 +725,23 @@ export default function WritingTask2Practice() {
                     className="w-full justify-center text-xs flex items-center gap-2"
                   >
                     <Sparkles className="w-4 h-4" />
-                    {isExtractingFramework ? 'Extracting...' : 'Framework Ready — Generate Summary'}
+                    {isExtractingFramework ? 'Extracting...' : <>Framework Ready &mdash; Generate Summary</>}
                   </SerifButton>
                 ) : (
                   <p className="text-xs font-sans text-paper-ink/55 bg-paper-ink/5 border border-paper-ink/10 rounded-sm px-3 py-2">
                     Keep discussing with Coach before generating summary.
                   </p>
                 )}
-                <SerifButton
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setPhase('writing')}
-                  className="w-full justify-center flex items-center gap-2"
-                >
-                  Skip Framework Discussion — Start Writing <ArrowRight className="w-4 h-4" />
-                </SerifButton>
+                {!frameworkSummaryGenerated && frameworkReadiness === 'ready_to_write' && (
+                  <SerifButton
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setPhase('writing')}
+                    className="w-full justify-center flex items-center gap-2"
+                  >
+                    Skip Framework Discussion &mdash; Start Writing <ArrowRight className="w-4 h-4" />
+                  </SerifButton>
+                )}
               </div>
             </PaperCard>
           </div>
@@ -754,13 +817,16 @@ export default function WritingTask2Practice() {
             </section>
 
             <div className="grid gap-8 xl:grid-cols-[minmax(0,1.12fr)_minmax(420px,0.88fr)] xl:items-start">
-              <section>
+              <section className="order-2">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-green-700" /> Key Corrections
+                  <ShieldCheck className="w-4 h-4 text-green-700" /> Sentence-level Corrections
                 </h3>
                 <div className="space-y-4">
                   {feedback.sentenceFeedback.map((item, i) => (
                     <PaperCard key={i} className="border-l-2 border-l-paper-ink/20">
+                      <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">
+                        Correction #{item.correctionNumber || i + 1}
+                      </div>
                       <div className="text-base text-paper-ink/60 line-through mb-2 leading-7">{item.original}</div>
                       <div className="text-[17px] font-bold mb-3 leading-8">{item.correction}</div>
                       <div className="flex flex-wrap items-center gap-2 mb-2 text-[10px] uppercase font-sans font-bold text-accent-terracotta">
@@ -774,17 +840,45 @@ export default function WritingTask2Practice() {
                 </div>
               </section>
 
-              <section>
+              <section className="order-1">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-accent-terracotta" /> Framework Logic Review
+                  <AlertCircle className="w-4 h-4 text-accent-terracotta" /> Logic & Structure Review
                 </h3>
                 <div className="space-y-3">
                   {feedback.frameworkFeedback.map((f, i) => (
                     <div key={i} className={`p-5 border border-paper-ink/10 rounded flex items-start gap-3 transition-colors ${f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-ink/5'}`}>
                       <div className={`w-2 h-2 rounded-full mt-1.5 ${f.severity === 'fatal' ? 'bg-red-800' : 'bg-accent-terracotta'}`} />
-                      <div>
+                      <div className="min-w-0 space-y-3">
                         <h4 className="text-[17px] font-bold leading-7">{f.issue}</h4>
-                        <p className="text-base leading-8 text-paper-ink/70 mt-1">{f.suggestionZh}</p>
+                        <div>
+                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Why it matters</p>
+                          <p className="text-base leading-8 text-paper-ink/70">{f.suggestionZh}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Big-picture fix</p>
+                          <p className="text-base leading-8 text-paper-ink/70">
+                            {f.paragraphFixZh || 'No sentence-level correction covers this issue. This needs paragraph-level revision.'}
+                          </p>
+                        </div>
+                        {f.relatedCorrectionIds?.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            <span className="text-xs font-sans text-paper-ink/45 self-center">Related:</span>
+                            {f.relatedCorrectionIds.map(id => (
+                              <span key={id} className="text-[10px] font-sans font-bold uppercase tracking-widest border border-paper-ink/10 bg-paper-50 px-2 py-1 rounded-sm">
+                                Correction #{id.replace(/^C/i, '')}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm leading-7 text-paper-ink/60 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">
+                            No sentence-level correction covers this issue. This needs paragraph-level revision.
+                          </p>
+                        )}
+                        {f.exampleFrame && (
+                          <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">
+                            Example frame: {f.exampleFrame}
+                          </p>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -49,8 +49,8 @@ export const writingSchemaInstruction = `The JSON object must match this exact k
     "lexicalResource": 0,
     "grammaticalRangeAccuracy": 0
   },
-  "frameworkFeedback": [{ "issue": "string", "suggestionZh": "string", "severity": "fatal" }],
-  "sentenceFeedback": [{ "original": "string", "correction": "string", "dimension": "TR", "tag": "string", "explanationZh": "string" }],
+  "frameworkFeedback": [{ "issue": "string", "suggestionZh": "string", "severity": "fatal", "relatedCorrectionIds": ["C1"], "paragraphFixZh": "string", "exampleFrame": "string" }],
+  "sentenceFeedback": [{ "id": "C1", "original": "string", "correction": "string", "dimension": "TR", "tag": "string", "explanationZh": "string" }],
   "modelAnswer": "string",
   "reusableArguments": [{ "argument": "string", "canBeReusedFor": ["string"], "explanationZh": "string" }],
   "obsidianMarkdown": "string"
@@ -95,7 +95,38 @@ export const frameworkSchemaInstruction = `The JSON object must match this exact
   "paragraphPlan": "string",
   "possibleExample": "string",
   "editableSummary": "string"
-}`;
+}
+
+editableSummary must be clear sections, not one dense block:
+Position
+- 中文逻辑:
+- English thesis draft:
+
+View A / Concession side
+- 中文逻辑:
+- English topic sentence draft:
+- Support points:
+- Useful sentence frame:
+
+View B / Main argument side
+- 中文逻辑:
+- English topic sentence draft:
+- Support points:
+- Useful sentence frame:
+
+My opinion
+- 中文逻辑:
+- English position sentence:
+- Concession pattern:
+
+Paragraph plan
+1. Introduction:
+2. Body 1:
+3. Body 2:
+4. Conclusion:
+
+Reusable language for this essay
+- Include 3-5 varied sentence frames or transitions.`;
 
 export const frameworkCoachSchemaInstruction = `The JSON object must match this exact key structure:
 {
@@ -182,6 +213,13 @@ You are an IELTS Writing Task 2 feedback engine for a local-first practice app.
 Return targeted feedback for the user's actual essay. Do not invent a different prompt.
 Keep Chinese explanations concise and practical.
 Set "task" to the exact input task value. For this V1 flow it is normally "task2".
+Separate big-picture task response / paragraph logic problems from sentence-level corrections.
+Use sentenceFeedback for direct local sentence corrections only. Give every sentence correction a stable id like C1, C2, C3.
+Use frameworkFeedback for Logic & Structure Review only: task response, paragraph plan, position, development, concession, and coherence problems.
+For each frameworkFeedback item, include relatedCorrectionIds when a sentence correction supports the same issue.
+If no sentence correction covers the logic issue, leave relatedCorrectionIds empty and include paragraphFixZh plus one optional English exampleFrame.
+Avoid duplicating full sentence correction text inside frameworkFeedback.
+Learner-facing explanations should be Chinese-first; English only for corrected sentences, examples, and useful frames.
 
 ${writingSchemaInstruction}
 
@@ -252,6 +290,7 @@ ${JSON.stringify(params, null, 2)}`);
 
 You extract a final IELTS Writing Task 2 framework from the learner's Phase 1 coach discussion notes.
 Ground the summary in learner notes, coach discussion, and any unsent draft notes. Use a bilingual editableSummary with Position, View A, View B, My opinion, and Paragraph plan sections. Each major section should include Chinese logic plus useful English thesis/topic sentence drafts where the learner has supplied enough information. Mark missing decisions as Not decided yet / 需要继续补充. Mark AI-suggested examples as Suggested example, please confirm. Do not turn the summary into a full model answer.
+Include reusable argument frames such as concession, contrast, not only...but also, not to mention, or this is not to suggest that, but vary them instead of repeating the same frames every time.
 Do not write the essay. Consolidate only the learner's notes and coach discussion into the requested fields.
 Do not invent a complete high-band essay plan from the prompt alone.
 If a decision is missing, write "Not decided yet / 需要继续补充" in that field.

@@ -541,10 +541,45 @@ const normalizeSeverity = (
   return 'naturalness';
 };
 
-const normalizeDimension = (value: unknown, path: string, errors: string[]) => {
+const normalizeDimension = (
+  value: unknown,
+  path: string,
+  errors: string[],
+): WritingFeedback['sentenceFeedback'][number]['dimension'] => {
   if (value === 'TR' || value === 'CC' || value === 'LR' || value === 'GRA') return value;
   errors.push(`${path} missing or invalid dimension`);
   return 'TR';
+};
+
+const normalizeCorrectionId = (value: unknown, index: number): string => {
+  if (typeof value === 'string' && /^C\d+$/i.test(value.trim())) return value.trim().toUpperCase();
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return `C${Math.floor(value)}`;
+  return `C${index + 1}`;
+};
+
+const normalizeRelatedCorrectionIds = (value: unknown, validIds: Set<string>): string[] => {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .map(item => normalizeCorrectionId(item, -1))
+      .filter(id => validIds.has(id)),
+  ));
+};
+
+const inferRelatedCorrectionIds = (
+  issue: string,
+  suggestionZh: string,
+  sentenceFeedback: WritingFeedback['sentenceFeedback'],
+): string[] => {
+  const haystack = `${issue} ${suggestionZh}`.toLowerCase();
+  const matches = sentenceFeedback.filter(item => {
+    if (item.dimension === 'TR' && /task|response|position|argument|logic|example|support|develop/.test(haystack)) return true;
+    if (item.dimension === 'CC' && /coherence|cohesion|paragraph|structure|link|transition|flow/.test(haystack)) return true;
+    if (item.dimension === 'LR' && /lexical|vocab|word|phrase|collocation/.test(haystack)) return true;
+    if (item.dimension === 'GRA' && /grammar|sentence|clause|tense|article/.test(haystack)) return true;
+    return false;
+  });
+  return matches.length <= 2 ? matches.map(item => item.id || `C${item.correctionNumber || 1}`) : [];
 };
 
 const normalizeWritingFeedback = (
@@ -560,6 +595,25 @@ const normalizeWritingFeedback = (
   const essayWords = countWords(request.essay || '');
   const task = asWritingTask(source.task, request.task, validationErrors);
   const lengthFeedback = buildWritingLengthFeedback(essayWords, task);
+  const sentenceFeedback = asArray(source.sentenceFeedback, 'sentenceFeedback', validationErrors).map((item, index) => {
+    const record = isRecord(item) ? item : {};
+    if (!isRecord(item)) validationErrors.push(`sentenceFeedback[${index}] missing or invalid object`);
+    return {
+      id: normalizeCorrectionId(record.id ?? record.correctionNumber, index),
+      correctionNumber: index + 1,
+      original: asString(record.original, FALLBACK_TEXT, `sentenceFeedback[${index}].original`, validationErrors),
+      correction: asString(record.correction, FALLBACK_TEXT, `sentenceFeedback[${index}].correction`, validationErrors),
+      dimension: normalizeDimension(record.dimension, `sentenceFeedback[${index}].dimension`, validationErrors),
+      tag: asString(record.tag, 'provider_safety', `sentenceFeedback[${index}].tag`, validationErrors),
+      explanationZh: asString(
+        record.explanationZh,
+        'Provider feedback was incomplete; this item was normalized safely.',
+        `sentenceFeedback[${index}].explanationZh`,
+        validationErrors,
+      ),
+    };
+  });
+  const validCorrectionIds = new Set(sentenceFeedback.map(item => item.id || `C${item.correctionNumber || 1}`));
 
   return {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -591,25 +645,24 @@ const normalizeWritingFeedback = (
             validationErrors,
           ),
           severity: normalizeSeverity(record.severity, `frameworkFeedback[${index}].severity`, validationErrors),
+          relatedCorrectionIds: (() => {
+            const explicit = normalizeRelatedCorrectionIds(record.relatedCorrectionIds, validCorrectionIds);
+            return explicit.length ? explicit : inferRelatedCorrectionIds(
+              asString(record.issue, FALLBACK_TEXT, `frameworkFeedback[${index}].issue`, validationErrors),
+              asString(record.suggestionZh, '', `frameworkFeedback[${index}].suggestionZh`, validationErrors),
+              sentenceFeedback,
+            );
+          })(),
+          paragraphFixZh: typeof record.paragraphFixZh === 'string' && record.paragraphFixZh.trim()
+            ? record.paragraphFixZh.trim()
+            : 'No sentence-level correction covers this issue. This needs paragraph-level revision.',
+          exampleFrame: typeof record.exampleFrame === 'string' && record.exampleFrame.trim()
+            ? record.exampleFrame.trim()
+            : undefined,
         };
       }),
     ],
-    sentenceFeedback: asArray(source.sentenceFeedback, 'sentenceFeedback', validationErrors).map((item, index) => {
-      const record = isRecord(item) ? item : {};
-      if (!isRecord(item)) validationErrors.push(`sentenceFeedback[${index}] missing or invalid object`);
-      return {
-        original: asString(record.original, FALLBACK_TEXT, `sentenceFeedback[${index}].original`, validationErrors),
-        correction: asString(record.correction, FALLBACK_TEXT, `sentenceFeedback[${index}].correction`, validationErrors),
-        dimension: normalizeDimension(record.dimension, `sentenceFeedback[${index}].dimension`, validationErrors),
-        tag: asString(record.tag, 'provider_safety', `sentenceFeedback[${index}].tag`, validationErrors),
-        explanationZh: asString(
-          record.explanationZh,
-          'Provider feedback was incomplete; this item was normalized safely.',
-          `sentenceFeedback[${index}].explanationZh`,
-          validationErrors,
-        ),
-      };
-    }),
+    sentenceFeedback,
     modelAnswer: asString(
       source.modelAnswer,
       'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',

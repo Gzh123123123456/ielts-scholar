@@ -124,11 +124,11 @@
 }
 
 .phase-tab {
-  @apply w-full min-w-0 justify-center px-5 py-3 rounded-sm transition-all duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/45 hover:text-paper-ink hover:bg-paper-ink/5 text-xs text-center whitespace-nowrap;
+  @apply w-full h-full min-w-0 overflow-hidden justify-center px-3 sm:px-5 py-3 rounded-sm transition-colors duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/45 hover:text-paper-ink hover:bg-paper-ink/5 text-[11px] sm:text-xs text-center whitespace-normal leading-snug;
 }
 
 .phase-tab-active {
-  @apply bg-accent-terracotta text-paper-50 shadow-sm;
+  @apply bg-accent-terracotta text-paper-50;
 }
 
 .phase-tab:disabled, .phase-tab-active:disabled {

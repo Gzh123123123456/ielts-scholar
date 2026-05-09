@@ -86,6 +86,11 @@ _Last updated: 2026-05-09_
   - Slightly larger feedback-card/paper-card spacing and phase-tab readability.
   - Improved line-height/spacing in Final Analysis sections (My Framework, My Essay, Key Corrections, Framework Logic Review, Model Answer Excerpt).
 - Writing Task 2 correction labels are display-normalized so learner UI shows readable Chinese-first labels instead of raw schema/provider enum keys such as `LR` or `LEXICAL_PRECISION`.
+- Latest Task 2 UX repair:
+  - Phase tab root cause was `whitespace-nowrap` allowing longer labels to visually overflow equal-width grid cells; the shared `.phase-tabs` / `.phase-tab` pattern now keeps all tabs in a stable 3-column grid and active/disabled states only change color/opacity.
+  - Framework summary buttons now have three states: keep discussing when not/almost ready, **Framework Ready — Generate Summary** when ready with no summary yet, and **Use This Framework — Start Writing** after a generated summary exists.
+  - Framework Summary now uses clear bilingual sections and reusable sentence frames instead of one dense block.
+  - Phase 3 separates **Logic & Structure Review** from **Sentence-level Corrections**; logic issues link to numbered corrections or explicitly mark paragraph-level revision.
 
 ## Writing Task 1 Academic Practice (Implemented)
 - V1.2 product direction is now Writing Task 1 Academic Basic Practice before Mock Exam.

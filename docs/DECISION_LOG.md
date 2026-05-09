@@ -1,5 +1,16 @@
 # Decision Log
 
+## [2026-05-09] Task 2 Framework UX and Linked Feedback Repair
+- **Decision**: Keep Task 2 phase tabs as one shared equal-width grid and constrain tab text inside each grid cell.
+- **Root cause**: The tabs were already in a 3-column grid, but `.phase-tab` used `whitespace-nowrap`; longer labels such as Phase 3 visually overflowed their equal cell and made the active tab look wider or offset.
+- **Implemented**:
+  - Active/inactive/disabled phase tab states now change color/opacity only.
+  - Framework summary buttons now follow three states: keep discussing, ready-generate-summary, and use-generated-framework-to-start-writing.
+  - Generated framework summaries now ask for clear bilingual sections plus reusable sentence frames.
+  - Phase 3 now separates **Logic & Structure Review** from **Sentence-level Corrections**.
+  - Sentence corrections receive stable numbers, and logic issues link to related correction IDs or mark themselves as paragraph-level only.
+- **Explicitly unchanged**: no V1.3 inline annotation, no click-to-highlight, no `.env.local` edits, no merge, no push.
+
 ## [2026-05-09] Task 2 Framework Coach Readiness Flow
 - **Decision**: Treat Writing Task 2 Phase 1 as a readiness-gated framework workflow, not a generic chat loop.
 - **Reason**: Learners need to know when their framework is ready enough to write, and Gemini quota should remain reserved for high-value final feedback.

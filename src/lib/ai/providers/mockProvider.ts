@@ -133,10 +133,14 @@ export class MockProvider implements AIProvider {
           issue: isUnderLength ? 'Under-length response' : 'Framework needs sharper development',
           suggestionZh: lengthNote,
           severity: isUnderLength ? 'fatal' : 'naturalness',
+          relatedCorrectionIds: [],
+          paragraphFixZh: lengthNote,
+          exampleFrame: 'This is not to suggest that the opposing view has no value; rather, the main issue is...',
         },
       ],
       sentenceFeedback: [
         {
+          id: 'C1',
           original: 'People should study what they want.',
           correction: 'Individuals should be encouraged to pursue subjects they are passionate about.',
           dimension: 'LR',
@@ -314,7 +318,39 @@ ${patterns.map(item => `- ${item}`).join('\n')}`,
 
     return {
       ...summary,
-      editableSummary: `Position:\n${summary.position}\n\nView A:\n${summary.viewA}\n\nView B:\n${summary.viewB}\n\nMy opinion:\n${summary.myOpinion}\n\nParagraph plan:\n${summary.paragraphPlan}\n\nPossible example:\n${summary.possibleExample}`,
+      editableSummary: `Position
+- 中文逻辑: ${summary.position}
+- English thesis draft: 需要继续补充 / Not decided yet
+
+View A / Concession side
+- 中文逻辑: ${summary.viewA}
+- English topic sentence draft: 需要继续补充 / Not decided yet
+- Support points: ${summary.possibleExample}
+- Useful sentence frame: This is not to suggest that...
+
+View B / Main argument side
+- 中文逻辑: ${summary.viewB}
+- English topic sentence draft: 需要继续补充 / Not decided yet
+- Support points: 需要继续补充 / Not decided yet
+- Useful sentence frame: Not only..., but also...
+
+My opinion
+- 中文逻辑: ${summary.myOpinion}
+- English position sentence: 需要继续补充 / Not decided yet
+- Concession pattern: While it is true that..., I would argue that...
+
+Paragraph plan
+1. Introduction: ${summary.paragraphPlan}
+2. Body 1: 需要继续补充 / Not decided yet
+3. Body 2: 需要继续补充 / Not decided yet
+4. Conclusion: 需要继续补充 / Not decided yet
+
+Reusable language for this essay
+- This is not to suggest that...
+- Not only..., but also...
+- By contrast,...
+- Not to mention...
+- A more balanced view is that...`,
     };
   }
 

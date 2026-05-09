@@ -56,6 +56,7 @@ export interface WritingTask2PracticeRecord extends PracticeRecordBase {
   frameworkChat: { role: 'user' | 'ai'; text: string }[];
   frameworkInput: string;
   finalFrameworkSummary: string;
+  frameworkSummaryGenerated?: boolean;
   frameworkReadiness?: WritingFrameworkReadiness;
   latestFrameworkCoach?: WritingFrameworkCoachFeedback;
   essay: string;
@@ -249,6 +250,7 @@ const sanitizeWritingTask2Record = (value: unknown): WritingTask2PracticeRecord 
     frameworkChat: asFrameworkChat(value.frameworkChat),
     frameworkInput: asString(value.frameworkInput),
     finalFrameworkSummary: asString(value.finalFrameworkSummary),
+    frameworkSummaryGenerated: Boolean(value.frameworkSummaryGenerated),
     frameworkReadiness: asFrameworkReadiness(value.frameworkReadiness),
     latestFrameworkCoach: isObject(value.latestFrameworkCoach)
       ? value.latestFrameworkCoach as unknown as WritingFrameworkCoachFeedback

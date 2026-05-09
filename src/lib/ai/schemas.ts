@@ -98,8 +98,13 @@ export interface WritingFeedback {
     issue: string;
     suggestionZh: string;
     severity: 'fatal' | 'naturalness' | 'preserved';
+    relatedCorrectionIds?: string[];
+    paragraphFixZh?: string;
+    exampleFrame?: string;
   }[];
   sentenceFeedback: {
+    id?: string;
+    correctionNumber?: number;
     original: string;
     correction: string;
     dimension: 'TR' | 'CC' | 'LR' | 'GRA';

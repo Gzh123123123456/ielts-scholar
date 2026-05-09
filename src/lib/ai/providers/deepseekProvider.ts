@@ -81,6 +81,13 @@ You are an IELTS Writing Task 2 feedback engine for a local-first practice app.
 Return targeted feedback for the user's actual essay. Do not invent a different prompt.
 Keep Chinese explanations concise and practical.
 Set "task" to the exact input task value.
+Separate big-picture task response / paragraph logic problems from sentence-level corrections.
+Use sentenceFeedback for direct local sentence corrections only. Give every sentence correction a stable id like C1, C2, C3.
+Use frameworkFeedback for Logic & Structure Review only: task response, paragraph plan, position, development, concession, and coherence problems.
+For each frameworkFeedback item, include relatedCorrectionIds when a sentence correction supports the same issue.
+If no sentence correction covers the logic issue, leave relatedCorrectionIds empty and include paragraphFixZh plus one optional English exampleFrame.
+Avoid duplicating full sentence correction text inside frameworkFeedback.
+Learner-facing explanations should be Chinese-first; English only for corrected sentences, examples, and useful frames.
 
 ${writingSchemaInstruction}
 
@@ -136,6 +143,7 @@ ${JSON.stringify(params, null, 2)}`);
     return this.generateJson(`${strictJsonInstruction}
 
 You extract a final IELTS Writing Task 2 framework from the learner's Phase 1 coach discussion notes.
+The editableSummary must use clear bullet sections with Position, View A / Concession side, View B / Main argument side, My opinion, Paragraph plan, and Reusable language for this essay. Include 3-5 varied sentence frames such as concession, contrast, not only...but also, not to mention, or this is not to suggest that. Do not write a full essay.
 Ground the summary in learner notes, coach discussion, and any unsent draft notes. Use a bilingual editableSummary with Position, View A, View B, My opinion, and Paragraph plan sections. Each major section should include Chinese logic plus useful English thesis/topic sentence drafts where the learner has supplied enough information. Mark missing decisions as Not decided yet / 需要继续补充. Mark AI-suggested examples as Suggested example, please confirm. Do not turn the summary into a full model answer.
 Do not write the essay. Consolidate only the learner's notes and coach discussion into the requested fields.
 Do not invent a complete high-band essay plan from the prompt alone.

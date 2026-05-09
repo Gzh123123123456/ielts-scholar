@@ -47,6 +47,9 @@ _Last updated: 2026-05-09_
   - Paragraph plan
   - Possible example
 - Current summary UI now presents a bilingual editable learning structure rather than a full model answer.
+- **Done Task 2 UX repair**: Framework summary button states now distinguish not/almost ready, ready-without-summary, and generated-summary cases.
+- **Done Task 2 UX repair**: Framework summaries include reusable sentence frames/transitions and stay editable.
+- **Done Task 2 feedback hierarchy**: Phase 3 separates logic-level review from sentence-level corrections and links logic issues to correction numbers when available.
 - Require user edit/confirm before moving to Phase 2.
 
 ### 2b) Future UI Consistency Notes
