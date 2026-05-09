@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-09] Task 2 Phase 3 Feedback Information Architecture
+- **Decision**: Treat Task 2 Phase 3 feedback as four separate learner jobs: global essay warnings, big-picture logic/structure review, sentence-level corrections, and topic vocabulary/expression upgrades.
+- **Reason**: Under-length warnings, lexical polish, paragraph logic, and local sentence fixes were competing in the same visual hierarchy, which made the most important revision task harder to see.
+- **Implemented**:
+  - Added normalized `essayLevelWarnings`, `location`, `issueType`, and `vocabularyUpgrade` support for Writing Task 2 feedback.
+  - Under-length / insufficient-sample feedback is displayed above detailed feedback as **Essay-level Warnings** instead of inside **Logic & Structure Review**.
+  - Logic issues are grouped by Whole Essay, Introduction, Body Paragraph 1, Body Paragraph 2, Conclusion, or Unknown / General.
+  - Logic issues link to compact correction-number references when provider output or safe local inference can find related sentence corrections.
+  - Pure lexical / grammar / local wording issues are filtered away from logic review and remain in sentence corrections or vocabulary upgrades unless they affect task response or structure.
+  - Task 2 markdown export now uses the same hierarchy as the UI.
+- **Explicitly unchanged**: no inline annotations, no click overlay, no provider routing change, no `.env.local` edits, no merge, no push.
+
 ## [2026-05-09] Task 2 Framework UX and Linked Feedback Repair
 - **Decision**: Keep Task 2 phase tabs as one shared equal-width grid and constrain tab text inside each grid cell.
 - **Root cause**: The tabs were already in a 3-column grid, but `.phase-tab` used `whitespace-nowrap`; longer labels such as Phase 3 visually overflowed their equal cell and made the active tab look wider or offset.

@@ -92,6 +92,15 @@ _Last updated: 2026-05-09_
   - Framework Summary now uses clear bilingual sections and reusable sentence frames instead of one dense block.
   - Phase 3 separates **Logic & Structure Review** from **Sentence-level Corrections**; logic issues link to numbered corrections or explicitly mark paragraph-level revision.
 
+### Task 2 Phase 3 Feedback Hierarchy Repair
+- Phase 3 now uses a clearer hierarchy: **My Essay**, **Essay-level Warnings**, **Logic & Structure Review**, **Sentence-level Corrections**, and **Vocabulary & Expression Upgrade**.
+- Under-length / insufficient-sample messages are global warnings, not normal logic cards.
+- Logic cards are grouped by essay location, stay limited to paragraph/task-response/structure problems, and link to numbered sentence corrections when relevant.
+- Pure lexical or grammar/local wording issues are rendered as sentence corrections or vocabulary upgrades, not big logic issues.
+- Logic cards no longer repeat full sentence correction text or duplicate the old "No sentence-level correction covers this issue" grey box.
+- Task 2 markdown export follows the same warning -> logic -> sentence correction -> vocabulary hierarchy.
+- Inline annotated essay overlay remains deferred to the next V1.3 step; it is not implemented in this repair.
+
 ## Writing Task 1 Academic Practice (Implemented)
 - V1.2 product direction is now Writing Task 1 Academic Basic Practice before Mock Exam.
 - `/writing/task1` is a usable Academic Task 1 practice page instead of a placeholder.

@@ -45,7 +45,8 @@ _Last updated: 2026-05-09_
   - Possible example
 - The current extraction format is a bilingual grounded summary; missing learner decisions are marked instead of invented.
 - Framework Summary now includes reusable sentence frames/transitions and uses clear bullet sections rather than a dense block.
-- Phase 3 feedback now separates **Logic & Structure Review** from **Sentence-level Corrections**, with logic issues linked to numbered corrections where possible.
+- Phase 3 feedback now separates **Essay-level Warnings**, **Logic & Structure Review**, **Sentence-level Corrections**, and **Vocabulary & Expression Upgrade**.
+- Under-length is a global warning, pure lexical issues stay out of big-picture logic cards, and logic issues link to numbered corrections where relevant.
 - Phase tab root cause repaired: nowrap labels were visually overflowing equal grid cells.
 - Require user edit/confirmation before entering Phase 2.
 - Framework Summary must summarize the learner's notes and coach discussion, not generate a full model plan from the prompt alone.
@@ -61,9 +62,9 @@ _Last updated: 2026-05-09_
 - Session-level notes are deferred until their user value and scope are clearer.
 
 ## V1.3 - Feedback Granularity Upgrade
-- Sentence numbering and correction-to-source mapping.
+- Sentence numbering and correction-to-source mapping. Basic correction numbers and logic-to-correction references are implemented in Phase 3 cards.
 - Click-to-locate correction.
-- Inline annotation later, not a full editor yet.
+- Inline annotated essay overlay / popover cards are the next step and are not part of the current Phase 3 hierarchy repair.
 
 ## V2 - Mock Exam Update
 - Dedicated Speaking, Writing Task 1, and Writing Task 2 mock flows after the three basic practice modules exist.

@@ -12,6 +12,7 @@
    - Framework Coach readiness is a local/provider-assisted planning aid, not an IELTS official scoring signal.
    - Framework Summary is grounded in learner notes and coach discussion; if the learner has not decided something, the summary should mark it as missing rather than fill in a polished model plan.
    - Logic-to-correction links are provider-supplied when available and locally inferred only when the match is safe; otherwise the issue is shown as paragraph-level revision.
+   - Task 2 Phase 3 does not yet include inline essay annotations, click-to-locate behavior, underlines, overlays, or popover cards. The current repair stops at grouped feedback cards, correction numbers, global warnings, and compact vocabulary upgrades.
 5. **Transcription**: Relies on browser Web Speech API. Works reliably in Chrome and Edge. Safari and AI Studio preview environments may be unreliable. Users should verify Chrome is using the correct microphone device.
 6. **no-speech Recovery**: Speaking Practice auto-restarts recognition on `no-speech` errors (up to 2 retries). This covers brief silence, but if the wrong microphone device is selected in Chrome, recognition will not work regardless.
 7. **Storage**: Data is stored in `localStorage`. Active attempts, practice records, provider usage estimates, and router cooldown state are recoverable in the same browser, but clearing browser data will lose history. No IndexedDB/database migration exists yet.

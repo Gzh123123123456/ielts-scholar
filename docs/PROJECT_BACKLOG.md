@@ -49,7 +49,8 @@ _Last updated: 2026-05-09_
 - Current summary UI now presents a bilingual editable learning structure rather than a full model answer.
 - **Done Task 2 UX repair**: Framework summary button states now distinguish not/almost ready, ready-without-summary, and generated-summary cases.
 - **Done Task 2 UX repair**: Framework summaries include reusable sentence frames/transitions and stay editable.
-- **Done Task 2 feedback hierarchy**: Phase 3 separates logic-level review from sentence-level corrections and links logic issues to correction numbers when available.
+- **Done Task 2 feedback hierarchy**: Phase 3 separates essay-level warnings, logic/structure review, sentence-level corrections, and vocabulary/expression upgrades.
+- **Done Task 2 feedback hierarchy**: under-length is treated as a global warning, pure lexical issues stay out of big-picture logic cards, and logic issues link to correction numbers when relevant.
 - Require user edit/confirm before moving to Phase 2.
 
 ### 2b) Future UI Consistency Notes
@@ -122,9 +123,9 @@ _Last updated: 2026-05-09_
   - review cards
 
 ### 4) Sentence-level Feedback
-- Step 1: sentence numbering and correction-to-source mapping.
+- Step 1: sentence numbering and correction-to-source mapping. *(Basic correction numbers and logic-to-correction references are implemented for Task 2 Phase 3 cards.)*
 - Step 2: click-to-locate correction.
-- Step 3: inline annotation.
+- Step 3: inline annotation / overlay on the essay text.
 - Do not implement full inline editor yet.
 
 ### 5) Speaking Improvements

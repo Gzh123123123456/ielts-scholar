@@ -82,11 +82,15 @@ Return targeted feedback for the user's actual essay. Do not invent a different 
 Keep Chinese explanations concise and practical.
 Set "task" to the exact input task value.
 Separate big-picture task response / paragraph logic problems from sentence-level corrections.
+Return essayLevelWarnings separately for global warnings only: under-length response, insufficient sample, unreliable training estimate. Do not put these in frameworkFeedback.
 Use sentenceFeedback for direct local sentence corrections only. Give every sentence correction a stable id like C1, C2, C3.
-Use frameworkFeedback for Logic & Structure Review only: task response, paragraph plan, position, development, concession, and coherence problems.
+Use frameworkFeedback for Logic & Structure Review only: task response, off-topic or irrelevant opening, missing advantage/disadvantage coverage, weak position, missing paragraph development, paragraph order/structure, lack of examples/support.
+Do not put pure lexical, grammar, or local wording issues into frameworkFeedback unless they directly affect task response or structure.
 For each frameworkFeedback item, include relatedCorrectionIds when a sentence correction supports the same issue.
 If no sentence correction covers the logic issue, leave relatedCorrectionIds empty and include paragraphFixZh plus one optional English exampleFrame.
+For every frameworkFeedback item include location, issueType, suggestionZh as whyItMattersZh, paragraphFixZh, relatedCorrectionIds, and exampleFrame.
 Avoid duplicating full sentence correction text inside frameworkFeedback.
+Return vocabularyUpgrade with 4-8 compact total items across topicVocabulary, userWordingUpgrades, collocationUpgrades, and reusableSentenceFrames. Focus on this essay topic and the user's wording.
 Learner-facing explanations should be Chinese-first; English only for corrected sentences, examples, and useful frames.
 
 ${writingSchemaInstruction}

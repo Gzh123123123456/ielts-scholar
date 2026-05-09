@@ -76,6 +76,94 @@ const displayCategory = (value: string) => {
   return categoryLabels[normalized] || humanizeKey(value);
 };
 
+type LogicLocation = NonNullable<WritingFeedback['frameworkFeedback'][number]['location']>;
+
+const logicLocationOrder: LogicLocation[] = [
+  'Whole Essay',
+  'Introduction',
+  'Body Paragraph 1',
+  'Body Paragraph 2',
+  'Conclusion',
+  'Unknown / General',
+];
+
+const isWarningIssue = (issue: string) =>
+  /under-length|insufficient sample|extremely insufficient|unreliable training estimate/i.test(issue);
+
+const isPureLocalLanguageIssue = (item: WritingFeedback['frameworkFeedback'][number]) => {
+  const text = `${item.issue} ${item.suggestionZh} ${item.issueType || ''}`.toLowerCase();
+  return /lexical|vocab|word choice|collocation|grammar|tense|article|punctuation|spelling/.test(text)
+    && !/task response|off-topic|irrelevant|position|paragraph|structure|development|support|example|advantage|disadvantage|concession|coherence/.test(text);
+};
+
+const getDisplayLocation = (item: WritingFeedback['frameworkFeedback'][number]): LogicLocation => {
+  if (item.location && logicLocationOrder.includes(item.location)) return item.location;
+  const text = `${item.issue} ${item.suggestionZh}`.toLowerCase();
+  if (/introduction|opening|intro/.test(text)) return 'Introduction';
+  if (/body\s*(paragraph)?\s*1|first body/.test(text)) return 'Body Paragraph 1';
+  if (/body\s*(paragraph)?\s*2|second body/.test(text)) return 'Body Paragraph 2';
+  if (/conclusion|closing/.test(text)) return 'Conclusion';
+  if (/whole|overall|essay|task response|position/.test(text)) return 'Whole Essay';
+  return 'Unknown / General';
+};
+
+const getEssayWarnings = (feedback: WritingFeedback, isInsufficientSample: boolean) => {
+  const explicit = Array.isArray(feedback.essayLevelWarnings) ? feedback.essayLevelWarnings : [];
+  const legacy = feedback.frameworkFeedback
+    .filter(item => isWarningIssue(item.issue))
+    .map(item => ({
+      title: item.issue,
+      messageZh: item.paragraphFixZh || item.suggestionZh,
+    }));
+  const insufficient = isInsufficientSample
+    ? [{
+        title: 'Essay development warning',
+        messageZh: 'This response is under 250 words or too low-signal, so the training estimate is capped. Expand body paragraphs before treating the estimate as reliable.',
+      }]
+    : [];
+  const seen = new Set<string>();
+  return [...insufficient, ...explicit, ...legacy].filter(item => {
+    const key = `${item.title}|${item.messageZh}`;
+    if (!item.messageZh || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const getLogicFeedback = (feedback: WritingFeedback) =>
+  feedback.frameworkFeedback.filter(item => !isWarningIssue(item.issue) && !isPureLocalLanguageIssue(item));
+
+const groupedLogicFeedback = (items: WritingFeedback['frameworkFeedback']) =>
+  logicLocationOrder
+    .map(location => ({
+      location,
+      items: items.filter(item => getDisplayLocation(item) === location),
+    }))
+    .filter(group => group.items.length);
+
+const getVocabularyUpgrade = (feedback: WritingFeedback) => {
+  const empty = {
+    topicVocabulary: [] as string[],
+    userWordingUpgrades: [] as WritingFeedback['vocabularyUpgrade']['userWordingUpgrades'],
+    collocationUpgrades: [] as string[],
+    reusableSentenceFrames: [] as string[],
+  };
+  const upgrade = feedback.vocabularyUpgrade || empty;
+  const lrCorrections = feedback.sentenceFeedback
+    .filter(item => item.dimension === 'LR')
+    .map(item => ({
+      original: item.original,
+      better: item.correction,
+      explanationZh: item.explanationZh,
+    }));
+  return {
+    topicVocabulary: (upgrade.topicVocabulary?.length ? upgrade.topicVocabulary : ['a balanced approach', 'long-term consequence']).slice(0, 2),
+    userWordingUpgrades: [...(upgrade.userWordingUpgrades || []), ...lrCorrections].slice(0, 2),
+    collocationUpgrades: (upgrade.collocationUpgrades?.length ? upgrade.collocationUpgrades : ['develop a clear position', 'support the argument with concrete evidence']).slice(0, 2),
+    reusableSentenceFrames: (upgrade.reusableSentenceFrames?.length ? upgrade.reusableSentenceFrames : ['This is not to suggest that ..., but ...', 'A more balanced view is that ...']).slice(0, 2),
+  };
+};
+
 const routeNotice = (
   route: { providerName: string; fallbackReason?: string; learnerReason: string },
   failureKind?: string,
@@ -538,12 +626,19 @@ export default function WritingTask2Practice() {
 
   const exportMarkdown = () => {
     if (!feedback) return;
-    const logicItems = feedback.frameworkFeedback.length
-      ? feedback.frameworkFeedback.map((item, index) => {
+    const warnings = getEssayWarnings(feedback, isInsufficientTask2Sample(essay));
+    const logicFeedback = getLogicFeedback(feedback);
+    const vocabulary = getVocabularyUpgrade(feedback);
+    const warningItems = warnings.length
+      ? warnings.map(item => `- ${item.title}: ${item.messageZh}`).join('\n')
+      : '- No essay-level warning.';
+    const logicItems = logicFeedback.length
+      ? logicFeedback.map((item, index) => {
           const related = item.relatedCorrectionIds?.length
             ? item.relatedCorrectionIds.map(id => `Correction #${id.replace(/^C/i, '')}`).join(', ')
-            : 'No sentence-level correction covers this issue. This needs paragraph-level revision.';
+            : 'Paragraph-level issue: no single sentence correction fully solves this.';
           return `### Logic Issue ${index + 1}: ${item.issue}
+- Location: ${getDisplayLocation(item)}
 - Why it matters: ${item.suggestionZh}
 - Big-picture fix: ${item.paragraphFixZh || item.suggestionZh}
 - Related: ${related}${item.exampleFrame ? `\n- Example frame: ${item.exampleFrame}` : ''}`;
@@ -557,10 +652,19 @@ export default function WritingTask2Practice() {
 - Focus: ${item.tag}
 - Explanation: ${item.explanationZh}`).join('\n\n')
       : '- No sentence-level correction returned.';
+    const vocabularyItems = [
+      ...vocabulary.topicVocabulary.map(item => `- Topic vocabulary: ${item}`),
+      ...vocabulary.userWordingUpgrades.map(item => `- User wording upgrade: ${item.original} -> ${item.better}\n  - ${item.explanationZh}`),
+      ...vocabulary.collocationUpgrades.map(item => `- Collocation: ${item}`),
+      ...vocabulary.reusableSentenceFrames.map(item => `- Sentence frame: ${item}`),
+    ].slice(0, 8).join('\n') || '- No vocabulary upgrade returned.';
     const markdown = `# IELTS Writing Task 2 Note
 
 ## Prompt
 ${feedback.question}
+
+## Essay-level Warnings
+${warningItems}
 
 ## Logic & Structure Review
 ${logicItems}
@@ -568,8 +672,8 @@ ${logicItems}
 ## Sentence-level Corrections
 ${sentenceItems}
 
-## Model Answer Excerpt
-${feedback.modelAnswer}
+## Vocabulary & Expression Upgrade
+${vocabularyItems}
 
 ## Essay
 ${feedback.essay}`;
@@ -587,6 +691,10 @@ ${feedback.essay}`;
   const isInsufficientSample = isInsufficientTask2Sample(essay);
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
   const hasCoachFeedback = frameworkChat.some((msg, index) => msg.role === 'ai' && index > 0);
+  const essayWarnings = feedback ? getEssayWarnings(feedback, isInsufficientSample) : [];
+  const logicFeedback = feedback ? getLogicFeedback(feedback) : [];
+  const logicGroups = feedback ? groupedLogicFeedback(logicFeedback) : [];
+  const vocabularyUpgrade = feedback ? getVocabularyUpgrade(feedback) : null;
 
   return (
     <PageShell size="wide">
@@ -783,14 +891,6 @@ ${feedback.essay}`;
 
         {phase === 'results' && feedback && (
           <div className="space-y-8">
-            {isInsufficientSample && (
-              <PaperCard className="border-l-2 border-l-red-800 bg-red-50/40">
-                <h3 className="text-sm font-bold uppercase tracking-widest text-red-800 mb-3">Insufficient Sample</h3>
-                <p className="text-base leading-8 text-paper-ink/85">
-                  This essay is too short or too low-signal for reliable Task 2 feedback. Treat any old saved scores or model-answer text as non-diagnostic; first expand the response into a clear position, two developed body paragraphs, and a short conclusion.
-                </p>
-              </PaperCard>
-            )}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: 'Task Response', score: feedback.scores.taskResponse },
@@ -815,6 +915,20 @@ ${feedback.essay}`;
                 </div>
               </PaperCard>
             </section>
+
+            {essayWarnings.length > 0 && (
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Essay-level Warnings</h3>
+                <div className="space-y-3">
+                  {essayWarnings.map((warning, index) => (
+                    <PaperCard key={`${warning.title}-${index}`} className="border-l-2 border-l-red-800 bg-red-50/40">
+                      <h4 className="text-[17px] font-bold leading-7 text-red-900 mb-2">{warning.title}</h4>
+                      <p className="text-base leading-8 text-paper-ink/85">{warning.messageZh}</p>
+                    </PaperCard>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <div className="grid gap-8 xl:grid-cols-[minmax(0,1.12fr)_minmax(420px,0.88fr)] xl:items-start">
               <section className="order-2">
@@ -844,47 +958,95 @@ ${feedback.essay}`;
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-accent-terracotta" /> Logic & Structure Review
                 </h3>
-                <div className="space-y-3">
-                  {feedback.frameworkFeedback.map((f, i) => (
-                    <div key={i} className={`p-5 border border-paper-ink/10 rounded flex items-start gap-3 transition-colors ${f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-ink/5'}`}>
-                      <div className={`w-2 h-2 rounded-full mt-1.5 ${f.severity === 'fatal' ? 'bg-red-800' : 'bg-accent-terracotta'}`} />
-                      <div className="min-w-0 space-y-3">
-                        <h4 className="text-[17px] font-bold leading-7">{f.issue}</h4>
-                        <div>
-                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Why it matters</p>
-                          <p className="text-base leading-8 text-paper-ink/70">{f.suggestionZh}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Big-picture fix</p>
-                          <p className="text-base leading-8 text-paper-ink/70">
-                            {f.paragraphFixZh || 'No sentence-level correction covers this issue. This needs paragraph-level revision.'}
-                          </p>
-                        </div>
-                        {f.relatedCorrectionIds?.length ? (
-                          <div className="flex flex-wrap gap-2">
-                            <span className="text-xs font-sans text-paper-ink/45 self-center">Related:</span>
-                            {f.relatedCorrectionIds.map(id => (
-                              <span key={id} className="text-[10px] font-sans font-bold uppercase tracking-widest border border-paper-ink/10 bg-paper-50 px-2 py-1 rounded-sm">
-                                Correction #{id.replace(/^C/i, '')}
-                              </span>
-                            ))}
+                <div className="space-y-5">
+                  {logicGroups.length ? logicGroups.map(group => (
+                    <div key={group.location} className="space-y-3">
+                      <h4 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45">{group.location}</h4>
+                      {group.items.map((f, i) => (
+                        <div key={`${group.location}-${i}`} className={`p-5 border border-paper-ink/10 rounded-sm flex items-start gap-3 transition-colors ${f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-ink/5'}`}>
+                          <div className={`w-2 h-2 rounded-full mt-1.5 ${f.severity === 'fatal' ? 'bg-red-800' : 'bg-accent-terracotta'}`} />
+                          <div className="min-w-0 space-y-3">
+                            <div>
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">{getDisplayLocation(f)}</p>
+                              <h5 className="text-[17px] font-bold leading-7">{f.issue}</h5>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Why it matters</p>
+                              <p className="text-base leading-8 text-paper-ink/70">{f.suggestionZh}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Big-picture fix</p>
+                              <p className="text-base leading-8 text-paper-ink/70">
+                                {f.paragraphFixZh || `Paragraph-level issue: no single sentence correction fully solves this. Rewrite the ${getDisplayLocation(f).toLowerCase()} around one clear idea with support.`}
+                              </p>
+                            </div>
+                            {f.relatedCorrectionIds?.length ? (
+                              <div className="flex flex-wrap gap-2">
+                                <span className="text-xs font-sans text-paper-ink/45 self-center">Related:</span>
+                                {f.relatedCorrectionIds.map(id => (
+                                  <span key={id} className="text-[10px] font-sans font-bold uppercase tracking-widest border border-paper-ink/10 bg-paper-50 px-2 py-1 rounded-sm">
+                                    Correction #{id.replace(/^C/i, '')}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm leading-7 text-paper-ink/60 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">
+                                Paragraph-level issue: no single sentence correction fully solves this.
+                              </p>
+                            )}
+                            {f.exampleFrame && (
+                              <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">
+                                Example frame: {f.exampleFrame}
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <p className="text-sm leading-7 text-paper-ink/60 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">
-                            No sentence-level correction covers this issue. This needs paragraph-level revision.
-                          </p>
-                        )}
-                        {f.exampleFrame && (
-                          <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">
-                            Example frame: {f.exampleFrame}
-                          </p>
-                        )}
-                      </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )) : (
+                    <PaperCard className="bg-paper-ink/5">
+                      <p className="text-base leading-8 text-paper-ink/65">No big-picture logic issue returned for this attempt.</p>
+                    </PaperCard>
+                  )}
                 </div>
               </section>
             </div>
+
+            {vocabularyUpgrade && (
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Vocabulary & Expression Upgrade</h3>
+                <PaperCard className="bg-paper-ink/[0.02]">
+                  <div className="grid gap-5 md:grid-cols-2">
+                    {vocabularyUpgrade.topicVocabulary.map((item, index) => (
+                      <div key={`topic-${index}`}>
+                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Topic-essential vocabulary</p>
+                        <p className="text-base leading-7 text-paper-ink/75">{item}</p>
+                      </div>
+                    ))}
+                    {vocabularyUpgrade.userWordingUpgrades.map((item, index) => (
+                      <div key={`wording-${index}`}>
+                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">User wording upgrade</p>
+                        <p className="text-sm leading-7 text-paper-ink/55 line-through">{item.original}</p>
+                        <p className="text-base leading-7 font-bold">{item.better}</p>
+                        <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
+                      </div>
+                    ))}
+                    {vocabularyUpgrade.collocationUpgrades.map((item, index) => (
+                      <div key={`collocation-${index}`}>
+                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Collocation upgrade</p>
+                        <p className="text-base leading-7 text-paper-ink/75">{item}</p>
+                      </div>
+                    ))}
+                    {vocabularyUpgrade.reusableSentenceFrames.map((item, index) => (
+                      <div key={`frame-${index}`}>
+                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Argument sentence frame</p>
+                        <p className="text-base leading-7 text-paper-ink/75">{item}</p>
+                      </div>
+                    ))}
+                  </div>
+                </PaperCard>
+              </section>
+            )}
 
             <PaperCard className="min-h-[220px]">
               <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Model Answer Excerpt</h3>

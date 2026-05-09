@@ -128,19 +128,29 @@ export class MockProvider implements AIProvider {
       question: params.question,
       essay: params.essay,
       scores,
+      essayLevelWarnings: isUnderLength
+        ? [{
+            title: 'Essay development warning',
+            messageZh: lengthNote,
+          }]
+        : [],
       frameworkFeedback: [
         {
-          issue: isUnderLength ? 'Under-length response' : 'Framework needs sharper development',
+          issue: 'Framework needs sharper development',
           suggestionZh: lengthNote,
           severity: isUnderLength ? 'fatal' : 'naturalness',
-          relatedCorrectionIds: [],
-          paragraphFixZh: lengthNote,
+          location: 'Whole Essay',
+          issueType: 'paragraph_development',
+          relatedCorrectionIds: ['C1'],
+          paragraphFixZh: 'Build each body paragraph around one clear topic sentence, then add one reason and one concrete example before polishing local wording.',
           exampleFrame: 'This is not to suggest that the opposing view has no value; rather, the main issue is...',
         },
       ],
       sentenceFeedback: [
         {
           id: 'C1',
+          paragraph: 'Introduction',
+          issueType: 'lexical_precision',
           original: 'People should study what they want.',
           correction: 'Individuals should be encouraged to pursue subjects they are passionate about.',
           dimension: 'LR',
@@ -148,6 +158,18 @@ export class MockProvider implements AIProvider {
           explanationZh: '可以用更正式、更准确的表达替代口语化词组，但前提是先把文章写成完整论证。',
         },
       ],
+      vocabularyUpgrade: {
+        topicVocabulary: ['academic autonomy', 'long-term employability'],
+        userWordingUpgrades: [
+          {
+            original: 'study what they want',
+            better: 'pursue subjects they are genuinely interested in',
+            explanationZh: 'This is more precise for education Task 2 topics than the vague phrase what they want.',
+          },
+        ],
+        collocationUpgrades: ['develop a clear career pathway', 'make an informed academic choice'],
+        reusableSentenceFrames: ['This is not to suggest that ..., but ...', 'A more balanced approach would be to ...'],
+      },
       modelAnswer: isUnderLength
         ? 'This sample is too short for a high training estimate. A complete response should state a clear position, develop two body paragraphs with specific reasoning, and finish with a concise conclusion.'
         : 'A stronger essay would maintain a clear position throughout, develop each body paragraph around one controlling idea, and use a specific example to show why the argument matters.',

@@ -98,19 +98,37 @@ export interface WritingFeedback {
     issue: string;
     suggestionZh: string;
     severity: 'fatal' | 'naturalness' | 'preserved';
+    location?: 'Whole Essay' | 'Introduction' | 'Body Paragraph 1' | 'Body Paragraph 2' | 'Conclusion' | 'Unknown / General';
+    issueType?: string;
     relatedCorrectionIds?: string[];
     paragraphFixZh?: string;
     exampleFrame?: string;
   }[];
+  essayLevelWarnings: {
+    title: string;
+    messageZh: string;
+  }[];
   sentenceFeedback: {
     id?: string;
     correctionNumber?: number;
+    paragraph?: string;
+    issueType?: string;
     original: string;
     correction: string;
     dimension: 'TR' | 'CC' | 'LR' | 'GRA';
     tag: string;
     explanationZh: string;
   }[];
+  vocabularyUpgrade: {
+    topicVocabulary: string[];
+    userWordingUpgrades: {
+      original: string;
+      better: string;
+      explanationZh: string;
+    }[];
+    collocationUpgrades: string[];
+    reusableSentenceFrames: string[];
+  };
   modelAnswer: string;
   reusableArguments: {
     argument: string;
