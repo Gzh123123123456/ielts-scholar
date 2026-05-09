@@ -1,5 +1,24 @@
 # Decision Log
 
+## [2026-05-09] Product Design Principles and Claude Patch Rejection
+
+- **Event**: A Claude Code patch attempted to redesign Writing Task 2 Phase 3 Vocabulary & Expression Upgrade.
+- **Decision**: The patch was reverted and is rejected as product direction.
+- **Reasons**:
+  - Explanatory module text such as "Expression bank for this essay — for revision and future reuse, not another correction list" created UI noise. The design should express itself through structure, not narration.
+  - Empty state rules were too aggressive, causing "No expression bank items for this attempt" to appear for a normal essay.
+  - Big-picture fixes remained too generic.
+  - Claude Code is not currently suitable for product information architecture changes.
+- **Actions taken**:
+  - Created `docs/PRODUCT_DESIGN_PRINCIPLES.md` as the long-term product design source of truth.
+  - Updated `docs/HANDOFF_NEXT_CHAT.md` to document the rejection and current agent role boundaries.
+  - Updated `docs/PROJECT_BACKLOG.md` with a clear future task tree for Codex.
+  - Updated `AGENTS.md` and `docs/AGENT_WORKFLOW.md` with role boundary notes.
+- **Forward direction**:
+  - Keep Claude Code to documentation, status checks, and verification.
+  - Hand off Phase 3 product UI work to Codex later.
+  - Future prompts must turn product principles into concrete task instructions.
+
 ## [2026-05-09] Task 2 Phase 3 Content Logic Refinement
 - **Decision**: Keep Phase 3 card-based for now, but deepen the content model inside each section before building interactive essay annotations.
 - **Reason**: Learners need clearer learning value from each feedback layer before source-text overlays are useful.

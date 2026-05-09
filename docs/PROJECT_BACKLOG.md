@@ -165,6 +165,111 @@ _Last updated: 2026-05-09_
 
 ---
 
+## P1 Future — Writing Task 2 Phase 3 (Codex Priority)
+
+### Vocabulary & Expression Upgrade Redesign
+
+Redesign according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
+
+- Use four confirmed groups:
+  - `Topic Vocabulary`
+  - `From Your Essay`
+  - `Collocations`
+  - `Argument Frames`
+- Avoid long module explanations.
+- Avoid duplicate sentence corrections.
+- `From Your Essay` must be phrase-level.
+- Universal academic phrases are allowed in small, strongly relevant doses.
+- Normal relevant input should not produce an empty vocabulary section.
+
+### Logic Review — Revision Roadmap
+
+- Logic Review should become a revision roadmap with specific paragraph-level fixes.
+- Each major logic issue should explain what, why, and what to do.
+- Avoid generic fixes; prefer task-specific guidance.
+
+### Personalized Model Answer Excerpt
+
+- Should remain a learner-specific upgraded direction, not a generic Band 9 essay.
+- Preserve learner's position and main ideas; fix the specific Phase 3 issues.
+
+---
+
+## P1 Future — V1.3 Annotated Essay Overlay
+
+- Source-text underline / marker / overlay is future work.
+- After overlay works, old large sentence correction cards can default-collapse.
+- Long-term direction: old large cards may eventually be removed.
+- Overlay must be aesthetically clean but must not compress or weaken content.
+
+---
+
+## P1 Future — Writing Task 2 Phase 1 Coach Upgrade
+
+- Framework Coach should be stronger than originally scoped.
+- It should not only organize a framework.
+- It should point out flawed claims, weak evidence, unsupported examples, imbalance, task-response gaps, and possible better argument directions.
+- It should use guided questions / suggestions to train the learner's thinking.
+- The stronger Coach is, the less Generate Framework Summary needs to invent.
+- Generate Framework Summary should organize already-discussed decisions, not think for the learner.
+
+---
+
+## P1 Future — Speaking Pre-Answer Coaching
+
+- Speaking should have pre-answer coaching / planning, especially for Part 2 and Part 3.
+- Training flow may become:
+  - get question
+  - plan answer structure / answer pattern
+  - then record
+  - then transcript + feedback
+- Part 2 needs story / cue-card structure support.
+- Part 3 needs abstract reasoning, comparison, cause/result, concession, example-building support.
+- Transcript fidelity is critical.
+- Do not use "smart correction" that silently fixes mispronounced words through context.
+- Raw transcript and possible intended word should be separated if better ASR is added.
+
+---
+
+## P1 Future — History
+
+- History should eventually include all user practice data.
+- It should not be artificially light.
+- The key is clear arrangement, summaries, filters, restore / export paths.
+- History should become the learner's practice archive.
+
+---
+
+## P1 Future — Progress
+
+- Progress can include reference band estimates.
+- Progress can use tables and data summaries.
+- Do not over-warn users that estimates are unofficial.
+- Present estimates calmly as training references.
+- Future progress can include trends, topic coverage, visual-type coverage, repeated issue statistics, practice frequency, and repeated-attempt comparisons.
+
+---
+
+## P1 Future — Provider / API Direction
+
+- Mock Provider means no-key fallback / local fake feedback path.
+- The user's current local setup may call real Gemini / DeepSeek APIs and consume tokens.
+- These are not contradictory.
+- Future shared / open-source mode may support user-provided API keys before entering the app.
+- Website may recommend mainstream model providers.
+- Each user should ideally use their own API key instead of consuming the project owner's tokens.
+- Production-safe server-side proxy / account / encrypted storage is a later direction, not current priority.
+
+---
+
+## P1 Future — Agent Workflow
+
+- Claude Code is not trusted for product UI / information architecture changes right now.
+- Claude Code should be used for docs, status checks, and verification only unless explicitly re-authorized.
+- Codex should handle main product / UI implementation once available.
+
+---
+
 ## Do Not Do Yet
 - Do not connect Gemini during UI polish.
 - Do not add RAG yet.
