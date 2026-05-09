@@ -5,6 +5,7 @@ import {
   AIProvider,
   SpeakingAnalysisRequest,
   WritingAnalysisRequest,
+  WritingFrameworkCoachRequest,
   WritingFrameworkRequest,
   WritingTask1AnalysisRequest,
 } from './providers/base';
@@ -28,6 +29,7 @@ import {
   safeAnalyzeSpeaking,
   safeAnalyzeWriting,
   safeAnalyzeWritingTask1,
+  safeCoachWritingFramework,
   safeExtractWritingFramework,
 } from './safety';
 
@@ -196,6 +198,21 @@ const chooseDeepSeekFallback = (operation: ProviderOperation) => {
   return makeDeepSeekFlash('Gemini is unavailable or reserved; using DeepSeek V4 Flash automatically.');
 };
 
+const chooseFrameworkRoute = (operation: 'writing_framework_coach' | 'writing_framework_extraction') => {
+  if (hasDeepSeek()) {
+    return makeDeepSeekFlash(
+      operation === 'writing_framework_coach'
+        ? 'Framework coach used DeepSeek V4 Flash as a low-cost intermediate step.'
+        : 'Framework extraction used DeepSeek V4 Flash to avoid spending Gemini on an intermediate step.',
+    );
+  }
+  return makeMock(
+    operation === 'writing_framework_coach'
+      ? 'Framework coach used local mock because DeepSeek fallback is unavailable.'
+      : 'Framework extraction avoided Gemini; using local mock because DeepSeek fallback is unavailable.',
+  );
+};
+
 const chooseRoute = (
   operation: ProviderOperation,
   payload: unknown,
@@ -209,10 +226,10 @@ const chooseRoute = (
       : makeMock('Gemini mode is configured without VITE_GEMINI_API_KEY; using Mock Provider.');
   }
 
-  if (operation === 'writing_framework_extraction') {
-    return hasDeepSeek()
-      ? makeDeepSeekFlash('Framework extraction used DeepSeek V4 Flash to avoid spending Gemini on an intermediate step.')
-      : makeMock('Framework extraction avoided Gemini; using Mock Provider because DeepSeek is not configured.');
+  if (operation === 'writing_framework_coach' || operation === 'writing_framework_extraction') {
+    return mode === 'auto'
+      ? chooseFrameworkRoute(operation)
+      : makeMock(`${operation} uses local mock unless auto routing with DeepSeek is configured.`);
   }
 
   if (options.insufficientSample) {
@@ -235,18 +252,23 @@ async function runWithRoute<T>(
   runner: (provider: AIProvider, providerName: string) => Promise<{ feedback: T; diagnostic: ProviderDiagnostic }>,
 ): Promise<RoutedResult<T>> {
   const result = await runner(route.provider, route.providerName);
+  const diagnostic = {
+    ...result.diagnostic,
+    modelName: route.model,
+  };
   const estimatedInputTokens = estimateTokensFromText(estimatedText(payload));
   recordApiCall({
     provider: route.providerName,
     model: route.model,
     operation,
-    success: !isProviderUnavailable(result.diagnostic),
-    status: result.diagnostic.failureKind || 'ok',
+    success: !isProviderUnavailable(diagnostic),
+    status: diagnostic.failureKind || 'ok',
     estimatedInputTokens,
   });
   recordRouterResult({
     lastEffectiveProvider: route.providerName,
     lastEffectiveModel: route.model,
+    lastOperation: operation,
     lastFallbackReason: route.fallbackReason,
     lastLearnerReason: route.learnerReason,
     lastDebugReason: route.debugReason,
@@ -254,6 +276,7 @@ async function runWithRoute<T>(
 
   return {
     ...result,
+    diagnostic,
     route: {
       providerName: route.providerName,
       model: route.model,
@@ -317,6 +340,14 @@ export const routedAnalyzeWritingTask1 = (
     safeAnalyzeWritingTask1(provider, providerName, request));
 };
 
+export const routedCoachWritingFramework = (
+  request: WritingFrameworkCoachRequest,
+): Promise<RoutedResult<string>> => {
+  const route = chooseRoute('writing_framework_coach', request, { reserveGemini: true });
+  return runWithGeminiRetry('writing_framework_coach', request, route, (provider, providerName) =>
+    safeCoachWritingFramework(provider, providerName, request));
+};
+
 export const routedExtractWritingFramework = (
   request: WritingFrameworkRequest,
 ): Promise<RoutedResult<WritingFrameworkSummary>> => {
@@ -324,4 +355,3 @@ export const routedExtractWritingFramework = (
   return runWithGeminiRetry('writing_framework_extraction', request, route, (provider, providerName) =>
     safeExtractWritingFramework(provider, providerName, request));
 };
-

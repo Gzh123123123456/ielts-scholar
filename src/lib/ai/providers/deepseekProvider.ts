@@ -113,11 +113,36 @@ Input:
 ${JSON.stringify(params, null, 2)}`);
   }
 
+  async coachWritingFramework(params: { task: 'task2'; question: string; notes: string }): Promise<string> {
+    return this.generateJson(`${strictJsonInstruction}
+
+You are a concise IELTS Writing Task 2 framework coach.
+Return this exact JSON shape:
+{
+  "comments": ["string"]
+}
+
+Rules:
+- Give 2 to 4 short comments/questions max.
+- Be Socratic: ask useful next-step questions and point out gaps.
+- Base every comment on the learner's notes and the current question.
+- Do not write a full essay.
+- Do not provide a complete model framework.
+- Do not use generic template feedback.
+- If the notes are thin, say what is missing and ask for one concrete decision.
+
+Input:
+${JSON.stringify(params, null, 2)}`);
+  }
+
   async extractWritingFramework(params: { task: 'task2'; question: string; notes: string }): Promise<string> {
     return this.generateJson(`${strictJsonInstruction}
 
 You extract a final IELTS Writing Task 2 framework from the learner's Phase 1 coach discussion notes.
-Do not write the essay. Consolidate the plan into the requested fields.
+Do not write the essay. Consolidate only the learner's notes and coach discussion into the requested fields.
+Do not invent a complete high-band essay plan from the prompt alone.
+If a decision is missing, write "Not decided yet / 需要继续补充" in that field.
+Possible examples must come from the learner notes. If you suggest an example because the notes imply a direction but do not name one, prefix it with "Suggested example, please confirm:".
 The editableSummary field must be a readable text block with these labels: Position, View A, View B, My opinion, Paragraph plan, Possible example.
 
 ${frameworkSchemaInstruction}

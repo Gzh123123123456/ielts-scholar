@@ -32,12 +32,20 @@ export interface WritingFrameworkRequest {
   notes: string;
 }
 
+export interface WritingFrameworkCoachRequest {
+  task: 'task2';
+  question: string;
+  notes: string;
+}
+
 export interface AIProvider {
   analyzeSpeaking(params: SpeakingAnalysisRequest): Promise<SpeakingFeedback | string>;
   
   analyzeWriting(params: WritingAnalysisRequest): Promise<WritingFeedback | string>;
 
   analyzeWritingTask1?(params: WritingTask1AnalysisRequest): Promise<WritingTask1Feedback | string>;
+
+  coachWritingFramework?(params: WritingFrameworkCoachRequest): Promise<string>;
 
   extractWritingFramework?(params: WritingFrameworkRequest): Promise<WritingFrameworkSummary | string>;
 }

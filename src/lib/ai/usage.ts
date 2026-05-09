@@ -24,6 +24,7 @@ export interface ApiUsageState {
 }
 
 export interface RouterState {
+  lastOperation?: ProviderOperation;
   geminiCooldownUntil?: string;
   geminiCooldownReason?: string;
   lastEffectiveProvider?: string;
@@ -120,4 +121,3 @@ export const clearApiUsageState = () => {
   localStorage.removeItem(API_USAGE_KEY);
   localStorage.removeItem(ROUTER_STATE_KEY);
 };
-

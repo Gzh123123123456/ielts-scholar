@@ -33,6 +33,8 @@ export const ApiStatusPanel: React.FC = () => {
   const geminiUsage = getGeminiLocalUsage();
   const limits = getGeminiLimits();
   const deepseekStatus = getDeepSeekStatus();
+  const mode = getProviderRouterMode();
+  const lastCall = [...usage.calls].reverse()[0];
   const lastDeepSeekProblem = [...usage.calls]
     .reverse()
     .find(call => call.provider === 'deepseek' && call.status !== 'ok');
@@ -61,8 +63,16 @@ export const ApiStatusPanel: React.FC = () => {
       <div className="flex-1 overflow-auto p-4 space-y-4">
         <section className="space-y-1">
           <h4 className="font-bold uppercase tracking-widest text-paper-ink/50">Router</h4>
-          <p>Mode: {getProviderRouterMode()}</p>
-          <p>Last used: {router.lastEffectiveProvider || 'none'} {router.lastEffectiveModel ? `/ ${router.lastEffectiveModel}` : ''}</p>
+          <p>Mode: {mode}</p>
+          <p>
+            {mode === 'auto'
+              ? 'Auto router active: Gemini is reserved for final feedback, DeepSeek handles fallback/intermediate work when configured.'
+              : mode === 'gemini'
+                ? 'Gemini-only mode: auto DeepSeek fallback is inactive.'
+                : 'Mock mode: no real provider routing is active.'}
+          </p>
+          <p>Last operation: {router.lastOperation || lastCall?.operation || 'none'}</p>
+          <p>Last used: {router.lastEffectiveProvider || lastCall?.provider || 'none'} {router.lastEffectiveModel || lastCall?.model ? `/ ${router.lastEffectiveModel || lastCall?.model}` : ''}</p>
           <p>Last reason: {router.lastLearnerReason || router.lastFallbackReason || 'No routed request yet.'}</p>
         </section>
 
@@ -80,6 +90,7 @@ export const ApiStatusPanel: React.FC = () => {
         <section className="space-y-1 border-t border-paper-ink/10 pt-4">
           <h4 className="font-bold uppercase tracking-widest text-paper-ink/50">DeepSeek</h4>
           <p>Status: {deepseekStatus.configured ? 'configured' : 'not configured'}</p>
+          <p>Fallback: {mode === 'auto' && deepseekStatus.configured ? 'available in auto mode' : 'unavailable'}</p>
           <p>Flash: {getDeepSeekFlashModel()}</p>
           <p>Pro: {getDeepSeekProModel()}</p>
           <p>Balance: {deepseekStatus.balance}</p>

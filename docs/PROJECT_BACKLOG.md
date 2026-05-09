@@ -16,9 +16,11 @@ _Last updated: 2026-05-09_
 - No production key management exists yet.
 - Auto-mode configuration includes Gemini local quota estimates and DeepSeek fallback env vars.
 - Gemini is quota-aware and used mainly for high-value final feedback.
-- DeepSeek V4 Flash is the cheap fallback and framework-extraction provider.
+- DeepSeek V4 Flash is the cheap fallback and low-cost Task 2 framework coach / framework-extraction provider.
 - DeepSeek V4 Pro is the Task 2 high-quality fallback before `2026-05-31T15:59:00Z`; it is disabled after that unless `VITE_DEEPSEEK_ALLOW_PRO_AFTER_DISCOUNT=true`.
 - API Status panel shows local estimates only; official Gemini remaining quota must be checked in Google AI Studio.
+- API Status distinguishes auto mode from Gemini-only mode, and reports DeepSeek fallback unavailable when auto/config is missing.
+- Vite env changes require restarting the local dev server.
 - **Done in V1.1 scaffolding**: provider safety wrappers normalize malformed Speaking/Writing feedback and prevent invalid provider output from crashing feedback UI.
 - **Done in V1.1 scaffolding**: Debug Panel visibility for latest provider diagnostic:
   - raw provider response
@@ -32,7 +34,9 @@ _Last updated: 2026-05-09_
 
 ### 2) Framework Intelligence (Writing Task 2)
 - **Done mock-safe in V1.1**: Add **Generate Framework Summary** / **Extract Final Framework** action using Mock Provider by default.
-- Still pending: use real AI provider to extract from Phase 1 discussion:
+- **Done Provider Router v1 integration fix**: Add low-cost `writing_framework_coach` and route both coach/extraction to DeepSeek V4 Flash in auto mode when configured.
+- **Done Provider Router v1 integration fix**: Framework Summary is grounded in user notes, coach feedback/discussion, and unsent draft notes; missing decisions are marked rather than invented.
+- Summary fields:
   - Position
   - View A
   - View B

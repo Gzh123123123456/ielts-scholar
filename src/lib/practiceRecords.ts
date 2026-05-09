@@ -6,6 +6,7 @@ export type PracticeRecordStatus = 'draft' | 'analyzed' | 'provider_failed';
 export interface ProviderDiagnosticSummary {
   operation: ProviderDiagnostic['operation'];
   providerName: string;
+  modelName?: string;
   fallbackUsed: boolean;
   failureKind?: ProviderDiagnostic['failureKind'];
   parseError?: string;
@@ -345,6 +346,7 @@ export const createRecordId = (prefix: string) => `${prefix}_${Date.now()}`;
 export const summarizeDiagnostic = (diagnostic: ProviderDiagnostic): ProviderDiagnosticSummary => ({
   operation: diagnostic.operation,
   providerName: diagnostic.providerName,
+  modelName: diagnostic.modelName,
   fallbackUsed: diagnostic.fallbackUsed,
   failureKind: diagnostic.failureKind,
   parseError: diagnostic.parseError,

@@ -4,7 +4,7 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
-import { isMockProviderActive, routedAnalyzeWriting, routedExtractWritingFramework } from '@/src/lib/ai';
+import { routedAnalyzeWriting, routedCoachWritingFramework, routedExtractWritingFramework } from '@/src/lib/ai';
 import { formatBandEstimate } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import { WritingFeedback } from '@/src/lib/ai/schemas';
@@ -72,6 +72,18 @@ const displayCategory = (value: string) => {
   return categoryLabels[normalized] || humanizeKey(value);
 };
 
+const routeNotice = (
+  route: { providerName: string; fallbackReason?: string; learnerReason: string },
+  failureKind?: string,
+) => {
+  if (failureKind === 'provider_unavailable') return 'Provider unavailable. Your text is preserved.';
+  if (route.fallbackReason && !/high-value final feedback/i.test(route.fallbackReason)) return route.fallbackReason;
+  if (/cooling down|quota|reserve|discount protection|fallback|unavailable/i.test(route.learnerReason)) {
+    return route.learnerReason;
+  }
+  return '';
+};
+
 export default function WritingTask2Practice() {
   const { addDebugLog, saveSession, setProviderDiagnostic } = useApp();
   const [question, setQuestion] = useState<WritingQuestion | null>(null);
@@ -81,6 +93,7 @@ export default function WritingTask2Practice() {
   const [finalFrameworkSummary, setFinalFrameworkSummary] = useState('');
   const [essay, setEssay] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCoachingFramework, setIsCoachingFramework] = useState(false);
   const [isExtractingFramework, setIsExtractingFramework] = useState(false);
   const [frameworkExtractMessage, setFrameworkExtractMessage] = useState('');
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
@@ -108,7 +121,7 @@ export default function WritingTask2Practice() {
       isRestoringRecordRef.current = false;
       return;
     }
-    if (!question || isAnalyzing || isExtractingFramework) return;
+    if (!question || isAnalyzing || isCoachingFramework || isExtractingFramework) return;
     persistWritingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
   }, [question, phase, frameworkChat, frameworkInput, finalFrameworkSummary, essay, feedback, feedbackFallbackUsed, providerErrorMessage]);
 
@@ -195,9 +208,41 @@ export default function WritingTask2Practice() {
     const userInput = frameworkInput;
     setFrameworkChat(prev => [...prev, { role: 'user', text: userInput }]);
     setFrameworkInput('');
+    setApiStatusMessage('');
+    setIsCoachingFramework(true);
 
-    await new Promise(r => setTimeout(r, 1000));
-    setFrameworkChat(prev => [...prev, { role: 'ai', text: "That sounds like a valid starting point. However, make sure you address 'both views' as requested by the prompt. How do you plan to structure the counter-argument paragraph? (This is a mock response in V1)" }]);
+    const notes = [
+      ...frameworkChat
+        .filter(msg => msg.role === 'user' || msg.role === 'ai')
+        .map(msg => `${msg.role === 'user' ? 'User note' : 'Coach feedback'}: ${msg.text.trim()}`)
+        .filter(Boolean),
+      `User note: ${userInput}`,
+    ].join('\n\n');
+
+    try {
+      const { feedback: coachFeedback, diagnostic, route } = await routedCoachWritingFramework({
+        task: 'task2',
+        question: question?.question || '',
+        notes,
+      });
+      setProviderDiagnostic(diagnostic);
+      const notice = routeNotice(route, diagnostic.failureKind);
+      if (notice && (diagnostic.failureKind === 'provider_unavailable' || route.providerName === 'mock')) {
+        setApiStatusMessage(notice);
+      }
+      if (diagnostic.failureKind === 'provider_unavailable') {
+        setFrameworkChat(prev => [...prev, { role: 'ai', text: 'AI coach is temporarily unavailable. Your note is saved; continue planning manually and retry later.' }]);
+        addDebugLog('Provider unavailable for framework coach.');
+        return;
+      }
+      setFrameworkChat(prev => [...prev, { role: 'ai', text: coachFeedback }]);
+      addDebugLog(diagnostic.fallbackUsed ? 'Provider fallback used for framework coach.' : 'Framework coach feedback complete.');
+    } catch (error) {
+      setFrameworkChat(prev => [...prev, { role: 'ai', text: 'Local mock coach: clarify your final position, one main reason, and one example from your own notes.' }]);
+      addDebugLog(`Framework coach failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsCoachingFramework(false);
+    }
 
     requestAnimationFrame(() => {
       if (discussionRef.current) {
@@ -221,8 +266,8 @@ export default function WritingTask2Practice() {
 
   const buildFrameworkNotes = () => {
     const chatNotes = frameworkChat
-      .filter(msg => msg.role === 'user')
-      .map(msg => msg.text.trim())
+      .filter((msg, index) => msg.role === 'user' || index > 0)
+      .map(msg => `${msg.role === 'user' ? 'User note' : 'Coach feedback'}: ${msg.text.trim()}`)
       .filter(Boolean);
     const draftInput = frameworkInput.trim();
 
@@ -252,7 +297,8 @@ export default function WritingTask2Practice() {
       });
 
       setProviderDiagnostic(diagnostic);
-      setApiStatusMessage(route.fallbackReason || route.learnerReason);
+      const notice = routeNotice(route, diagnostic.failureKind);
+      setApiStatusMessage(diagnostic.failureKind === 'provider_unavailable' ? notice : '');
       if (diagnostic.failureKind === 'provider_unavailable') {
         setFrameworkExtractMessage('AI provider temporarily unavailable. Please retry later. You can keep editing the framework manually.');
         addDebugLog('Provider unavailable for framework extraction.');
@@ -264,7 +310,9 @@ export default function WritingTask2Practice() {
       setFrameworkExtractMessage(
         diagnostic.fallbackUsed
           ? 'A safe fallback framework was generated. Please review and edit it before writing.'
-          : 'Framework summary generated. You can edit it before moving to Phase 2.',
+          : route.providerName === 'mock'
+            ? 'Local mock framework summary generated from your notes. You can edit it before moving to Phase 2.'
+            : 'Framework summary generated from your notes. You can edit it before moving to Phase 2.',
       );
       addDebugLog(
         diagnostic.fallbackUsed
@@ -293,7 +341,7 @@ export default function WritingTask2Practice() {
         essay
       }, isInsufficientTask2Sample(essay));
       setProviderDiagnostic(diagnostic);
-      setApiStatusMessage(route.fallbackReason || route.learnerReason);
+      setApiStatusMessage(routeNotice(route, diagnostic.failureKind));
 
       if (diagnostic.failureKind === 'provider_unavailable') {
         setFeedbackFallbackUsed(false);
@@ -360,7 +408,6 @@ export default function WritingTask2Practice() {
     URL.revokeObjectURL(url);
   };
 
-  const isMock = isMockProviderActive();
   const writingWorkspaceClass = 'practice-workspace';
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
   const isInsufficientSample = isInsufficientTask2Sample(essay);
@@ -380,7 +427,7 @@ export default function WritingTask2Practice() {
         </PaperCard>
       </div>
 
-      <div className={`${writingWorkspaceClass} flex gap-4 p-1 bg-paper-ink/5 rounded-sm self-start mb-8 font-sans uppercase tracking-widest font-bold overflow-x-auto`}>
+      <div className={`${writingWorkspaceClass} grid grid-cols-3 gap-2 p-1 bg-paper-ink/5 rounded-sm mb-8 font-sans uppercase tracking-widest font-bold`}>
         <button
           onClick={() => setPhase('framework')}
           className={phase === 'framework' ? 'phase-tab phase-tab-active' : 'phase-tab'}
@@ -458,6 +505,9 @@ export default function WritingTask2Practice() {
                 />
                 <div className="flex justify-end">
                   <SerifButton type="submit" variant="secondary" className="px-4 py-2 text-xs">Send to Coach</SerifButton>
+                  {isCoachingFramework && (
+                    <span className="text-xs font-sans text-paper-ink/45 self-center">Coaching...</span>
+                  )}
                 </div>
               </form>
             </PaperCard>
@@ -640,15 +690,6 @@ export default function WritingTask2Practice() {
                 </div>
               </div>
             </details>
-
-            <div className="space-y-3">
-              {isMock && (
-                <div className="flex items-center gap-2 p-3 bg-paper-ink/5 rounded text-[10px] text-paper-ink/45 uppercase tracking-wider border border-paper-ink/10 font-sans">
-                  <span>Prototype feedback shown using mock AI. Connect Gemini for training analysis.</span>
-                </div>
-              )}
-
-            </div>
 
             <div className="flex justify-between gap-4 border-t border-paper-ink/10 pt-6">
               <SerifButton onClick={exportMarkdown} variant="outline" className="flex-1 text-xs flex items-center justify-center gap-2">

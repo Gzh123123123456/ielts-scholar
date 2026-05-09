@@ -13,12 +13,14 @@ import {
   routedAnalyzeSpeaking,
   routedAnalyzeWriting,
   routedAnalyzeWritingTask1,
+  routedCoachWritingFramework,
   routedExtractWritingFramework,
 } from './router';
 export {
   safeAnalyzeSpeaking,
   safeAnalyzeWriting,
   safeAnalyzeWritingTask1,
+  safeCoachWritingFramework,
   safeExtractWritingFramework,
 } from './safety';
 export {
@@ -39,6 +41,7 @@ export {
   routedAnalyzeSpeaking,
   routedAnalyzeWriting,
   routedAnalyzeWritingTask1,
+  routedCoachWritingFramework,
   routedExtractWritingFramework,
 };
 

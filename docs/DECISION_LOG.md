@@ -1,5 +1,18 @@
 # Decision Log
 
+## [2026-05-09] Provider Router Integration Fixes and Task 2 Framework Flow
+- **Decision**: Keep Task 2 intermediate framework work off Gemini in auto mode.
+- **Reason**: Framework coaching and summary extraction are low-cost planning steps; Gemini quota should be reserved for high-value final feedback.
+- **Implemented**:
+  - Added distinct `writing_framework_coach` diagnostics and routing.
+  - Framework Coach uses DeepSeek V4 Flash in `VITE_AI_PROVIDER=auto` when DeepSeek is configured, otherwise local mock fallback is labeled as such.
+  - Framework Summary continues to use `writing_framework_extraction`, also preferring DeepSeek V4 Flash in auto mode.
+  - Framework Summary prompts now require grounding in user notes / coach discussion / unsent draft notes; missing decisions are marked instead of invented.
+  - Removed the permanent Task 2 provider banner and restored stable three-column phase tabs.
+  - API Status now clearly distinguishes auto router active, Gemini-only mode with auto fallback inactive, and DeepSeek fallback unavailable.
+- **Env note**: Changing Vite env values such as `VITE_AI_PROVIDER` or provider keys requires restarting the local dev server.
+- **Explicitly unchanged**: no V1.3 sentence mapping work, no provider UI key input, no merge, no push.
+
 ## [2026-05-09] Personal Provider Router v1, API Status, and Local Reset
 - **Decision**: Keep Mock Provider as default, while adding `VITE_AI_PROVIDER=auto` for personal local development.
 - **Reason**: Real-provider experimentation should be useful without making the prototype depend on paid APIs or browser-entered keys.

@@ -2,6 +2,7 @@ import {
   AIProvider,
   SpeakingAnalysisRequest,
   WritingAnalysisRequest,
+  WritingFrameworkCoachRequest,
   WritingTask1AnalysisRequest,
   WritingFrameworkRequest,
 } from './providers/base';
@@ -20,6 +21,7 @@ import { capBand, floorToHalfBand, formatBandEstimate, roundToHalfBand } from '.
 type SpeakingRequest = SpeakingAnalysisRequest;
 type WritingRequest = WritingAnalysisRequest;
 type WritingTask1Request = WritingTask1AnalysisRequest;
+type FrameworkCoachRequest = WritingFrameworkCoachRequest;
 type FrameworkRequest = WritingFrameworkRequest;
 
 interface SafeAnalyzeResult<T> {
@@ -812,37 +814,37 @@ const normalizeWritingFrameworkSummary = (
     sourceNotes: asString(source.sourceNotes, request.notes || FALLBACK_TEXT, 'sourceNotes', validationErrors),
     position: asString(
       source.position,
-      'Position could not be extracted. Add your final stance manually.',
+      'Not decided yet / 需要继续补充',
       'position',
       validationErrors,
     ),
     viewA: asString(
       source.viewA,
-      'View A could not be extracted. Add the first view manually.',
+      'Not decided yet / 需要继续补充',
       'viewA',
       validationErrors,
     ),
     viewB: asString(
       source.viewB,
-      'View B could not be extracted. Add the second view manually.',
+      'Not decided yet / 需要继续补充',
       'viewB',
       validationErrors,
     ),
     myOpinion: asString(
       source.myOpinion,
-      'My opinion could not be extracted. Add your own opinion manually.',
+      'Not decided yet / 需要继续补充',
       'myOpinion',
       validationErrors,
     ),
     paragraphPlan: asString(
       source.paragraphPlan,
-      'Paragraph plan could not be extracted. Add the essay structure manually.',
+      'Not decided yet / 需要继续补充',
       'paragraphPlan',
       validationErrors,
     ),
     possibleExample: asString(
       source.possibleExample,
-      'Possible example could not be extracted. Add an example manually if useful.',
+      'Suggested example, please confirm: Not decided yet / 需要继续补充',
       'possibleExample',
       validationErrors,
     ),
@@ -857,6 +859,20 @@ const normalizeWritingFrameworkSummary = (
       validationErrors,
     ),
   };
+};
+
+const normalizeFrameworkCoach = (value: unknown, validationErrors: string[]): string => {
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+  const rawComments = Array.isArray(source.comments) ? source.comments : [];
+  if (!Array.isArray(source.comments)) validationErrors.push('comments missing or invalid array');
+  const comments = rawComments
+    .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    .slice(0, 4);
+  if (comments.length === 0) {
+    return 'Local safety fallback: please clarify your final position, the two main reasons, and one example from your own notes.';
+  }
+  return comments.map(item => item.trim()).join('\n');
 };
 
 export const safeAnalyzeSpeaking = async (
@@ -985,6 +1001,51 @@ export const safeAnalyzeWritingTask1 = async (
       fallbackUsed,
       failureKind,
       normalizedFields,
+      timestamp: new Date().toISOString(),
+    }),
+  };
+};
+
+export const safeCoachWritingFramework = async (
+  provider: AIProvider,
+  providerName: string,
+  requestPayload: FrameworkCoachRequest,
+): Promise<SafeAnalyzeResult<string>> => {
+  let rawResponse: unknown = null;
+  let parsedJson: unknown = null;
+  let parseError: string | undefined;
+  const validationErrors: string[] = [];
+
+  try {
+    if (!provider.coachWritingFramework) {
+      throw new Error('Provider does not implement coachWritingFramework');
+    }
+
+    rawResponse = await provider.coachWritingFramework(requestPayload);
+    const parsed = parseRawResponse(rawResponse);
+    parsedJson = parsed.parsedJson;
+    parseError = parsed.parseError;
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const feedback = normalizeFrameworkCoach(parsedJson, validationErrors);
+  const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
+
+  return {
+    feedback,
+    diagnostic: buildDiagnostic({
+      module: 'writing',
+      operation: 'writing_framework_coach',
+      providerName,
+      requestPayload,
+      rawResponse,
+      parsedJson,
+      parseError,
+      validationErrors,
+      fallbackUsed,
+      failureKind,
       timestamp: new Date().toISOString(),
     }),
   };

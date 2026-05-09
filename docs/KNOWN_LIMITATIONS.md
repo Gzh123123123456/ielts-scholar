@@ -2,8 +2,13 @@
 
 1. **AI Feedback**: V1 defaults to a Mock AI provider for prototyping. Real API keys are required for actual feedback.
 2. **Optional Gemini / Auto Provider Modes**: Gemini can be enabled with `VITE_AI_PROVIDER=gemini`; personal local routing can be enabled with `VITE_AI_PROVIDER=auto`. Because Vite exposes `VITE_*` variables to browser/client code, this is suitable only for local/personal prototype use. No production key management, server-side proxy, browser key input, or UI provider toggle exists yet.
+   - `VITE_AI_PROVIDER=gemini` is Gemini-only; DeepSeek auto fallback is inactive.
+   - `VITE_AI_PROVIDER=auto` is required for automatic DeepSeek fallback/intermediate routing.
+   - Vite env changes require restarting the local dev server.
 3. **Quota Estimates**: Gemini official remaining quota cannot be read reliably from this browser app. API Status shows local estimates only: requests today, current-minute requests, estimated current-minute input tokens, and cooldown.
 4. **DeepSeek Fallback**: DeepSeek V4 Flash is used as the cheap fallback. DeepSeek V4 Pro is used for Task 2 high-quality fallback only before `2026-05-31T15:59:00Z`, unless `VITE_DEEPSEEK_ALLOW_PRO_AFTER_DISCOUNT=true`. Balance check is best-effort only and currently shown as unavailable if it cannot be read safely.
+   - Task 2 framework coach and framework extraction use DeepSeek V4 Flash in auto mode when configured.
+   - If DeepSeek is missing, those intermediate steps fall back to local mock handling and are labeled as mock.
 5. **Transcription**: Relies on browser Web Speech API. Works reliably in Chrome and Edge. Safari and AI Studio preview environments may be unreliable. Users should verify Chrome is using the correct microphone device.
 6. **no-speech Recovery**: Speaking Practice auto-restarts recognition on `no-speech` errors (up to 2 retries). This covers brief silence, but if the wrong microphone device is selected in Chrome, recognition will not work regardless.
 7. **Storage**: Data is stored in `localStorage`. Active attempts, practice records, provider usage estimates, and router cooldown state are recoverable in the same browser, but clearing browser data will lose history. No IndexedDB/database migration exists yet.

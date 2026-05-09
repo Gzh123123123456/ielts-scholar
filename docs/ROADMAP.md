@@ -17,6 +17,8 @@ _Last updated: 2026-05-09_
   - DeepSeek V4 Pro is Task 2 high-quality fallback before `2026-05-31T15:59:00Z`, then disabled unless explicitly allowed.
   - Official Gemini remaining quota is not readable; UI shows local estimates only.
   - OpenAI-compatible/OpenRouter UI remains a future hidden direction.
+  - Auto fallback requires `VITE_AI_PROVIDER=auto`; Gemini-only mode does not use DeepSeek fallback.
+  - Vite env changes require restarting the local dev server.
 - Add local-first practice reliability for current practice modules.
   - Done: Speaking and Writing Task 2 active attempts and recent records.
   - Done: Speaking records filtered by part and individual Speaking record deletion.
@@ -28,6 +30,8 @@ _Last updated: 2026-05-09_
 
 ### Writing Task 2 Framework Intelligence
 - Add **Generate Framework Summary** / **Extract Final Framework**.
+- Add `writing_framework_coach` as a distinct low-cost intermediate operation.
+- In auto mode with DeepSeek configured, framework coach and framework extraction use DeepSeek V4 Flash and do not spend Gemini.
 - Extract structured framework from Phase 1 discussion:
   - Position
   - View A
@@ -36,6 +40,9 @@ _Last updated: 2026-05-09_
   - Paragraph plan
   - Possible example
 - Require user edit/confirmation before entering Phase 2.
+- Framework Summary must summarize the learner's notes and coach discussion, not generate a full model plan from the prompt alone.
+- Task 2 provider banner has been removed; provider notices appear only when routing/fallback events actually occur.
+- Phase tab layout is restored to stable three-column alignment.
 
 ## V1.2 - Writing Task 1 Academic Basic Practice
 - Add a minimal Academic Task 1 practice page.

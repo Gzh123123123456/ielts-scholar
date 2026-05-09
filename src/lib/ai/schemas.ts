@@ -6,6 +6,7 @@ export type ProviderOperation =
   | 'speaking_analysis'
   | 'writing_analysis'
   | 'writing_task1_analysis'
+  | 'writing_framework_coach'
   | 'writing_framework_extraction';
 export type ProviderFailureKind = 'provider_unavailable' | 'parse_or_schema';
 
@@ -13,6 +14,7 @@ export interface ProviderDiagnostic {
   module: IELTSModule;
   operation: ProviderOperation;
   providerName: string;
+  modelName?: string;
   requestPayload: unknown;
   rawResponse: unknown;
   parsedJson: unknown;
