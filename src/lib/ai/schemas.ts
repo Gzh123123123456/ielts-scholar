@@ -113,6 +113,13 @@ export interface WritingFeedback {
     correctionNumber?: number;
     paragraph?: string;
     issueType?: string;
+    primaryIssue?: string;
+    secondaryIssues?: string[];
+    microUpgrades?: {
+      original: string;
+      better: string;
+      explanationZh: string;
+    }[];
     original: string;
     correction: string;
     dimension: 'TR' | 'CC' | 'LR' | 'GRA';
@@ -130,6 +137,7 @@ export interface WritingFeedback {
     reusableSentenceFrames: string[];
   };
   modelAnswer: string;
+  modelAnswerPersonalized?: boolean;
   reusableArguments: {
     argument: string;
     canBeReusedFor: string[];

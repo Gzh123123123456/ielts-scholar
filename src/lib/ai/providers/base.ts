@@ -16,6 +16,8 @@ export interface WritingAnalysisRequest {
   task: string;
   question: string;
   essay: string;
+  frameworkNotes?: string;
+  finalFrameworkSummary?: string;
 }
 
 export interface WritingTask1AnalysisRequest {

@@ -51,7 +51,19 @@ export const writingSchemaInstruction = `The JSON object must match this exact k
   },
   "essayLevelWarnings": [{ "title": "string", "messageZh": "string" }],
   "frameworkFeedback": [{ "issue": "string", "suggestionZh": "string", "severity": "fatal", "location": "Whole Essay", "issueType": "task_response", "relatedCorrectionIds": ["C1"], "paragraphFixZh": "string", "exampleFrame": "string" }],
-  "sentenceFeedback": [{ "id": "C1", "paragraph": "Introduction", "issueType": "off_topic", "original": "string", "correction": "string", "dimension": "TR", "tag": "string", "explanationZh": "string" }],
+  "sentenceFeedback": [{
+    "id": "C1",
+    "paragraph": "Introduction",
+    "issueType": "off_topic",
+    "primaryIssue": "Task response",
+    "secondaryIssues": ["Coherence", "Lexical precision"],
+    "microUpgrades": [{ "original": "string", "better": "string", "explanationZh": "string" }],
+    "original": "string",
+    "correction": "string",
+    "dimension": "TR",
+    "tag": "string",
+    "explanationZh": "string"
+  }],
   "vocabularyUpgrade": {
     "topicVocabulary": ["string"],
     "userWordingUpgrades": [{ "original": "string", "better": "string", "explanationZh": "string" }],
@@ -59,6 +71,7 @@ export const writingSchemaInstruction = `The JSON object must match this exact k
     "reusableSentenceFrames": ["string"]
   },
   "modelAnswer": "string",
+  "modelAnswerPersonalized": true,
   "reusableArguments": [{ "argument": "string", "canBeReusedFor": ["string"], "explanationZh": "string" }],
   "obsidianMarkdown": "string"
 }`;
@@ -213,6 +226,8 @@ ${JSON.stringify(params, null, 2)}`);
     task: string;
     question: string;
     essay: string;
+    frameworkNotes?: string;
+    finalFrameworkSummary?: string;
   }): Promise<string> {
     return this.generateJson(`${strictJsonInstruction}
 
@@ -223,13 +238,16 @@ Set "task" to the exact input task value. For this V1 flow it is normally "task2
 Separate big-picture task response / paragraph logic problems from sentence-level corrections.
 Return essayLevelWarnings separately for global warnings only: under-length response, insufficient sample, unreliable training estimate. Do not put these in frameworkFeedback.
 Use sentenceFeedback for direct local sentence corrections only. Give every sentence correction a stable id like C1, C2, C3.
+For each sentenceFeedback item include primaryIssue, up to 2-3 secondaryIssues, and 0-3 microUpgrades. Prioritize IELTS training value; do not list every tiny error.
 Use frameworkFeedback for Logic & Structure Review only: task response, off-topic or irrelevant opening, missing advantage/disadvantage coverage, weak position, missing paragraph development, paragraph order/structure, lack of examples/support.
 Do not put pure lexical, grammar, or local wording issues into frameworkFeedback unless they directly affect task response or structure.
 For each frameworkFeedback item, include relatedCorrectionIds when a sentence correction supports the same issue.
+Link logic issues accurately: irrelevant/off-topic introductions link to introduction/task-response corrections; missing advantages/disadvantages link to concession/balance/body corrections; weak position links to thesis or conclusion corrections.
 If no sentence correction covers the logic issue, leave relatedCorrectionIds empty and include paragraphFixZh plus one optional English exampleFrame.
 For every frameworkFeedback item include location, issueType, suggestionZh as whyItMattersZh, paragraphFixZh, relatedCorrectionIds, and exampleFrame.
 Avoid duplicating full sentence correction text inside frameworkFeedback.
-Return vocabularyUpgrade with 4-8 compact total items across topicVocabulary, userWordingUpgrades, collocationUpgrades, and reusableSentenceFrames. Focus on this essay topic and the user's wording.
+Return vocabularyUpgrade as a compact learning bank with 4-8 total items across topicVocabulary, userWordingUpgrades, collocationUpgrades, and reusableSentenceFrames. Focus on this essay topic and the user's argument. Do not duplicate full sentence correction pairs here; userWordingUpgrades should be short phrase-level upgrades.
+The modelAnswer field must be a Personalized Model Answer Excerpt: preserve the user's position and main ideas when possible, use the provided framework notes/summary, fix the logic/sentence/vocabulary issues above, and stay learnable Band 7.5-8. Do not produce a generic Band 9 essay or introduce many new arguments. Set modelAnswerPersonalized to true only when the excerpt uses the user's essay/framework context; otherwise false.
 Learner-facing explanations should be Chinese-first; English only for corrected sentences, examples, and useful frames.
 
 ${writingSchemaInstruction}

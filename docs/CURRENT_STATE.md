@@ -101,6 +101,14 @@ _Last updated: 2026-05-09_
 - Task 2 markdown export follows the same warning -> logic -> sentence correction -> vocabulary hierarchy.
 - Inline annotated essay overlay remains deferred to the next V1.3 step; it is not implemented in this repair.
 
+### Task 2 Phase 3 Content Logic Refinement
+- **Vocabulary & Expression Upgrade** now behaves as a compact learning bank rather than a second correction list, with topic vocabulary, short user wording upgrades, collocations, and reusable argument frames.
+- **Sentence-level Corrections** now support a primary issue, up to 2-3 secondary issues, and short micro upgrades, while old records render without empty placeholders.
+- **Logic & Structure Review** uses stronger local inference for related correction numbers, especially off-topic introductions, weak thesis/position issues, balance/concession gaps, and body-paragraph development problems.
+- **Personalized Model Answer Excerpt** is supported by passing Phase 1 notes and the editable framework summary into final analysis. New provider output can mark the excerpt as personalized when it preserves the learner's position/framework and fixes the feedback issues.
+- Old saved records that only contain the earlier `modelAnswer` field still render as a normal model excerpt instead of being falsely labeled personalized.
+- V1.3 Step 2, **Interactive Annotated Essay Overlay**, is documented only as the next step and was not implemented.
+
 ## Writing Task 1 Academic Practice (Implemented)
 - V1.2 product direction is now Writing Task 1 Academic Basic Practice before Mock Exam.
 - `/writing/task1` is a usable Academic Task 1 practice page instead of a placeholder.

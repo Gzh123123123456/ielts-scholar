@@ -47,6 +47,7 @@ _Last updated: 2026-05-09_
 - Framework Summary now includes reusable sentence frames/transitions and uses clear bullet sections rather than a dense block.
 - Phase 3 feedback now separates **Essay-level Warnings**, **Logic & Structure Review**, **Sentence-level Corrections**, and **Vocabulary & Expression Upgrade**.
 - Under-length is a global warning, pure lexical issues stay out of big-picture logic cards, and logic issues link to numbered corrections where relevant.
+- Vocabulary & Expression Upgrade is now a compact learning bank; sentence corrections support primary issue, secondary issues, and micro upgrades; personalized model excerpts can be grounded in the learner essay and Phase 1 framework context.
 - Phase tab root cause repaired: nowrap labels were visually overflowing equal grid cells.
 - Require user edit/confirmation before entering Phase 2.
 - Framework Summary must summarize the learner's notes and coach discussion, not generate a full model plan from the prompt alone.
@@ -63,8 +64,15 @@ _Last updated: 2026-05-09_
 
 ## V1.3 - Feedback Granularity Upgrade
 - Sentence numbering and correction-to-source mapping. Basic correction numbers and logic-to-correction references are implemented in Phase 3 cards.
-- Click-to-locate correction.
-- Inline annotated essay overlay / popover cards are the next step and are not part of the current Phase 3 hierarchy repair.
+- Sentence correction depth. Primary issue, secondary issues, and micro upgrades are implemented in Phase 3 cards.
+- **Step 2 - Interactive Annotated Essay Overlay** is the next task only:
+  - inject correction markers into the original essay
+  - underline/problem-dot on source text
+  - click marker to open correction overlay card
+  - overlay includes correction, micro vocabulary upgrade, and related logic issue
+  - right-side Logic Review aligns by essay paragraph
+  - old correction card list can become secondary/collapsible
+- Step 2 is documented only in the current repair; no inline underline, marker, popover, overlay, or click-to-locate behavior is implemented yet.
 
 ## V2 - Mock Exam Update
 - Dedicated Speaking, Writing Task 1, and Writing Task 2 mock flows after the three basic practice modules exist.

@@ -90,6 +90,8 @@ export class MockProvider implements AIProvider {
     task: string;
     question: string;
     essay: string;
+    frameworkNotes?: string;
+    finalFrameworkSummary?: string;
   }): Promise<WritingFeedback> {
     await new Promise(r => setTimeout(r, 2000));
     const words = countWords(params.essay);
@@ -151,6 +153,15 @@ export class MockProvider implements AIProvider {
           id: 'C1',
           paragraph: 'Introduction',
           issueType: 'lexical_precision',
+          primaryIssue: 'Lexical precision',
+          secondaryIssues: ['Task response clarity'],
+          microUpgrades: [
+            {
+              original: 'study what they want',
+              better: 'pursue subjects they are genuinely interested in',
+              explanationZh: '短语级升级，比完整句子替换更容易复用。',
+            },
+          ],
           original: 'People should study what they want.',
           correction: 'Individuals should be encouraged to pursue subjects they are passionate about.',
           dimension: 'LR',
@@ -172,7 +183,8 @@ export class MockProvider implements AIProvider {
       },
       modelAnswer: isUnderLength
         ? 'This sample is too short for a high training estimate. A complete response should state a clear position, develop two body paragraphs with specific reasoning, and finish with a concise conclusion.'
-        : 'A stronger essay would maintain a clear position throughout, develop each body paragraph around one controlling idea, and use a specific example to show why the argument matters.',
+        : `Based on your framework, a stronger version would keep the same position but make the paragraph logic more explicit: individuals should have room to pursue subjects they are genuinely interested in, because motivation often leads to deeper learning and better long-term performance. This does not mean practical value should be ignored; rather, schools can guide students to connect personal interests with realistic career pathways.`,
+      modelAnswerPersonalized: Boolean(params.finalFrameworkSummary || params.frameworkNotes || params.essay.trim()),
       reusableArguments: [
         {
           argument: 'Personal interest leads to better academic performance',

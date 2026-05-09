@@ -76,6 +76,13 @@ const displayCategory = (value: string) => {
   return categoryLabels[normalized] || humanizeKey(value);
 };
 
+const shortenPhrase = (text: string, maxWords = 8) => {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  const words = cleaned.split(' ').filter(Boolean);
+  if (words.length <= maxWords) return cleaned;
+  return `${words.slice(0, maxWords).join(' ')}...`;
+};
+
 type LogicLocation = NonNullable<WritingFeedback['frameworkFeedback'][number]['location']>;
 
 const logicLocationOrder: LogicLocation[] = [
@@ -151,11 +158,13 @@ const getVocabularyUpgrade = (feedback: WritingFeedback) => {
   const upgrade = feedback.vocabularyUpgrade || empty;
   const lrCorrections = feedback.sentenceFeedback
     .filter(item => item.dimension === 'LR')
-    .map(item => ({
-      original: item.original,
-      better: item.correction,
-      explanationZh: item.explanationZh,
-    }));
+    .flatMap(item => item.microUpgrades?.length
+      ? item.microUpgrades
+      : [{
+          original: shortenPhrase(item.original),
+          better: shortenPhrase(item.correction),
+          explanationZh: '短语级升级，避免重复完整句子修改。',
+        }]);
   return {
     topicVocabulary: (upgrade.topicVocabulary?.length ? upgrade.topicVocabulary : ['a balanced approach', 'long-term consequence']).slice(0, 2),
     userWordingUpgrades: [...(upgrade.userWordingUpgrades || []), ...lrCorrections].slice(0, 2),
@@ -565,7 +574,9 @@ export default function WritingTask2Practice() {
       const { feedback: result, diagnostic, route } = await routedAnalyzeWriting({
         task: 'task2',
         question: question?.question || '',
-        essay
+        essay,
+        frameworkNotes: buildFrameworkNotes(),
+        finalFrameworkSummary,
       }, isInsufficientTask2Sample(essay));
       setProviderDiagnostic(diagnostic);
       setApiStatusMessage(routeNotice(route, diagnostic.failureKind));
@@ -646,11 +657,13 @@ export default function WritingTask2Practice() {
       : '- No logic-level issue returned.';
     const sentenceItems = feedback.sentenceFeedback.length
       ? feedback.sentenceFeedback.map((item, index) => `### Correction #${item.correctionNumber || index + 1}
-- Original: ${item.original}
-- Correction: ${item.correction}
-- Dimension: ${item.dimension}
-- Focus: ${item.tag}
-- Explanation: ${item.explanationZh}`).join('\n\n')
+- Primary issue: ${item.primaryIssue || displayDimension(item.dimension)}
+${item.secondaryIssues?.length ? `- Secondary issues: ${item.secondaryIssues.join(', ')}
+` : ''}- Original: ${item.original}
+- Suggested revision: ${item.correction}
+- Why it matters: ${item.explanationZh}
+${item.microUpgrades?.length ? `- Micro upgrades:
+${item.microUpgrades.map(upgrade => `  - ${upgrade.original} -> ${upgrade.better}: ${upgrade.explanationZh}`).join('\n')}` : ''}`).join('\n\n')
       : '- No sentence-level correction returned.';
     const vocabularyItems = [
       ...vocabulary.topicVocabulary.map(item => `- Topic vocabulary: ${item}`),
@@ -675,6 +688,9 @@ ${sentenceItems}
 ## Vocabulary & Expression Upgrade
 ${vocabularyItems}
 
+## ${feedback.modelAnswerPersonalized ? 'Personalized Model Answer Excerpt' : 'Model Answer Excerpt'}
+${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPersonalized ? '\n\nThis excerpt keeps your original position and fixes the main issues above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}
+
 ## Essay
 ${feedback.essay}`;
     const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
@@ -690,6 +706,7 @@ ${feedback.essay}`;
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
   const isInsufficientSample = isInsufficientTask2Sample(essay);
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
+  const isPersonalizedModelAnswer = Boolean(feedback?.modelAnswerPersonalized);
   const hasCoachFeedback = frameworkChat.some((msg, index) => msg.role === 'ai' && index > 0);
   const essayWarnings = feedback ? getEssayWarnings(feedback, isInsufficientSample) : [];
   const logicFeedback = feedback ? getLogicFeedback(feedback) : [];
@@ -941,6 +958,14 @@ ${feedback.essay}`;
                       <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">
                         Correction #{item.correctionNumber || i + 1}
                       </div>
+                      <div className="flex flex-wrap items-center gap-2 mb-3 text-[10px] uppercase font-sans font-bold">
+                        <span className="text-accent-terracotta">{item.primaryIssue || displayDimension(item.dimension)}</span>
+                        {item.secondaryIssues?.map(issue => (
+                          <span key={issue} className="border border-paper-ink/10 bg-paper-ink/5 text-paper-ink/55 px-2 py-1 rounded-sm">
+                            {issue}
+                          </span>
+                        ))}
+                      </div>
                       <div className="text-base text-paper-ink/60 line-through mb-2 leading-7">{item.original}</div>
                       <div className="text-[17px] font-bold mb-3 leading-8">{item.correction}</div>
                       <div className="flex flex-wrap items-center gap-2 mb-2 text-[10px] uppercase font-sans font-bold text-accent-terracotta">
@@ -948,7 +973,21 @@ ${feedback.essay}`;
                         <span className="opacity-30">-</span>
                         <span>{displayCategory(item.tag)}</span>
                       </div>
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Why it matters</p>
                       <p className="text-sm leading-7 text-paper-ink-muted bg-paper-ink/5 p-3 rounded">{item.explanationZh}</p>
+                      {item.microUpgrades?.length ? (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Micro upgrades</p>
+                          {item.microUpgrades.map((upgrade, upgradeIndex) => (
+                            <div key={`${upgrade.original}-${upgradeIndex}`} className="text-sm leading-7 text-paper-ink/70 border border-paper-ink/10 bg-paper-50/70 rounded-sm px-3 py-2">
+                              <span className="line-through text-paper-ink/45">{upgrade.original}</span>
+                              <span className="mx-2 text-paper-ink/30">-&gt;</span>
+                              <span className="font-bold">{upgrade.better}</span>
+                              <p className="text-paper-ink/60">{upgrade.explanationZh}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </PaperCard>
                   ))}
                 </div>
@@ -1049,7 +1088,14 @@ ${feedback.essay}`;
             )}
 
             <PaperCard className="min-h-[220px]">
-              <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Model Answer Excerpt</h3>
+              <h3 className="text-sm font-bold uppercase tracking-widest mb-2">
+                {isPersonalizedModelAnswer ? 'Personalized Model Answer Excerpt' : 'Model Answer Excerpt'}
+              </h3>
+              {hasSubstantialModelAnswer && isPersonalizedModelAnswer && (
+                <p className="text-sm leading-7 text-paper-ink/60 mb-4">
+                  This excerpt keeps your original position and fixes the main issues above.
+                </p>
+              )}
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                 {hasSubstantialModelAnswer ? (
                   <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap max-h-[420px] overflow-auto pr-1">

@@ -558,6 +558,45 @@ const normalizeCorrectionId = (value: unknown, index: number): string => {
   return `C${index + 1}`;
 };
 
+const normalizeIssueLabel = (value: unknown, dimension: WritingFeedback['sentenceFeedback'][number]['dimension'], tag: string): string => {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  const tagLabel = tag.replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+  if (tagLabel && tag !== 'provider_safety') return tagLabel;
+  return dimension === 'TR'
+    ? 'Task response'
+    : dimension === 'CC'
+      ? 'Coherence and cohesion'
+      : dimension === 'LR'
+        ? 'Lexical precision'
+        : 'Grammar accuracy';
+};
+
+const normalizeSecondaryIssues = (
+  value: unknown,
+  primaryIssue: string,
+): string[] =>
+  (Array.isArray(value) ? value : [])
+    .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    .map(item => item.trim())
+    .filter(item => item.toLowerCase() !== primaryIssue.toLowerCase())
+    .slice(0, 3);
+
+const normalizeMicroUpgrades = (
+  value: unknown,
+): WritingFeedback['sentenceFeedback'][number]['microUpgrades'] =>
+  (Array.isArray(value) ? value : [])
+    .map(item => {
+      const record = isRecord(item) ? item : {};
+      const original = typeof record.original === 'string' ? record.original.trim() : '';
+      const better = typeof record.better === 'string' ? record.better.trim() : '';
+      const explanationZh = typeof record.explanationZh === 'string' && record.explanationZh.trim()
+        ? record.explanationZh.trim()
+        : '短语级升级，适合保留到同类作文中复用。';
+      return { original, better, explanationZh };
+    })
+    .filter(item => item.original && item.better)
+    .slice(0, 3);
+
 const normalizeLocation = (
   value: unknown,
   fallbackText = '',
@@ -592,18 +631,25 @@ const normalizeRelatedCorrectionIds = (value: unknown, validIds: Set<string>): s
 const inferRelatedCorrectionIds = (
   issue: string,
   suggestionZh: string,
+  location: WritingFeedback['frameworkFeedback'][number]['location'],
   sentenceFeedback: WritingFeedback['sentenceFeedback'],
 ): string[] => {
-  const haystack = `${issue} ${suggestionZh}`.toLowerCase();
-  const matches = sentenceFeedback.filter(item => {
-    const itemText = `${item.original} ${item.correction} ${item.tag} ${item.issueType || ''} ${item.paragraph || ''}`.toLowerCase();
-    if (/introduction|opening|off-topic|irrelevant/.test(haystack) && /introduction|opening|off-topic|irrelevant|task_response/.test(itemText)) return true;
-    if (/disadvantage|advantage|both views|concession|counter/.test(haystack) && /concession|task_response|develop|paragraph|body/.test(itemText)) return true;
-    if (item.dimension === 'TR' && /task|response|position|argument|logic|example|support|develop|off-topic|irrelevant/.test(haystack)) return true;
-    if (item.dimension === 'CC' && /coherence|cohesion|paragraph|structure|link|transition|flow|develop/.test(haystack)) return true;
-    return false;
-  });
-  return matches.length <= 2 ? matches.map(item => item.id || `C${item.correctionNumber || 1}`) : [];
+  const haystack = `${issue} ${suggestionZh} ${location || ''}`.toLowerCase();
+  const scored = sentenceFeedback.map(item => {
+    const itemText = `${item.original} ${item.correction} ${item.tag} ${item.issueType || ''} ${item.paragraph || ''} ${item.primaryIssue || ''} ${(item.secondaryIssues || []).join(' ')}`.toLowerCase();
+    let score = 0;
+    if (/introduction|opening|off-topic|irrelevant/.test(haystack) && /introduction|opening|off-topic|irrelevant|task_response/.test(itemText)) score += 4;
+    if (/disadvantage|advantage|both views|concession|counter|balance/.test(haystack) && /concession|balance|task_response|develop|paragraph|body|advantage|disadvantage/.test(itemText)) score += 4;
+    if (/weak position|position|thesis|stance/.test(haystack) && /thesis|position|stance|conclusion|introduction|task_response/.test(itemText)) score += 4;
+    if (location && location !== 'Whole Essay' && location !== 'Unknown / General' && itemText.includes(location.toLowerCase())) score += 3;
+    if (item.dimension === 'TR' && /task|response|position|argument|logic|example|support|develop|off-topic|irrelevant/.test(haystack)) score += 2;
+    if (item.dimension === 'CC' && /coherence|cohesion|paragraph|structure|link|transition|flow|develop|order/.test(haystack)) score += 2;
+    return { item, score };
+  }).filter(entry => entry.score >= 3);
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(entry => entry.item.id || `C${entry.item.correctionNumber || 1}`);
 };
 
 const isFrameworkLevelIssue = (issue: string, suggestionZh: string, issueType?: string): boolean => {
@@ -615,7 +661,15 @@ const isFrameworkLevelIssue = (issue: string, suggestionZh: string, issueType?: 
 };
 
 const defaultParagraphFix = (issue: string, location?: string): string =>
-  `Rewrite the ${location || 'relevant part'} around one clear controlling idea, then add one reason and one concrete example before polishing wording.`;
+  `先重写 ${location || 'relevant part'} 的段落功能：用一句清楚的中心句回答题目，再补一个原因和一个具体例子，最后检查该段是否回扣你的总立场。`;
+
+const defaultExampleFrame = (issue: string): string => {
+  const text = issue.toLowerCase();
+  if (/introduction|opening|position|thesis/.test(text)) return 'While this view has some merit, I would argue that...';
+  if (/advantage|disadvantage|concession|balance/.test(text)) return 'This is not to suggest that ..., but the stronger concern is...';
+  if (/example|support|develop/.test(text)) return 'For example, this can be seen when...';
+  return 'A more balanced way to develop this point is to...';
+};
 
 const normalizeLimitedStringArray = (
   value: unknown,
@@ -630,6 +684,7 @@ const normalizeLimitedStringArray = (
 
 const buildLocalVocabularyUpgrade = (
   source: Record<string, unknown>,
+  request: WritingRequest,
   sentenceFeedback: WritingFeedback['sentenceFeedback'],
   validationErrors: string[],
 ): WritingFeedback['vocabularyUpgrade'] => {
@@ -645,14 +700,9 @@ const buildLocalVocabularyUpgrade = (
     })
     .filter(item => item.original && item.better)
     .slice(0, 3);
-  const wordingFromCorrections = sentenceFeedback
-    .filter(item => item.dimension === 'LR')
-    .map(item => ({
-      original: item.original,
-      better: item.correction,
-      explanationZh: item.explanationZh,
-    }))
-    .slice(0, Math.max(0, 3 - wordingFromProvider.length));
+  const microFromCorrections = sentenceFeedback
+    .flatMap(item => item.microUpgrades || [])
+    .slice(0, Math.max(0, 2 - wordingFromProvider.length));
   const topicWords = Array.isArray(vocabSource.topicVocabulary)
     ? normalizeLimitedStringArray(vocabSource.topicVocabulary, 'vocabularyUpgrade.topicVocabulary', validationErrors, 3)
     : [];
@@ -665,10 +715,10 @@ const buildLocalVocabularyUpgrade = (
 
   return {
     topicVocabulary: topicWords.length ? topicWords : [
-      'long-term consequence',
       'a balanced approach',
+      request.question.toLowerCase().includes('education') ? 'academic autonomy' : 'long-term consequence',
     ],
-    userWordingUpgrades: [...wordingFromProvider, ...wordingFromCorrections].slice(0, 3),
+    userWordingUpgrades: [...wordingFromProvider, ...microFromCorrections].slice(0, 2),
     collocationUpgrades: collocations.length ? collocations : [
       'develop a clear position',
       'support the argument with concrete evidence',
@@ -696,15 +746,21 @@ const normalizeWritingFeedback = (
   const sentenceFeedback = asArray(source.sentenceFeedback, 'sentenceFeedback', validationErrors).map((item, index) => {
     const record = isRecord(item) ? item : {};
     if (!isRecord(item)) validationErrors.push(`sentenceFeedback[${index}] missing or invalid object`);
+    const dimension = normalizeDimension(record.dimension, `sentenceFeedback[${index}].dimension`, validationErrors);
+    const tag = asString(record.tag, 'provider_safety', `sentenceFeedback[${index}].tag`, validationErrors);
+    const primaryIssue = normalizeIssueLabel(record.primaryIssue, dimension, tag);
     return {
       id: normalizeCorrectionId(record.id ?? record.correctionNumber, index),
       correctionNumber: index + 1,
       paragraph: typeof record.paragraph === 'string' && record.paragraph.trim() ? record.paragraph.trim() : undefined,
       issueType: typeof record.issueType === 'string' && record.issueType.trim() ? record.issueType.trim() : undefined,
+      primaryIssue,
+      secondaryIssues: normalizeSecondaryIssues(record.secondaryIssues, primaryIssue),
+      microUpgrades: normalizeMicroUpgrades(record.microUpgrades),
       original: asString(record.original, FALLBACK_TEXT, `sentenceFeedback[${index}].original`, validationErrors),
       correction: asString(record.correction, FALLBACK_TEXT, `sentenceFeedback[${index}].correction`, validationErrors),
-      dimension: normalizeDimension(record.dimension, `sentenceFeedback[${index}].dimension`, validationErrors),
-      tag: asString(record.tag, 'provider_safety', `sentenceFeedback[${index}].tag`, validationErrors),
+      dimension,
+      tag,
       explanationZh: asString(
         record.explanationZh,
         'Provider feedback was incomplete; this item was normalized safely.',
@@ -738,7 +794,7 @@ const normalizeWritingFeedback = (
       const location = normalizeLocation(record.location, `${issue} ${suggestionZh}`);
       const relatedCorrectionIds = (() => {
         const explicit = normalizeRelatedCorrectionIds(record.relatedCorrectionIds, validCorrectionIds);
-        return explicit.length ? explicit : inferRelatedCorrectionIds(issue, suggestionZh, sentenceFeedback);
+        return explicit.length ? explicit : inferRelatedCorrectionIds(issue, suggestionZh, location, sentenceFeedback);
       })();
       return {
         issue,
@@ -752,7 +808,7 @@ const normalizeWritingFeedback = (
           : defaultParagraphFix(issue, location),
         exampleFrame: typeof record.exampleFrame === 'string' && record.exampleFrame.trim()
           ? record.exampleFrame.trim()
-          : undefined,
+          : defaultExampleFrame(issue),
       };
     })
     .filter(item => !/under-length|insufficient sample|extremely insufficient/i.test(item.issue))
@@ -780,13 +836,14 @@ const normalizeWritingFeedback = (
       ...sourceWarnings,
     ],
     sentenceFeedback,
-    vocabularyUpgrade: buildLocalVocabularyUpgrade(source, sentenceFeedback, validationErrors),
+    vocabularyUpgrade: buildLocalVocabularyUpgrade(source, request, sentenceFeedback, validationErrors),
     modelAnswer: asString(
       source.modelAnswer,
       'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
       'modelAnswer',
       validationErrors,
     ),
+    modelAnswerPersonalized: source.modelAnswerPersonalized === true,
     reusableArguments: asArray(source.reusableArguments, 'reusableArguments', validationErrors).map((item, index) => {
       const record = isRecord(item) ? item : {};
       if (!isRecord(item)) validationErrors.push(`reusableArguments[${index}] missing or invalid object`);

@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-09] Task 2 Phase 3 Content Logic Refinement
+- **Decision**: Keep Phase 3 card-based for now, but deepen the content model inside each section before building interactive essay annotations.
+- **Reason**: Learners need clearer learning value from each feedback layer before source-text overlays are useful.
+- **Implemented**:
+  - Sentence corrections now support `primaryIssue`, `secondaryIssues`, and `microUpgrades` while preserving old records.
+  - Vocabulary & Expression Upgrade is now a compact learning bank, not a duplicate correction list.
+  - Logic-to-correction inference now checks location, task-response markers, off-topic openings, balance/concession gaps, and thesis/conclusion issues more deliberately.
+  - Final writing analysis now receives optional Phase 1 framework notes and editable framework summary so new provider output can produce a personalized model excerpt.
+  - New provider prompts require a learnable Band 7.5-8 personalized excerpt, not a generic Band 9 essay.
+  - Task 2 markdown export includes sentence primary/secondary/micro fields and the personalized excerpt section when supported.
+- **Explicitly unchanged**: no underline markers, no dot markers, no popovers, no overlay, no click-to-locate behavior, no provider routing change, no `.env.local` edits, no merge, no push.
+
 ## [2026-05-09] Task 2 Phase 3 Feedback Information Architecture
 - **Decision**: Treat Task 2 Phase 3 feedback as four separate learner jobs: global essay warnings, big-picture logic/structure review, sentence-level corrections, and topic vocabulary/expression upgrades.
 - **Reason**: Under-length warnings, lexical polish, paragraph logic, and local sentence fixes were competing in the same visual hierarchy, which made the most important revision task harder to see.

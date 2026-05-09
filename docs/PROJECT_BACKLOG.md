@@ -51,6 +51,7 @@ _Last updated: 2026-05-09_
 - **Done Task 2 UX repair**: Framework summaries include reusable sentence frames/transitions and stay editable.
 - **Done Task 2 feedback hierarchy**: Phase 3 separates essay-level warnings, logic/structure review, sentence-level corrections, and vocabulary/expression upgrades.
 - **Done Task 2 feedback hierarchy**: under-length is treated as a global warning, pure lexical issues stay out of big-picture logic cards, and logic issues link to correction numbers when relevant.
+- **Done Task 2 feedback content refinement**: Vocabulary & Expression Upgrade is a compact learning bank; sentence corrections support primary issue, secondary issues, and micro upgrades; personalized model excerpts can use learner essay/framework context.
 - Require user edit/confirm before moving to Phase 2.
 
 ### 2b) Future UI Consistency Notes
@@ -124,8 +125,15 @@ _Last updated: 2026-05-09_
 
 ### 4) Sentence-level Feedback
 - Step 1: sentence numbering and correction-to-source mapping. *(Basic correction numbers and logic-to-correction references are implemented for Task 2 Phase 3 cards.)*
-- Step 2: click-to-locate correction.
-- Step 3: inline annotation / overlay on the essay text.
+- Step 1b: sentence correction depth. *(Primary issue, secondary issues, and micro upgrades are implemented for Task 2 Phase 3 cards.)*
+- **V1.3 Step 2 - Interactive Annotated Essay Overlay** *(documented only; not implemented yet)*:
+  - inject correction markers into the original essay
+  - underline/problem-dot on source text
+  - click marker to open correction overlay card
+  - overlay includes correction, micro vocabulary upgrade, and related logic issue
+  - right-side Logic Review aligns by essay paragraph
+  - old correction card list can become secondary/collapsible
+- Step 3: full inline annotation/editor refinements after Step 2 proves useful.
 - Do not implement full inline editor yet.
 
 ### 5) Speaking Improvements
