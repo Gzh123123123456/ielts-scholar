@@ -118,8 +118,13 @@
   @apply px-4 py-2 bg-accent-terracotta text-paper-50 font-serif hover:bg-accent-terracotta/80 transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100 disabled:cursor-not-allowed cursor-pointer;
 }
 
+.phase-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .phase-tab {
-  @apply min-w-0 flex-1 justify-center px-5 py-3 rounded-sm transition-all duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/45 hover:text-paper-ink hover:bg-paper-ink/5 text-xs text-center whitespace-nowrap;
+  @apply w-full min-w-0 justify-center px-5 py-3 rounded-sm transition-all duration-200 flex items-center gap-2 cursor-pointer text-paper-ink/45 hover:text-paper-ink hover:bg-paper-ink/5 text-xs text-center whitespace-nowrap;
 }
 
 .phase-tab-active {

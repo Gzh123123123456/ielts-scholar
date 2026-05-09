@@ -1,4 +1,10 @@
-import { SpeakingFeedback, WritingFeedback, WritingFrameworkSummary, WritingTask1Feedback } from '../schemas';
+import {
+  SpeakingFeedback,
+  WritingFeedback,
+  WritingFrameworkCoachFeedback,
+  WritingFrameworkSummary,
+  WritingTask1Feedback,
+} from '../schemas';
 
 export interface SpeakingAnalysisRequest {
   part: number;
@@ -45,7 +51,7 @@ export interface AIProvider {
 
   analyzeWritingTask1?(params: WritingTask1AnalysisRequest): Promise<WritingTask1Feedback | string>;
 
-  coachWritingFramework?(params: WritingFrameworkCoachRequest): Promise<string>;
+  coachWritingFramework?(params: WritingFrameworkCoachRequest): Promise<WritingFrameworkCoachFeedback | string>;
 
   extractWritingFramework?(params: WritingFrameworkRequest): Promise<WritingFrameworkSummary | string>;
 }

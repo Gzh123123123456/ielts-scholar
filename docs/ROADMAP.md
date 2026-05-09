@@ -32,6 +32,10 @@ _Last updated: 2026-05-09_
 - Add **Generate Framework Summary** / **Extract Final Framework**.
 - Add `writing_framework_coach` as a distinct low-cost intermediate operation.
 - In auto mode with DeepSeek configured, framework coach and framework extraction use DeepSeek V4 Flash and do not spend Gemini.
+- Framework Coach now has readiness states (`not_ready`, `almost_ready`, `ready_to_write`) based on a Task 2 planning checklist.
+- `ready_to_write` stops the coaching loop and enables **Framework Ready — Generate Summary**; summary generation stays in Phase 1 for editing.
+- Enter inserts a newline in Framework Notes; Ctrl/Cmd+Enter sends to Coach.
+- Learners can stop a running coach response, delete the latest coach feedback, or skip framework discussion and start writing without AI.
 - Extract structured framework from Phase 1 discussion:
   - Position
   - View A
@@ -39,6 +43,7 @@ _Last updated: 2026-05-09_
   - My opinion
   - Paragraph plan
   - Possible example
+- The current extraction format is a bilingual grounded summary; missing learner decisions are marked instead of invented.
 - Require user edit/confirmation before entering Phase 2.
 - Framework Summary must summarize the learner's notes and coach discussion, not generate a full model plan from the prompt alone.
 - Task 2 provider banner has been removed; provider notices appear only when routing/fallback events actually occur.

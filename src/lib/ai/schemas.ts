@@ -160,3 +160,27 @@ export interface WritingFrameworkSummary {
   possibleExample: string;
   editableSummary: string;
 }
+
+export type WritingFrameworkReadiness = 'not_ready' | 'almost_ready' | 'ready_to_write';
+
+export interface WritingFrameworkCoachFeedback {
+  mode: IELTSMode;
+  module: 'writing';
+  task: 'task2';
+  question: string;
+  sourceNotes: string;
+  readiness: WritingFrameworkReadiness;
+  checklist: {
+    taskTypeAnswered: boolean;
+    clearPosition: boolean;
+    bothViewsCovered: boolean;
+    supportExists: boolean;
+    paragraphPlanClear: boolean;
+  };
+  mainGaps: string[];
+  nextQuestions: string[];
+  finalFixes: string[];
+  readySummary: string;
+  message: string;
+  comments?: string[];
+}

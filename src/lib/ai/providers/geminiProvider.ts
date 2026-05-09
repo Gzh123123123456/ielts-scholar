@@ -97,6 +97,29 @@ export const frameworkSchemaInstruction = `The JSON object must match this exact
   "editableSummary": "string"
 }`;
 
+export const frameworkCoachSchemaInstruction = `The JSON object must match this exact key structure:
+{
+  "mode": "practice",
+  "module": "writing",
+  "task": "task2",
+  "question": "string",
+  "sourceNotes": "string",
+  "readiness": "not_ready | almost_ready | ready_to_write",
+  "checklist": {
+    "taskTypeAnswered": true,
+    "clearPosition": true,
+    "bothViewsCovered": true,
+    "supportExists": true,
+    "paragraphPlanClear": true
+  },
+  "mainGaps": ["string"],
+  "nextQuestions": ["string"],
+  "finalFixes": ["string"],
+  "readySummary": "string",
+  "message": "string",
+  "comments": ["string"]
+}`;
+
 export class GeminiProvider implements AIProvider {
   private ai: GoogleGenAI;
   private model: string;
@@ -206,12 +229,15 @@ ${JSON.stringify(params, null, 2)}`);
     return this.generateJson(`${strictJsonInstruction}
 
 You are a concise IELTS Writing Task 2 framework coach.
-Return this exact JSON shape:
-{
-  "comments": ["string"]
-}
-Give 2 to 4 short Socratic comments/questions based only on the learner notes and current question.
-Do not write a full essay or complete model framework.
+Judge readiness with this checklist: task type answered, clear position, both required views covered, usable support/examples, and clear paragraph plan.
+Chinese-first. Use English only for useful IELTS phrases or topic-sentence drafts.
+If not_ready: show main gaps and 2-3 specific next questions.
+If almost_ready: show only final small fixes and what to add before generating summary.
+If ready_to_write: stop asking questions, summarize why ready, and tell the learner to generate summary or start writing.
+No full essay. No complete model framework. No generic template loop.
+comments must contain 2-4 short learner-facing lines that match the readiness status.
+
+${frameworkCoachSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);
@@ -225,6 +251,7 @@ ${JSON.stringify(params, null, 2)}`);
     return this.generateJson(`${strictJsonInstruction}
 
 You extract a final IELTS Writing Task 2 framework from the learner's Phase 1 coach discussion notes.
+Ground the summary in learner notes, coach discussion, and any unsent draft notes. Use a bilingual editableSummary with Position, View A, View B, My opinion, and Paragraph plan sections. Each major section should include Chinese logic plus useful English thesis/topic sentence drafts where the learner has supplied enough information. Mark missing decisions as Not decided yet / 需要继续补充. Mark AI-suggested examples as Suggested example, please confirm. Do not turn the summary into a full model answer.
 Do not write the essay. Consolidate only the learner's notes and coach discussion into the requested fields.
 Do not invent a complete high-band essay plan from the prompt alone.
 If a decision is missing, write "Not decided yet / 需要继续补充" in that field.

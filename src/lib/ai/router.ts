@@ -14,6 +14,7 @@ import {
   ProviderOperation,
   SpeakingFeedback,
   WritingFeedback,
+  WritingFrameworkCoachFeedback,
   WritingFrameworkSummary,
   WritingTask1Feedback,
 } from './schemas';
@@ -342,7 +343,7 @@ export const routedAnalyzeWritingTask1 = (
 
 export const routedCoachWritingFramework = (
   request: WritingFrameworkCoachRequest,
-): Promise<RoutedResult<string>> => {
+): Promise<RoutedResult<WritingFrameworkCoachFeedback>> => {
   const route = chooseRoute('writing_framework_coach', request, { reserveGemini: true });
   return runWithGeminiRetry('writing_framework_coach', request, route, (provider, providerName) =>
     safeCoachWritingFramework(provider, providerName, request));

@@ -1,5 +1,18 @@
 # Decision Log
 
+## [2026-05-09] Task 2 Framework Coach Readiness Flow
+- **Decision**: Treat Writing Task 2 Phase 1 as a readiness-gated framework workflow, not a generic chat loop.
+- **Reason**: Learners need to know when their framework is ready enough to write, and Gemini quota should remain reserved for high-value final feedback.
+- **Implemented**:
+  - Framework Coach now returns `not_ready`, `almost_ready`, or `ready_to_write` with a Task 2 checklist.
+  - `ready_to_write` stops asking more questions and unlocks **Framework Ready — Generate Summary**.
+  - Enter inserts a newline; Ctrl/Cmd+Enter sends to coach.
+  - Coach requests can be stopped best-effort, and the latest coach feedback can be deleted without removing user notes.
+  - Framework Summary generation is grounded in notes, coach discussion, and unsent draft notes, and uses a bilingual editable structure.
+  - Learners can skip framework discussion and start writing without an AI call.
+  - In auto mode, framework coach and extraction continue to use DeepSeek V4 Flash; Gemini remains reserved for final feedback.
+- **Explicitly unchanged**: no V1.3 sentence mapping work, no `.env.local` edits, no merge, no push.
+
 ## [2026-05-09] Provider Router Integration Fixes and Task 2 Framework Flow
 - **Decision**: Keep Task 2 intermediate framework work off Gemini in auto mode.
 - **Reason**: Framework coaching and summary extraction are low-cost planning steps; Gemini quota should be reserved for high-value final feedback.

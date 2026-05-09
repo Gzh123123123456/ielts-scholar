@@ -68,7 +68,11 @@ _Last updated: 2026-05-09_
   - Captures provider diagnostics for Debug Panel inspection.
 - The permanent Task 2 provider banner was removed; Task 2 now shows inline provider notices only when fallback/cooldown/quota reserve/discount protection/provider-unavailable events occur.
 - Phase tabs use stable three-column alignment so active/inactive/disabled states do not resize or shift the tab positions.
-- Phase 1 notes input supports Enter-to-send, Shift+Enter for newline, and IME composition protection for Chinese/Japanese/Korean input.
+- Task 2 Framework Coach now returns readiness states: `not_ready`, `almost_ready`, and `ready_to_write`.
+- Ready-to-write stops the coaching loop and enables **Framework Ready — Generate Summary**; summary generation uses `writing_framework_extraction` and does not auto-advance to Phase 2.
+- Learners can use **Skip Framework Discussion — Start Writing** to move to Phase 2 without an AI call, preserving any manual Final Framework Summary as reference.
+- Framework Summary uses an editable bilingual grounded structure: Position, View A, View B, My opinion, and Paragraph plan, with missing decisions marked instead of invented.
+- Phase 1 notes input supports Enter for newline, Ctrl/Cmd+Enter to send, Stop generating, Delete last coach feedback, and IME composition protection for Chinese/Japanese/Korean input.
 - Phase 2 displays Final Framework Summary before essay writing.
 - Phase 3 displays My Essay prominently before feedback; My Framework remains available as secondary planning reference.
 - Submit gating is disabled only when `essay.trim().length === 0` (implemented as `!essay.trim()`).

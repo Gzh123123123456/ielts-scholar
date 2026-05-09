@@ -1,5 +1,12 @@
 import { SpeakingQuestion, WritingQuestion, WritingTask1AcademicPrompt } from '@/src/data/questions/bank';
-import { ProviderDiagnostic, SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from '@/src/lib/ai/schemas';
+import {
+  ProviderDiagnostic,
+  SpeakingFeedback,
+  WritingFeedback,
+  WritingFrameworkCoachFeedback,
+  WritingFrameworkReadiness,
+  WritingTask1Feedback,
+} from '@/src/lib/ai/schemas';
 
 export type PracticeRecordStatus = 'draft' | 'analyzed' | 'provider_failed';
 
@@ -49,6 +56,8 @@ export interface WritingTask2PracticeRecord extends PracticeRecordBase {
   frameworkChat: { role: 'user' | 'ai'; text: string }[];
   frameworkInput: string;
   finalFrameworkSummary: string;
+  frameworkReadiness?: WritingFrameworkReadiness;
+  latestFrameworkCoach?: WritingFrameworkCoachFeedback;
   essay: string;
   feedback?: WritingFeedback;
   feedbackFallbackUsed?: boolean;
@@ -119,6 +128,9 @@ const asSpeakingPart = (value: unknown): 1 | 2 | 3 =>
 
 const asPhase = (value: unknown): WritingTask2PracticeRecord['phase'] =>
   value === 'writing' || value === 'results' || value === 'framework' ? value : 'framework';
+
+const asFrameworkReadiness = (value: unknown): WritingFrameworkReadiness | undefined =>
+  value === 'almost_ready' || value === 'ready_to_write' || value === 'not_ready' ? value : undefined;
 
 const asFrameworkChat = (value: unknown): WritingTask2PracticeRecord['frameworkChat'] =>
   Array.isArray(value)
@@ -237,6 +249,10 @@ const sanitizeWritingTask2Record = (value: unknown): WritingTask2PracticeRecord 
     frameworkChat: asFrameworkChat(value.frameworkChat),
     frameworkInput: asString(value.frameworkInput),
     finalFrameworkSummary: asString(value.finalFrameworkSummary),
+    frameworkReadiness: asFrameworkReadiness(value.frameworkReadiness),
+    latestFrameworkCoach: isObject(value.latestFrameworkCoach)
+      ? value.latestFrameworkCoach as unknown as WritingFrameworkCoachFeedback
+      : undefined,
     essay: asString(value.essay),
     feedbackFallbackUsed: Boolean(value.feedbackFallbackUsed),
   };

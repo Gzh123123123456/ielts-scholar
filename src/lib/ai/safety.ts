@@ -12,6 +12,8 @@ import {
   SpeakingFeedback,
   SpeakingPart,
   WritingFeedback,
+  WritingFrameworkCoachFeedback,
+  WritingFrameworkReadiness,
   WritingFrameworkSummary,
   WritingTask1Feedback,
   WritingTask,
@@ -861,18 +863,86 @@ const normalizeWritingFrameworkSummary = (
   };
 };
 
-const normalizeFrameworkCoach = (value: unknown, validationErrors: string[]): string => {
+const normalizeReadiness = (
+  value: unknown,
+  validationErrors: string[],
+): WritingFrameworkReadiness => {
+  if (value === 'not_ready' || value === 'almost_ready' || value === 'ready_to_write') {
+    return value;
+  }
+  validationErrors.push('readiness missing or invalid');
+  return 'not_ready';
+};
+
+const asBoolean = (value: unknown, field: string, validationErrors: string[]): boolean => {
+  if (typeof value === 'boolean') return value;
+  validationErrors.push(`${field} missing or invalid boolean`);
+  return false;
+};
+
+const normalizeCoachList = (
+  value: unknown,
+  field: string,
+  validationErrors: string[],
+  maxItems: number,
+): string[] => {
+  if (!Array.isArray(value)) {
+    validationErrors.push(`${field} missing or invalid array`);
+    return [];
+  }
+  return value
+    .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    .map(item => item.trim())
+    .slice(0, maxItems);
+};
+
+const normalizeFrameworkCoach = (
+  value: unknown,
+  request: FrameworkCoachRequest,
+  validationErrors: string[],
+): WritingFrameworkCoachFeedback => {
   const source = isRecord(value) ? value : {};
   if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
-  const rawComments = Array.isArray(source.comments) ? source.comments : [];
-  if (!Array.isArray(source.comments)) validationErrors.push('comments missing or invalid array');
-  const comments = rawComments
-    .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
-    .slice(0, 4);
-  if (comments.length === 0) {
-    return 'Local safety fallback: please clarify your final position, the two main reasons, and one example from your own notes.';
-  }
-  return comments.map(item => item.trim()).join('\n');
+  const checklist = isRecord(source.checklist) ? source.checklist : {};
+  if (!isRecord(source.checklist)) validationErrors.push('checklist missing or invalid object');
+  const readiness = normalizeReadiness(source.readiness, validationErrors);
+  const comments = normalizeCoachList(source.comments, 'comments', validationErrors, 4);
+  const mainGaps = normalizeCoachList(source.mainGaps, 'mainGaps', validationErrors, 4);
+  const nextQuestions = normalizeCoachList(source.nextQuestions, 'nextQuestions', validationErrors, 3);
+  const finalFixes = normalizeCoachList(source.finalFixes, 'finalFixes', validationErrors, 3);
+  const readySummary = asString(
+    source.readySummary,
+    readiness === 'ready_to_write' ? 'Framework is ready enough to write.' : '',
+    'readySummary',
+    validationErrors,
+  );
+  const fallbackMessage = comments.length
+    ? comments.join('\n')
+    : readiness === 'ready_to_write'
+      ? 'Framework is ready. Generate the summary or start writing.'
+      : 'Please clarify your final position, two body ideas, and one supporting example.';
+
+  return {
+    mode: source.mode === 'mock' ? 'mock' : 'practice',
+    module: 'writing',
+    task: 'task2',
+    question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
+    sourceNotes: asString(source.sourceNotes, request.notes || FALLBACK_TEXT, 'sourceNotes', validationErrors),
+    readiness,
+    checklist: {
+      taskTypeAnswered: asBoolean(checklist.taskTypeAnswered, 'checklist.taskTypeAnswered', validationErrors),
+      clearPosition: asBoolean(checklist.clearPosition, 'checklist.clearPosition', validationErrors),
+      bothViewsCovered: asBoolean(checklist.bothViewsCovered, 'checklist.bothViewsCovered', validationErrors),
+      supportExists: asBoolean(checklist.supportExists, 'checklist.supportExists', validationErrors),
+      paragraphPlanClear: asBoolean(checklist.paragraphPlanClear, 'checklist.paragraphPlanClear', validationErrors),
+    },
+    mainGaps,
+    nextQuestions: readiness === 'ready_to_write' ? [] : nextQuestions,
+    finalFixes,
+    readySummary,
+    message: asString(source.message, fallbackMessage, 'message', validationErrors),
+    comments,
+  };
 };
 
 export const safeAnalyzeSpeaking = async (
@@ -1010,7 +1080,7 @@ export const safeCoachWritingFramework = async (
   provider: AIProvider,
   providerName: string,
   requestPayload: FrameworkCoachRequest,
-): Promise<SafeAnalyzeResult<string>> => {
+): Promise<SafeAnalyzeResult<WritingFrameworkCoachFeedback>> => {
   let rawResponse: unknown = null;
   let parsedJson: unknown = null;
   let parseError: string | undefined;
@@ -1029,7 +1099,7 @@ export const safeCoachWritingFramework = async (
     parseError = error instanceof Error ? error.message : String(error);
   }
 
-  const feedback = normalizeFrameworkCoach(parsedJson, validationErrors);
+  const feedback = normalizeFrameworkCoach(parsedJson, requestPayload, validationErrors);
   const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
   const failureKind = getFailureKind(parseError, validationErrors);
 

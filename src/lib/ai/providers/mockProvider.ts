@@ -1,5 +1,12 @@
 import { AIProvider } from './base';
-import { SpeakingFeedback, WritingFeedback, WritingFrameworkSummary, WritingTask1Feedback } from '../schemas';
+import {
+  SpeakingFeedback,
+  WritingFeedback,
+  WritingFrameworkCoachFeedback,
+  WritingFrameworkReadiness,
+  WritingFrameworkSummary,
+  WritingTask1Feedback,
+} from '../schemas';
 
 const firstNonEmptyLine = (text: string, fallback: string): string => {
   const line = text
@@ -315,17 +322,64 @@ ${patterns.map(item => `- ${item}`).join('\n')}`,
     task: 'task2';
     question: string;
     notes: string;
-  }): Promise<string> {
+  }): Promise<WritingFrameworkCoachFeedback> {
     await new Promise(r => setTimeout(r, 450));
     const notes = params.notes.trim();
     const firstLine = firstNonEmptyLine(notes, '');
     const focus = firstLine ? shorten(firstLine, 120) : 'your position';
-    return JSON.stringify({
-      comments: [
-        `Local mock coach: Your current focus seems to be "${focus}". Which side will your thesis finally support?`,
-        'What is the strongest reason from your own notes, and what example can prove it?',
-        'Which opposing view do you need to acknowledge without turning the essay into a list?',
-      ],
-    });
+    const lower = notes.toLowerCase();
+    const checklist = {
+      taskTypeAnswered: notes.length > 40,
+      clearPosition: /i think|my opinion|position|agree|disagree|partly|我认为|立场|同意|不同意/.test(lower),
+      bothViewsCovered: /view a|view b|both|opposing|另一方|双方|反方|正方/.test(lower),
+      supportExists: /example|for example|support|because|原因|例子|案例/.test(lower),
+      paragraphPlanClear: /body|paragraph|para|introduction|conclusion|主体|段落|开头|结尾/.test(lower),
+    };
+    const passed = Object.values(checklist).filter(Boolean).length;
+    const readiness: WritingFrameworkReadiness = passed >= 5
+      ? 'ready_to_write'
+      : passed >= 3
+        ? 'almost_ready'
+        : 'not_ready';
+    const mainGaps = [
+      !checklist.clearPosition ? '先明确最终立场：完全同意、不同意，还是部分同意。' : '',
+      !checklist.bothViewsCovered ? '如果题目要求讨论双方，请补上另一方观点以及你的取舍。' : '',
+      !checklist.supportExists ? '补一个来自你自己经验或常识的例子，不要只写抽象理由。' : '',
+      !checklist.paragraphPlanClear ? '把两个主体段分别要写什么说清楚。' : '',
+    ].filter(Boolean);
+    const nextQuestions = readiness === 'not_ready'
+      ? [
+          `本地 mock coach：你现在的重点像是“${focus}”。你的最终立场是哪一边？`,
+          '两个主体段各自证明什么？',
+          '你准备使用哪个例子或事实来支撑最强理由？',
+        ]
+      : [];
+    const finalFixes = readiness === 'almost_ready'
+      ? ['再补清楚一个例子和段落顺序，然后生成 Framework Summary。']
+      : [];
+    const readySummary = readiness === 'ready_to_write'
+      ? '本地 mock 判断：立场、双方覆盖、支撑和段落计划已经够用，可以生成总结或直接开始写。'
+      : '';
+    const message = readiness === 'ready_to_write'
+      ? readySummary
+      : readiness === 'almost_ready'
+        ? '本地 mock coach：框架接近可写，只需要补上最后的小缺口。'
+        : '本地 mock coach：现在还不够写完整作文，先回答下面几个关键问题。';
+
+    return {
+      mode: 'mock',
+      module: 'writing',
+      task: 'task2',
+      question: params.question,
+      sourceNotes: params.notes,
+      readiness,
+      checklist,
+      mainGaps,
+      nextQuestions,
+      finalFixes,
+      readySummary,
+      message,
+      comments: [message, ...mainGaps, ...nextQuestions, ...finalFixes].slice(0, 4),
+    };
   }
 }

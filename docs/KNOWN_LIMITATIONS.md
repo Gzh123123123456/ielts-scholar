@@ -9,6 +9,8 @@
 4. **DeepSeek Fallback**: DeepSeek V4 Flash is used as the cheap fallback. DeepSeek V4 Pro is used for Task 2 high-quality fallback only before `2026-05-31T15:59:00Z`, unless `VITE_DEEPSEEK_ALLOW_PRO_AFTER_DISCOUNT=true`. Balance check is best-effort only and currently shown as unavailable if it cannot be read safely.
    - Task 2 framework coach and framework extraction use DeepSeek V4 Flash in auto mode when configured.
    - If DeepSeek is missing, those intermediate steps fall back to local mock handling and are labeled as mock.
+   - Framework Coach readiness is a local/provider-assisted planning aid, not an IELTS official scoring signal.
+   - Framework Summary is grounded in learner notes and coach discussion; if the learner has not decided something, the summary should mark it as missing rather than fill in a polished model plan.
 5. **Transcription**: Relies on browser Web Speech API. Works reliably in Chrome and Edge. Safari and AI Studio preview environments may be unreliable. Users should verify Chrome is using the correct microphone device.
 6. **no-speech Recovery**: Speaking Practice auto-restarts recognition on `no-speech` errors (up to 2 retries). This covers brief silence, but if the wrong microphone device is selected in Chrome, recognition will not work regardless.
 7. **Storage**: Data is stored in `localStorage`. Active attempts, practice records, provider usage estimates, and router cooldown state are recoverable in the same browser, but clearing browser data will lose history. No IndexedDB/database migration exists yet.

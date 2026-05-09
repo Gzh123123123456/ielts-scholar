@@ -7,7 +7,11 @@ import { useApp } from '@/src/context/AppContext';
 import { routedAnalyzeWriting, routedCoachWritingFramework, routedExtractWritingFramework } from '@/src/lib/ai';
 import { formatBandEstimate } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
-import { WritingFeedback } from '@/src/lib/ai/schemas';
+import {
+  WritingFeedback,
+  WritingFrameworkCoachFeedback,
+  WritingFrameworkReadiness,
+} from '@/src/lib/ai/schemas';
 import {
   createRecordId,
   getActiveWritingTask2,
@@ -16,7 +20,7 @@ import {
   upsertPracticeRecord,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
-import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
+import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
 
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
@@ -84,12 +88,49 @@ const routeNotice = (
   return '';
 };
 
+const readinessLabels: Record<WritingFrameworkReadiness, string> = {
+  not_ready: '还不能写 / Not ready',
+  almost_ready: '接近可写 / Almost ready',
+  ready_to_write: '可以开始写 / Ready to write',
+};
+
+const checklistLabels: Record<keyof WritingFrameworkCoachFeedback['checklist'], string> = {
+  taskTypeAnswered: '题型要求已回应',
+  clearPosition: '立场清楚',
+  bothViewsCovered: '需要时已覆盖双方观点',
+  supportExists: '有可用例子或支撑',
+  paragraphPlanClear: '段落计划够清楚',
+};
+
+const formatCoachFeedback = (feedback: WritingFrameworkCoachFeedback, isMock: boolean) => {
+  const lines = [
+    `${readinessLabels[feedback.readiness]}${isMock ? ' (local mock)' : ''}`,
+    feedback.message,
+  ].filter(Boolean);
+
+  const checklist = Object.entries(feedback.checklist)
+    .map(([key, value]) => `${value ? 'OK' : 'Needs work'} - ${checklistLabels[key as keyof WritingFrameworkCoachFeedback['checklist']]}`)
+    .join('\n');
+
+  if (checklist) lines.push(`Checklist:\n${checklist}`);
+  if (feedback.mainGaps.length) lines.push(`主要缺口:\n${feedback.mainGaps.map(item => `- ${item}`).join('\n')}`);
+  if (feedback.finalFixes.length) lines.push(`最后小修:\n${feedback.finalFixes.map(item => `- ${item}`).join('\n')}`);
+  if (feedback.nextQuestions.length) lines.push(`下一步问题:\n${feedback.nextQuestions.map(item => `- ${item}`).join('\n')}`);
+  if (feedback.readiness === 'ready_to_write' && feedback.readySummary) {
+    lines.push(`Ready reason:\n${feedback.readySummary}`);
+  }
+
+  return lines.join('\n\n');
+};
+
 export default function WritingTask2Practice() {
   const { addDebugLog, saveSession, setProviderDiagnostic } = useApp();
   const [question, setQuestion] = useState<WritingQuestion | null>(null);
   const [phase, setPhase] = useState<'framework' | 'writing' | 'results'>('framework');
   const [frameworkChat, setFrameworkChat] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
   const [frameworkInput, setFrameworkInput] = useState('');
+  const [frameworkReadiness, setFrameworkReadiness] = useState<WritingFrameworkReadiness>('not_ready');
+  const [latestFrameworkCoach, setLatestFrameworkCoach] = useState<WritingFrameworkCoachFeedback | null>(null);
   const [finalFrameworkSummary, setFinalFrameworkSummary] = useState('');
   const [essay, setEssay] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -103,6 +144,8 @@ export default function WritingTask2Practice() {
   const [apiStatusMessage, setApiStatusMessage] = useState('');
   const discussionRef = useRef<HTMLDivElement | null>(null);
   const isFrameworkInputComposingRef = useRef(false);
+  const coachRunIdRef = useRef(0);
+  const cancelledCoachRunRef = useRef<number | null>(null);
   const activeAttemptIdRef = useRef(createRecordId('wt2'));
   const restoredRecordRef = useRef<WritingTask2PracticeRecord | null>(null);
   const isRestoringRecordRef = useRef(false);
@@ -123,7 +166,19 @@ export default function WritingTask2Practice() {
     }
     if (!question || isAnalyzing || isCoachingFramework || isExtractingFramework) return;
     persistWritingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
-  }, [question, phase, frameworkChat, frameworkInput, finalFrameworkSummary, essay, feedback, feedbackFallbackUsed, providerErrorMessage]);
+  }, [
+    question,
+    phase,
+    frameworkChat,
+    frameworkInput,
+    frameworkReadiness,
+    latestFrameworkCoach,
+    finalFrameworkSummary,
+    essay,
+    feedback,
+    feedbackFallbackUsed,
+    providerErrorMessage,
+  ]);
 
   const buildWritingRecord = (status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft'): WritingTask2PracticeRecord | null => {
     if (!question) return null;
@@ -147,6 +202,8 @@ export default function WritingTask2Practice() {
       phase,
       frameworkChat,
       frameworkInput,
+      frameworkReadiness,
+      latestFrameworkCoach: latestFrameworkCoach || undefined,
       finalFrameworkSummary,
       essay,
       feedback: status === 'provider_failed' ? undefined : feedback || undefined,
@@ -174,6 +231,8 @@ export default function WritingTask2Practice() {
     setPhase(record.feedback ? 'results' : record.phase);
     setFrameworkChat(record.frameworkChat.length ? record.frameworkChat : [{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
     setFrameworkInput(record.frameworkInput);
+    setFrameworkReadiness(record.frameworkReadiness || record.latestFrameworkCoach?.readiness || 'not_ready');
+    setLatestFrameworkCoach(record.latestFrameworkCoach || null);
     setFinalFrameworkSummary(record.finalFrameworkSummary);
     setEssay(record.essay);
     setFeedback(record.feedback || null);
@@ -194,6 +253,8 @@ export default function WritingTask2Practice() {
     setFeedback(null);
     setFeedbackFallbackUsed(false);
     setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
+    setFrameworkReadiness('not_ready');
+    setLatestFrameworkCoach(null);
     setFinalFrameworkSummary('');
     setFrameworkExtractMessage('');
     setProviderErrorMessage('');
@@ -203,9 +264,12 @@ export default function WritingTask2Practice() {
   };
 
   const submitFrameworkNote = async () => {
-    if (!frameworkInput.trim()) return;
+    if (!frameworkInput.trim() || isCoachingFramework) return;
 
     const userInput = frameworkInput;
+    const runId = coachRunIdRef.current + 1;
+    coachRunIdRef.current = runId;
+    cancelledCoachRunRef.current = null;
     setFrameworkChat(prev => [...prev, { role: 'user', text: userInput }]);
     setFrameworkInput('');
     setApiStatusMessage('');
@@ -225,6 +289,10 @@ export default function WritingTask2Practice() {
         question: question?.question || '',
         notes,
       });
+      if (cancelledCoachRunRef.current === runId || coachRunIdRef.current !== runId) {
+        addDebugLog('Framework coach response ignored after cancellation.');
+        return;
+      }
       setProviderDiagnostic(diagnostic);
       const notice = routeNotice(route, diagnostic.failureKind);
       if (notice && (diagnostic.failureKind === 'provider_unavailable' || route.providerName === 'mock')) {
@@ -235,13 +303,24 @@ export default function WritingTask2Practice() {
         addDebugLog('Provider unavailable for framework coach.');
         return;
       }
-      setFrameworkChat(prev => [...prev, { role: 'ai', text: coachFeedback }]);
+      setLatestFrameworkCoach(coachFeedback);
+      setFrameworkReadiness(coachFeedback.readiness);
+      setFrameworkChat(prev => [...prev, {
+        role: 'ai',
+        text: formatCoachFeedback(coachFeedback, route.providerName === 'mock'),
+      }]);
       addDebugLog(diagnostic.fallbackUsed ? 'Provider fallback used for framework coach.' : 'Framework coach feedback complete.');
     } catch (error) {
+      if (cancelledCoachRunRef.current === runId || coachRunIdRef.current !== runId) {
+        addDebugLog('Framework coach error ignored after cancellation.');
+        return;
+      }
       setFrameworkChat(prev => [...prev, { role: 'ai', text: 'Local mock coach: clarify your final position, one main reason, and one example from your own notes.' }]);
       addDebugLog(`Framework coach failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      setIsCoachingFramework(false);
+      if (coachRunIdRef.current === runId) {
+        setIsCoachingFramework(false);
+      }
     }
 
     requestAnimationFrame(() => {
@@ -251,6 +330,28 @@ export default function WritingTask2Practice() {
     });
   };
 
+  const stopFrameworkCoach = () => {
+    const runId = coachRunIdRef.current;
+    cancelledCoachRunRef.current = runId;
+    coachRunIdRef.current = runId + 1;
+    setIsCoachingFramework(false);
+    setApiStatusMessage('Coach generation stopped. Your notes are preserved.');
+    addDebugLog('Framework coach generation cancelled by user.');
+  };
+
+  const deleteLastCoachFeedback = () => {
+    setFrameworkChat(prev => {
+      const lastCoachIndex = [...prev].map((msg, index) => ({ msg, index }))
+        .reverse()
+        .find(item => item.msg.role === 'ai' && item.index > 0)?.index;
+      if (lastCoachIndex === undefined) return prev;
+      return prev.filter((_, index) => index !== lastCoachIndex);
+    });
+    setLatestFrameworkCoach(null);
+    setFrameworkReadiness('not_ready');
+    setFrameworkExtractMessage('Latest coach feedback deleted. Your notes are unchanged.');
+  };
+
   const handleFrameworkSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await submitFrameworkNote();
@@ -258,7 +359,7 @@ export default function WritingTask2Practice() {
 
   const handleFrameworkInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const isComposing = isFrameworkInputComposingRef.current || e.nativeEvent.isComposing;
-    if (e.key !== 'Enter' || e.shiftKey || isComposing) return;
+    if (e.key !== 'Enter' || isComposing || (!e.ctrlKey && !e.metaKey)) return;
 
     e.preventDefault();
     void submitFrameworkNote();
@@ -412,6 +513,7 @@ export default function WritingTask2Practice() {
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
   const isInsufficientSample = isInsufficientTask2Sample(essay);
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
+  const hasCoachFeedback = frameworkChat.some((msg, index) => msg.role === 'ai' && index > 0);
 
   return (
     <PageShell size="wide">
@@ -427,7 +529,7 @@ export default function WritingTask2Practice() {
         </PaperCard>
       </div>
 
-      <div className={`${writingWorkspaceClass} grid grid-cols-3 gap-2 p-1 bg-paper-ink/5 rounded-sm mb-8 font-sans uppercase tracking-widest font-bold`}>
+      <div className={`${writingWorkspaceClass} phase-tabs gap-2 p-1 bg-paper-ink/5 rounded-sm mb-8 font-sans uppercase tracking-widest font-bold`}>
         <button
           onClick={() => setPhase('framework')}
           className={phase === 'framework' ? 'phase-tab phase-tab-active' : 'phase-tab'}
@@ -481,7 +583,7 @@ export default function WritingTask2Practice() {
                           ? 'Prompt Guidance'
                           : 'Coach Feedback'}
                     </p>
-                    <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted'} text-[17px] leading-8`}>
+                    <p className={`${msg.role === 'user' ? 'text-paper-ink' : 'text-paper-ink-muted'} text-[17px] leading-8 whitespace-pre-wrap`}>
                       {msg.text}
                     </p>
                   </div>
@@ -503,11 +605,30 @@ export default function WritingTask2Practice() {
                   autoFocus
                   className="w-full min-h-[180px] xl:min-h-[160px] bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
                 />
-                <div className="flex justify-end">
-                  <SerifButton type="submit" variant="secondary" className="px-4 py-2 text-xs">Send to Coach</SerifButton>
-                  {isCoachingFramework && (
-                    <span className="text-xs font-sans text-paper-ink/45 self-center">Coaching...</span>
+                <p className="text-xs font-sans text-paper-ink/45">
+                  Enter = newline. Ctrl+Enter / Cmd+Enter = Send to Coach.
+                </p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {hasCoachFeedback && (
+                    <SerifButton
+                      type="button"
+                      variant="outline"
+                      onClick={deleteLastCoachFeedback}
+                      className="px-4 py-2 text-xs flex items-center gap-2"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete last coach feedback
+                    </SerifButton>
                   )}
+                  <SerifButton
+                    type={isCoachingFramework ? 'button' : 'submit'}
+                    variant="secondary"
+                    onClick={isCoachingFramework ? stopFrameworkCoach : undefined}
+                    disabled={!isCoachingFramework && !frameworkInput.trim()}
+                    className="px-4 py-2 text-xs"
+                  >
+                    {isCoachingFramework ? 'Stop generating' : 'Send to Coach'}
+                  </SerifButton>
                 </div>
               </form>
             </PaperCard>
@@ -516,17 +637,10 @@ export default function WritingTask2Practice() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3 shrink-0">
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Final Framework Summary</h3>
+                  <p className="text-xs font-sans text-paper-ink/45">
+                    Coach readiness: {readinessLabels[frameworkReadiness]}
+                  </p>
                 </div>
-                <SerifButton
-                  type="button"
-                  variant="outline"
-                  onClick={extractFinalFramework}
-                  disabled={isExtractingFramework}
-                  className="shrink-0 text-xs flex items-center justify-center gap-2"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  {isExtractingFramework ? 'Extracting...' : 'Generate Framework Summary'}
-                </SerifButton>
               </div>
               {frameworkExtractMessage && (
                 <p className="text-xs font-sans text-paper-ink/55 bg-paper-ink/5 border border-paper-ink/10 rounded-sm px-3 py-2 mb-3 shrink-0">
@@ -538,11 +652,32 @@ export default function WritingTask2Practice() {
                 onChange={(e) => setFinalFrameworkSummary(e.target.value)}
                 placeholder="Final Framework Summary (Chinese or English)..."
                 rows={12}
-                className="w-full min-h-[360px] xl:min-h-0 xl:flex-1 xl:max-h-[calc(100vh-20rem)] bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                className="w-full min-h-[360px] md:min-h-[440px] xl:min-h-[520px] xl:h-[60vh] xl:max-h-[calc(100vh-14rem)] xl:flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y overflow-auto placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
               />
-              <div className="flex justify-end border-t border-paper-ink/10 pt-4 mt-4 shrink-0">
-                <SerifButton onClick={() => setPhase('writing')} className="flex items-center gap-2">
-                  Done with Framework <ArrowRight className="w-4 h-4" />
+              <div className="flex flex-col gap-3 border-t border-paper-ink/10 pt-4 mt-4 shrink-0">
+                {frameworkReadiness === 'ready_to_write' ? (
+                  <SerifButton
+                    type="button"
+                    variant="outline"
+                    onClick={extractFinalFramework}
+                    disabled={isExtractingFramework}
+                    className="w-full justify-center text-xs flex items-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {isExtractingFramework ? 'Extracting...' : 'Framework Ready — Generate Summary'}
+                  </SerifButton>
+                ) : (
+                  <p className="text-xs font-sans text-paper-ink/55 bg-paper-ink/5 border border-paper-ink/10 rounded-sm px-3 py-2">
+                    Keep discussing with Coach before generating summary.
+                  </p>
+                )}
+                <SerifButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setPhase('writing')}
+                  className="w-full justify-center flex items-center gap-2"
+                >
+                  Skip Framework Discussion — Start Writing <ArrowRight className="w-4 h-4" />
                 </SerifButton>
               </div>
             </PaperCard>

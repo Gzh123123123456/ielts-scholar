@@ -36,6 +36,9 @@ _Last updated: 2026-05-09_
 - **Done mock-safe in V1.1**: Add **Generate Framework Summary** / **Extract Final Framework** action using Mock Provider by default.
 - **Done Provider Router v1 integration fix**: Add low-cost `writing_framework_coach` and route both coach/extraction to DeepSeek V4 Flash in auto mode when configured.
 - **Done Provider Router v1 integration fix**: Framework Summary is grounded in user notes, coach feedback/discussion, and unsent draft notes; missing decisions are marked rather than invented.
+- **Done Task 2 coach readiness flow**: Framework Coach returns `not_ready`, `almost_ready`, or `ready_to_write`; ready-to-write gates summary generation and stops the generic coaching loop.
+- **Done Task 2 coach readiness flow**: Enter inserts a newline, Ctrl/Cmd+Enter sends, Stop generating cancels/ignores late coach responses best-effort, and Delete last coach feedback removes only the latest coach item.
+- **Done Task 2 coach readiness flow**: Learners can skip framework discussion and start writing without an AI call.
 - Summary fields:
   - Position
   - View A
@@ -43,6 +46,7 @@ _Last updated: 2026-05-09_
   - My opinion
   - Paragraph plan
   - Possible example
+- Current summary UI now presents a bilingual editable learning structure rather than a full model answer.
 - Require user edit/confirm before moving to Phase 2.
 
 ### 2b) Future UI Consistency Notes
