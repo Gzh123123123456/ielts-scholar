@@ -1,6 +1,6 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-09_
+_Last updated: 2026-05-12_
 
 ## Repo
 
@@ -24,6 +24,11 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Recent Events
 
+- **2026-05-12**: Speaking seasonal question bank data scaffolding completed (two passes).
+  - Pass 1: Created `src/data/speaking/` folder with types, 2026 May-August bank data, V1 re-export, and priority index.
+  - Pass 2 (completeness): Filled evergreen Part 1 (5 topics) and mainland reused Part 2&3 (26 topics) from `docs/source_materials/speaking/ielts-speaking-bank-2026-05-to-08.extracted.md`.
+  - This is data-layer preparation only; runtime selection integration is deferred.
+  - Existing `src/data/questions/bank.ts` preserved unchanged.
 - A Claude Code patch attempted to redesign Writing Task 2 Phase 3 Vocabulary & Expression Upgrade.
 - **That patch has been reverted and must NOT be treated as accepted design direction.**
 - Do not continue from the rejected Claude patch.

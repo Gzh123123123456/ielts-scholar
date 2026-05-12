@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-09_
+_Last updated: 2026-05-12_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -214,6 +214,30 @@ Redesign according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 - Generate Framework Summary should organize already-discussed decisions, not think for the learner.
 
 ---
+
+## P1 Future — Speaking Seasonal Question Bank
+
+### Speaking 2026 May-August Seasonal Question Bank Data Scaffolding *(data files created; not connected to runtime)*
+- **Done 2026-05-12 (scaffolding pass)**: Created `src/data/speaking/` data folder with:
+  - `speakingPromptTypes.ts` — shared types for seasonal Speaking prompts (bank ID, season, region, new/reused/evergreen/non-mainland status, Part 1/2/3, topic, cue card, follow-ups, tags, priority, completeness).
+  - `speakingBank2026MayAug.ts` — structured 2026 May-August mainland and non-mainland prompt data.
+  - `speakingBankV1.ts` — re-export of existing V1 original prompt bank (no breakage).
+  - `speakingBankIndex.ts` — bank metadata, priority helpers, and part-filtered selectors (pure, side-effect-free).
+- **Done 2026-05-12 (completeness pass)**:
+  - Evergreen Part 1 (5 topics): replaced compressed questions with full source questions from `docs/source_materials/speaking/ielts-speaking-bank-2026-05-to-08.extracted.md`. Marked complete.
+  - Mainland reused Part 2&3 (26 topics): replaced all `p2Partial` placeholders with full `p2` entries including cue card, cue points, and complete follow-up questions from extracted markdown. Marked complete.
+  - New May Part 1 topics that remain `partial`: Sports team (1 question), Reading (3 questions), Typing (3 questions) — marked partial in the source.
+  - New May Part 2&3 topics all remain `partial` — source marks all follow-ups as 待补充/pending.
+- Existing `src/data/questions/bank.ts` preserved unchanged; all existing imports continue to work.
+- Priority order defined: latest mainland new > latest mainland reused > evergreen > V1 original > non-mainland.
+- Non-mainland topics stored as optional data with lower priority for mainland practice.
+- **Still pending**:
+  - Runtime selection integration — connect the new bank to Speaking Practice prompt selection behavior.
+  - PDF runtime parsing of question banks.
+  - User-uploaded bank UI.
+  - Speaking UI changes for bank selection.
+  - Deferred to a later Codex/product implementation step after Writing Task 2 Phase 3 is complete.
+- **Next slice** (after Task 2 Phase 3): "Speaking 2026 May-August seasonal question bank data integration."
 
 ## P1 Future — Speaking Pre-Answer Coaching
 

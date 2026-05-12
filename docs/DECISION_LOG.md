@@ -1,5 +1,29 @@
 # Decision Log
 
+## [2026-05-12] Speaking Seasonal Question Bank Data Scaffolding (Pass 1)
+- **Decision**: Prepare Speaking module data files for the 2026 May-August seasonal IELTS Speaking question bank as a data-layer and documentation preparation task only. Do not connect to runtime behavior yet.
+- **Reason**: The data preparation is mechanical and can be done safely without affecting current Speaking, recording, transcription, scoring, feedback, provider routing, History, or Progress logic. This slice is documented as the next small Speaking data slice AFTER the current Writing Task 2 Phase 3 priority.
+- **Implemented**:
+  - Created `src/data/speaking/` folder with four files (types, bank data, V1 re-export, index).
+  - Priority order: latest mainland new > latest mainland reused > evergreen > V1 original > non-mainland.
+  - Non-mainland topics stored as optional data with lower priority for mainland practice.
+  - Updated all four docs.
+- **Explicitly unchanged**: no Speaking UI changes, no runtime bank selection, no recording/transcription/scoring/feedback/provider/History/Progress changes, no `.env.local` edits, no merge, no push.
+
+## [2026-05-12] Speaking Seasonal Question Bank Completeness Pass (Pass 2)
+- **Decision**: Fill the two largest incomplete sections (evergreen Part 1 and mainland reused Part 2&3) from the extracted markdown source before handing off to Codex.
+- **Reason**: Codex should not need to reconstruct the 26 reused Part 2&3 cue cards and follow-ups from PDF; the data should be ready to connect. The evergreen questions in the first pass were compressed/paraphrased locally and needed to be replaced with the actual source questions.
+- **Implemented**:
+  - Evergreen Part 1 (5 topics): replaced 4-5 compressed questions per topic with full source question lists (Work or studies: 22 questions, Home/accommodation: 16, Hometown: 14, The area you live in: 7, The city you live in: 11). Marked complete.
+  - Mainland reused Part 2&3 (26 topics): replaced all `p2Partial` placeholders with full `p2` entries containing cue card prompt, cue card points, and 5-6 follow-up questions each from the extracted markdown. Marked complete.
+  - `p2Partial` helper is retained for definition but is no longer called in section E.
+  - Source coverage note added as a comment in the bank file.
+  - Updated all four docs.
+- **Partial entries remaining** (per source marking):
+  - New Part 1: Sports team (1 question), Reading (3 questions), Typing (3 questions) — source marks 待补充.
+  - All 14 new Part 2&3 topics — source marks follow-ups as 待补充/pending.
+- **Next**: After Writing Task 2 Phase 3 product information architecture/content logic repair is completed, the next small Speaking data slice is "Speaking 2026 May-August seasonal question bank data integration" (runtime selection).
+
 ## [2026-05-09] Product Design Principles and Claude Patch Rejection
 
 - **Event**: A Claude Code patch attempted to redesign Writing Task 2 Phase 3 Vocabulary & Expression Upgrade.

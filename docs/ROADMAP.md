@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-09_
+_Last updated: 2026-05-12_
 
 ## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -53,6 +53,13 @@ _Last updated: 2026-05-09_
 - Framework Summary must summarize the learner's notes and coach discussion, not generate a full model plan from the prompt alone.
 - Task 2 provider banner has been removed; provider notices appear only when routing/fallback events actually occur.
 - Phase tab layout is restored to stable three-column alignment.
+
+## V1.3 - Speaking Seasonal Question Bank (Data Scaffolding)
+- **Done 2026-05-12 (scaffolding pass)**: Created `src/data/speaking/` with type definitions, 2026 May-August bank data, V1 re-export, and index with priority helpers.
+- **Done 2026-05-12 (completeness pass)**: Evergreen Part 1 (5 topics) and mainland reused Part 2&3 (26 topics) completed with full source questions from extracted markdown. New May topics remain partial only where the source explicitly marks them as 待补充.
+- Data files are scaffolding only; runtime selection integration is deferred to a later Codex/product implementation step.
+- Non-mainland topics are stored as optional data and should not be default-priority for mainland practice.
+- Next slice (after Writing Task 2 Phase 3): "Speaking 2026 May-August seasonal question bank data integration" (runtime connection).
 
 ## V1.2 - Writing Task 1 Academic Basic Practice
 - Add a minimal Academic Task 1 practice page.
