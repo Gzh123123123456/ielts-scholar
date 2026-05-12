@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-12_
+_Last updated: 2026-05-12 (final Speaking note standard)_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -214,6 +214,20 @@ Redesign according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 - Generate Framework Summary should organize already-discussed decisions, not think for the learner.
 
 ---
+
+## P1 Future — Speaking Note Standard & Export
+
+### Unified IELTS Speaking Note Standard *(standard created; product export code not yet updated)*
+- **Done 2026-05-12**: Created `docs/IELTS_SPEAKING_NOTE_STANDARD.md` — final unified standard for all Speaking training notes.
+  - Single standard adapts by session size: single question / mini session / topic session.
+  - Part 1, Part 2, and Part 3 share one Attempt Block structure; only Answer Path shape and readiness criteria differ by part.
+  - Manual VSCode Claude training uses `/ielts-session` and `/ielts-export` slash commands.
+  - Personal practice notes under `notes/ielts/` are gitignored local data.
+- **Still pending**:
+  - Update product markdown export code to follow this standard.
+  - Implement session-level export aggregation.
+  - Add Personal Material Bank / Error Pattern Bank / Filler Detox / Transfer Loop to product export gradually.
+- **Next** (after Task 2 Phase 3): Update product Speaking export to match `docs/IELTS_SPEAKING_NOTE_STANDARD.md`.
 
 ## P1 Future — Speaking Seasonal Question Bank
 

@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-12] Final Unified IELTS Speaking Note Standard
+- **Decision**: Create one unified Speaking note standard that works for all session sizes (single question, mini session, topic session) and all Speaking parts (Part 1, 2, 3) instead of maintaining separate templates.
+- **Reason**: Multiple note versions (v1, v2) and separate Part 1/2/3 templates create fragmentation. A single standard that adapts by session density is simpler to follow and easier to implement in future product export.
+- **Implemented**:
+  - Created `docs/IELTS_SPEAKING_NOTE_STANDARD.md` — the final standard.
+  - Updated `.claude/commands/ielts-session.md` and created `ielts-export.md` to reference the standard.
+  - Updated `.gitignore` to protect personal practice data under `notes/ielts/`.
+  - Three existing high-frequency notes (Work, Accommodation, Hometown) rewritten into final format under `notes/ielts/speaking/final/` with P0/P1/P2 weighting.
+  - Standard includes: session density rules, one universal Attempt Block, expression weighting (Active Today max 3, Recognize Only 5–8), separate filler/template/collocation warnings, quantitative readiness checklists, time-boxed practice plan.
+- **Explicitly unchanged**: No product code, no Speaking UI, no Writing UI, no provider routing, no markdown export code, no `.env.local` edits.
+- **Next**: After Task 2 Phase 3, update product markdown export to follow this standard.
+
 ## [2026-05-12] Speaking Seasonal Question Bank Data Scaffolding (Pass 1)
 - **Decision**: Prepare Speaking module data files for the 2026 May-August seasonal IELTS Speaking question bank as a data-layer and documentation preparation task only. Do not connect to runtime behavior yet.
 - **Reason**: The data preparation is mechanical and can be done safely without affecting current Speaking, recording, transcription, scoring, feedback, provider routing, History, or Progress logic. This slice is documented as the next small Speaking data slice AFTER the current Writing Task 2 Phase 3 priority.

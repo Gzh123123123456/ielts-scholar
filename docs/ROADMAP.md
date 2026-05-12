@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-12_
+_Last updated: 2026-05-12 (final Speaking note standard)_
 
 ## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -54,7 +54,14 @@ _Last updated: 2026-05-12_
 - Task 2 provider banner has been removed; provider notices appear only when routing/fallback events actually occur.
 - Phase tab layout is restored to stable three-column alignment.
 
-## V1.3 - Speaking Seasonal Question Bank (Data Scaffolding)
+## V1.3 - Speaking Note Standard & Seasonal Bank
+
+### Unified Speaking Note Standard *(standard created; product export not yet updated)*
+- **Done 2026-05-12**: Created `docs/IELTS_SPEAKING_NOTE_STANDARD.md` with unified format for single question / mini session / topic session across Part 1 / 2 / 3.
+- `/ielts-session` and `/ielts-export` slash commands created for manual VSCode Claude training.
+- Future product markdown export should read this standard as its specification.
+
+### Speaking Seasonal Question Bank (Data Scaffolding)
 - **Done 2026-05-12 (scaffolding pass)**: Created `src/data/speaking/` with type definitions, 2026 May-August bank data, V1 re-export, and index with priority helpers.
 - **Done 2026-05-12 (completeness pass)**: Evergreen Part 1 (5 topics) and mainland reused Part 2&3 (26 topics) completed with full source questions from extracted markdown. New May topics remain partial only where the source explicitly marks them as 待补充.
 - Data files are scaffolding only; runtime selection integration is deferred to a later Codex/product implementation step.

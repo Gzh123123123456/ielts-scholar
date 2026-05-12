@@ -1,6 +1,6 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-12_
+_Last updated: 2026-05-12 (final Speaking note standard)_
 
 ## Repo
 
@@ -24,6 +24,11 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Recent Events
 
+- **2026-05-12**: Final unified IELTS Speaking note standard created (`docs/IELTS_SPEAKING_NOTE_STANDARD.md`).
+  - Single standard for all session sizes (single question / mini session / topic session) and all Speaking parts (Part 1 / 2 / 3).
+  - Manual VSCode Claude training and future product export use the same standard.
+  - Two slash commands: `/ielts-session` and `/ielts-export`.
+  - Personal practice notes under `notes/ielts/` are gitignored and must not be pushed/merged.
 - **2026-05-12**: Speaking seasonal question bank data scaffolding completed (two passes).
   - Pass 1: Created `src/data/speaking/` folder with types, 2026 May-August bank data, V1 re-export, and priority index.
   - Pass 2 (completeness): Filled evergreen Part 1 (5 topics) and mainland reused Part 2&3 (26 topics) from `docs/source_materials/speaking/ielts-speaking-bank-2026-05-to-08.extracted.md`.

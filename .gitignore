@@ -7,4 +7,21 @@ coverage/
 .env*
 !.env.example
 *.pdf
-.claude/
+.claude/*
+!.claude/commands/
+
+# Personal IELTS practice data / Obsidian exports
+notes/ielts/
+exports/ielts/
+practice_exports/
+local_practice_data/
+*.local.md
+*.private.md
+
+# Personal audio/transcript artifacts
+*.webm
+*.wav
+*.m4a
+*.mp3
+transcripts/
+recordings/
