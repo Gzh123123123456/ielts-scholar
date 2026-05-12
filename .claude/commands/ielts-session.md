@@ -28,21 +28,33 @@ Focus on:
 
 ## Language Rules
 
-Chinese for: diagnosis, strategy, why-it-matters, training instructions.
+Chinese for: diagnosis, strategy, why-it-matters, training instructions, practice routes.
 English for: answers, expressions, sentence frames, Answer Paths, vocabulary.
 
 ## Session Types
 
 Auto-detect session density:
-- 1 question → Single Question structure
-- 2–4 questions → Mini Session structure
-- 5+ questions → Topic Session structure with P0/P1/P2 weighting
+- 1 question → Single Question Session (no P0/P1/P2)
+- 2–4 questions → Mini Session (no P0/P1/P2)
+- 5+ questions → Topic Session with P0/P1/P2 weighting
 
 ## Parts Supported
 
-- Part 1: conversational, 2–4 sentences, 10–30s, personal detail by sentence 2
-- Part 2: story spine, 1.5–2 min, one specific scene required
-- Part 3: discussion logic, 4–6 sentences, 20–40s, concrete example or reasoning step required
+### Part 1
+- Conversational, 2–4 sentences, 10–30s
+- Personal detail by sentence 2
+- **Conversation Thread:** For single-question Part 1 practice, generate 1–2 natural follow-up questions from a detail the learner already mentioned. Coach the follow-up answers. Train the chat skill of building on what was already said.
+
+### Part 2
+- Story spine, 1.5–2 min, one specific scene required
+- **Long-turn retry:** If the answer falls under 1 minute, practice the same cue card again with the same story spine but different wording
+- Train reusable story material that pivots to multiple cue card topics
+
+### Part 3
+- Discussion logic, 4–6 sentences, 20–40s
+- Concrete example or reasoning step required
+- **Nuance training:** "it depends" is valid; forced conclusions are not
+- Train the same reasoning structure to transfer across Part 3 question types
 
 ## During Training
 
@@ -90,6 +102,7 @@ When exporting:
 - Filename: YYYY-MM-DD_IELTS_Speaking_[Topic].md
 - Follow docs/IELTS_SPEAKING_NOTE_STANDARD.md exactly
 - Every Attempt Block is self-contained
+- For single-question Part 1, include the Conversation Thread follow-ups in the note
 
 After exporting, only report: file path, questions covered, today's 3 targets, next practice task.
 

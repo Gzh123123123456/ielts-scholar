@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-12 (final Speaking note standard)_
+_Last updated: 2026-05-13 (final handoff)_
 
 ## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -56,10 +56,12 @@ _Last updated: 2026-05-12 (final Speaking note standard)_
 
 ## V1.3 - Speaking Note Standard & Seasonal Bank
 
-### Unified Speaking Note Standard *(standard created; product export not yet updated)*
-- **Done 2026-05-12**: Created `docs/IELTS_SPEAKING_NOTE_STANDARD.md` with unified format for single question / mini session / topic session across Part 1 / 2 / 3.
-- `/ielts-session` and `/ielts-export` slash commands created for manual VSCode Claude training.
-- Future product markdown export should read this standard as its specification.
+### Unified Speaking Note Standard *(standard finalized; product export not yet updated)*
+- **Done 2026-05-13 (final handoff)**: `docs/IELTS_SPEAKING_NOTE_STANDARD.md` finalized.
+- Session density: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).
+- Part 1 includes Conversation Thread. Part 2 includes Story Spine + long-turn retry. Part 3 includes Discussion Path + nuance training.
+- `/ielts-session` and `/ielts-export` updated.
+- Future product markdown export reads this standard as its specification.
 
 ### Speaking Seasonal Question Bank (Data Scaffolding)
 - **Done 2026-05-12 (scaffolding pass)**: Created `src/data/speaking/` with type definitions, 2026 May-August bank data, V1 re-export, and index with priority helpers.

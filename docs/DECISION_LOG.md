@@ -1,5 +1,19 @@
 # Decision Log
 
+## [2026-05-13] Speaking Note Standard Final Handoff
+- **Decision**: Finalize the Speaking note standard design. Do not create new versions, do not split by part, do not over-engineer P0/P1/P2.
+- **Reason**: The standard has been validated across three full Topic Session notes (Work, Accommodation, Hometown). Further iteration on the format itself is diminishing returns. The remaining work is product implementation.
+- **Final decisions confirmed**:
+  - One unified standard for all speaking parts and session sizes.
+  - Session density: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).
+  - P0/P1/P2 is internal weighting logic for Topic Sessions only — not a template system.
+  - Part 1 single-question practice includes Conversation Thread follow-ups.
+  - Part 2 includes Story Spine and long-turn retry. Part 3 includes Discussion Path and nuance training.
+  - Manual VSCode Claude and future product export use the same standard. Only Source metadata differs.
+  - Updated `docs/IELTS_SPEAKING_NOTE_STANDARD.md`, `.claude/commands/ielts-session.md`, `.claude/commands/ielts-export.md`, and all handoff/backlog docs.
+  - Personal notes under `notes/ielts/` remain local/gitignored.
+- **Next**: After Writing Task 2 Phase 3, implement product Speaking export following this standard. Add Conversation Thread, Material Bank, Error Pattern Bank, Filler Detox, and Transfer Loop gradually.
+
 ## [2026-05-12] Final Unified IELTS Speaking Note Standard
 - **Decision**: Create one unified Speaking note standard that works for all session sizes (single question, mini session, topic session) and all Speaking parts (Part 1, 2, 3) instead of maintaining separate templates.
 - **Reason**: Multiple note versions (v1, v2) and separate Part 1/2/3 templates create fragmentation. A single standard that adapts by session density is simpler to follow and easier to implement in future product export.

@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-12 (final Speaking note standard)_
+_Last updated: 2026-05-13 (final handoff)_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -217,15 +217,19 @@ Redesign according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 
 ## P1 Future — Speaking Note Standard & Export
 
-### Unified IELTS Speaking Note Standard *(standard created; product export code not yet updated)*
-- **Done 2026-05-12**: Created `docs/IELTS_SPEAKING_NOTE_STANDARD.md` — final unified standard for all Speaking training notes.
-  - Single standard adapts by session size: single question / mini session / topic session.
-  - Part 1, Part 2, and Part 3 share one Attempt Block structure; only Answer Path shape and readiness criteria differ by part.
-  - Manual VSCode Claude training uses `/ielts-session` and `/ielts-export` slash commands.
-  - Personal practice notes under `notes/ielts/` are gitignored local data.
+### Unified IELTS Speaking Note Standard *(standard finalized; product export code not yet updated)*
+- **Done 2026-05-13 (final handoff)**: `docs/IELTS_SPEAKING_NOTE_STANDARD.md` finalized. Do not create new versions.
+  - Single standard adapts by session size: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).
+  - Part 1, Part 2, and Part 3 share one Attempt Block; only Answer Path and readiness criteria differ.
+  - Part 1 single-question practice includes Conversation Thread follow-ups.
+  - Part 2 includes Story Spine + long-turn retry. Part 3 includes Discussion Path + nuance training.
+  - Manual VSCode Claude and future product export use the same standard (only Source metadata differs).
+  - `/ielts-session` and `/ielts-export` commands updated for final handoff.
+  - Three local validation notes under `notes/ielts/speaking/final/` (Work, Accommodation, Hometown) — must not be committed/pushed.
 - **Still pending**:
   - Update product markdown export code to follow this standard.
   - Implement session-level export aggregation.
+  - Add Part 1 Conversation Thread practice to product.
   - Add Personal Material Bank / Error Pattern Bank / Filler Detox / Transfer Loop to product export gradually.
 - **Next** (after Task 2 Phase 3): Update product Speaking export to match `docs/IELTS_SPEAKING_NOTE_STANDARD.md`.
 

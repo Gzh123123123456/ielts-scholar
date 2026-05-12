@@ -1,6 +1,6 @@
 # IELTS Speaking Note Standard
 
-_Last updated: 2026-05-12_
+_Last updated: 2026-05-13 (final handoff)_
 
 This document defines the **final unified standard** for all IELTS Speaking training notes.
 
@@ -107,6 +107,8 @@ The note adapts to session size. All three densities use the **same Attempt Bloc
 ---
 
 ### 3.4 Weight Levels for Topic Session
+
+**P0/P1/P2 weighting applies only to Topic Sessions (5+ questions).** Single Question and Mini Sessions do NOT use P0/P1/P2. They use their own compact structures defined in Sections 3.1 and 3.2. P0/P1/P2 are not separate templates for different session types — they are internal weighting logic for large topic sessions only.
 
 **P0 — Must Practice Today**
 
@@ -437,6 +439,39 @@ Minimal version for 1 question:
 - Target tone: conversational, not mini-speech
 - Required element: one personal detail by sentence 2
 
+#### Part 1 Conversation Thread (Single Question Session)
+
+Part 1 is chat-like and flexible. A Part 1 single-question practice should not only include the main question. It should include a **Conversation Thread:**
+
+- main question
+- user's main answer
+- diagnosis
+- revised main answer
+- 1–2 natural follow-up questions generated from the user's answer
+- follow-up answer paths
+- follow-up coaching
+- Part 1 chat skill trained
+- ready-to-test checklist
+
+A natural follow-up is generated from a detail the learner already mentioned.
+
+Example: If the user says they live near a fire station, a natural follow-up can be:
+- Does the noise bother you?
+- What kind of noise do you usually hear?
+
+Example: If the user says they walk more in Japan, a natural follow-up can be:
+- Where do you usually walk?
+- Why do you think you walk more now?
+
+Part 1 follow-up readiness criteria:
+- main answer: usually 10–25 seconds
+- follow-up answer: usually 8–18 seconds
+- 0 Chinese
+- filler count ≤ 2
+- no "that's a good question" unless genuinely needed
+- answer the follow-up based on the detail already mentioned
+- do not repeat the main answer word-for-word
+
 ### Part 2
 
 - Answer Path: who/what/where → specific scene → key details → feeling change → why it matters (1.5–2 min)
@@ -444,12 +479,24 @@ Minimal version for 1 question:
 - Target tone: story spine, not memorized script
 - Required element: one specific scene (a moment, not a summary of the whole experience)
 
+Part 2 training should include:
+- **Story Spine:** the 5-step path above, practiced without a full script
+- **Long-turn retry:** if the answer falls significantly short (under 1 minute), practice the same cue card again with the same story spine but different wording
+- **1-minute planning notes** if the session context allows it
+- **Reusable story material:** the same personal story should be pivotable to multiple cue card topics
+
 ### Part 3
 
 - Answer Path: direct position → depends/contrast/condition → example → consequence → balanced close (4–6 sentences, 20–40s)
 - Filler budget: only logical bridges, no empty fillers
 - Target tone: discussion logic, not essay paragraph
 - Required element: one concrete example or a clear reasoning step
+
+Part 3 training should include:
+- **Discussion Path:** the 5-step path above, practiced as a thinking structure, not a memorized paragraph
+- **Nuance training:** "it depends" is valid; a forced conclusion is not
+- **Speculative language:** "It's hard to say for certain, but…", "One possibility is…"
+- **Cross-question reasoning:** the same reasoning structure (position → condition → example → consequence) should transfer across Part 3 question types
 
 ### Mixed-Part Sessions
 
@@ -485,7 +532,23 @@ Claude auto-detects session density:
 
 ---
 
-## 12. Product Export Workflow (Future)
+## 12. Product and VSCode Claude Consistency
+
+Manual VSCode Claude training notes and future product-exported notes must use the **same standard.** The note logic must not diverge.
+
+The only difference should be metadata:
+
+```
+Source: VSCode Claude Manual Training
+```
+or
+```
+Source: IELTS Scholar Product Export
+```
+
+All other sections — Attempt Block structure, Answer Path, Re-answer Mission tiers, Transfer labels, readiness checklists, session density rules, P0/P1/P2 weighting (Topic Sessions only), language rules, expression limits — are identical regardless of source.
+
+## 13. Product Export Workflow (Future)
 
 When the IELTS Scholar product markdown export is updated:
 
@@ -498,7 +561,7 @@ When the IELTS Scholar product markdown export is updated:
 
 ---
 
-## 13. Guardrails
+## 14. Guardrails
 
 ### Content volume
 
