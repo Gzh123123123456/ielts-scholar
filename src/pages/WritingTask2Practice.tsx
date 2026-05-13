@@ -22,6 +22,11 @@ import {
 } from '@/src/lib/practiceRecords';
 import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
 
+type LanguageBankView = {
+  topicVocabulary: WritingFeedback['vocabularyUpgrade']['topicVocabulary'];
+  expressionUpgrades: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'];
+};
+
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
 const hasLowSignalText = (text: string) => {
@@ -87,6 +92,128 @@ const phraseLevel = (text: string, maxWords = 7) => {
   const cleaned = text.replace(/[.!?;:]+$/g, '').replace(/\s+/g, ' ').trim();
   const words = cleaned.split(' ').filter(Boolean);
   return words.length <= maxWords ? cleaned : words.slice(0, maxWords).join(' ');
+};
+
+const isRemoteWorkQuestion = (question: string) =>
+  /work from home|working from home|remote work|remote working|travelling to an office|traveling to an office|office-based/i.test(question);
+
+const remoteWorkTopicVocabulary = (): WritingFeedback['vocabularyUpgrade']['topicVocabulary'] => [
+  {
+    expression: 'flexible working arrangements',
+    meaningZh: '灵活办公安排，例如在家办公、弹性时间或混合办公。',
+    usageZh: '用于写远程办公的主要优势，说明员工可以更自主地安排工作地点和时间。',
+    example: 'Flexible working arrangements can make employees more productive.',
+  },
+  {
+    expression: 'work-life balance',
+    meaningZh: '工作与生活之间的平衡。',
+    usageZh: '用于论证远程办公能减少通勤压力、给家庭和个人生活留出更多空间。',
+    example: 'Working from home may improve work-life balance.',
+  },
+  {
+    expression: 'commuting time',
+    meaningZh: '上下班通勤时间。',
+    usageZh: '用于解释在家办公的直接好处：节省时间、降低交通成本和疲劳感。',
+    example: 'Employees can save commuting time and start work with more energy.',
+  },
+  {
+    expression: 'widen the recruitment pool',
+    meaningZh: '扩大招聘范围，让公司可以招到不同地区的人才。',
+    usageZh: '用于写雇主层面的优势，尤其适合说明公司不再只依赖本地员工。',
+    example: 'Remote work can widen the recruitment pool for employers.',
+  },
+  {
+    expression: 'face-to-face communication',
+    meaningZh: '面对面沟通。',
+    usageZh: '用于写远程办公的缺点，例如沟通效率下降、误解增加或协作变慢。',
+    example: 'Some tasks still require face-to-face communication.',
+  },
+  {
+    expression: 'team cohesion',
+    meaningZh: '团队凝聚力。',
+    usageZh: '用于讨论长期远程办公可能削弱同事之间的信任、归属感和协作默契。',
+    example: 'A lack of informal contact may weaken team cohesion.',
+  },
+  {
+    expression: 'professional isolation',
+    meaningZh: '职业上的孤立感。',
+    usageZh: '用于写员工层面的负面影响，尤其是缺少同事支持、反馈和职场连接。',
+    example: 'Remote employees may experience professional isolation.',
+  },
+  {
+    expression: 'blurred work-life boundaries',
+    meaningZh: '工作和生活边界变模糊。',
+    usageZh: '用于写远程办公的反面：员工可能更难下班，压力反而增加。',
+    example: 'Working at home can create blurred work-life boundaries.',
+  },
+];
+
+const remoteWorkArgumentFrames = (): WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] => [
+  {
+    category: 'argument_frame',
+    better: 'Although ... remains a concern, ...',
+    explanationZh: '用来承认远程办公的缺点，再转向你的判断，适合 outweigh 类题目。',
+    reuseWhenZh: '下次需要先承认一个反方问题，再说明它不是决定性问题时使用。',
+    example: 'Although weaker team cohesion remains a concern, it can be reduced through regular check-ins.',
+  },
+  {
+    category: 'argument_frame',
+    better: 'The main advantage is not simply ..., but ...',
+    explanationZh: '这个句架能把优势写得更深入，避免只停留在“方便”。',
+    reuseWhenZh: '下次想把一个表层优势推进到更深层影响时使用。',
+    example: 'The main advantage is not simply saving commuting time, but improving employees\' control over their day.',
+  },
+  {
+    category: 'argument_frame',
+    better: 'This can be addressed through ..., so it does not outweigh ...',
+    explanationZh: '适合处理缺点：先给解决方式，再说明该缺点不足以推翻优势。',
+    reuseWhenZh: '下次写 advantages outweigh disadvantages 时，用来压低反方缺点的权重。',
+    example: 'This can be addressed through clear supervision, so it does not outweigh the benefits of flexibility.',
+  },
+];
+
+const frameHighlightPieces = (frame: string): string[] =>
+  frame
+    .split(/\.\.\.|…/g)
+    .map(piece => piece.replace(/^[,.;:\s]+|[,.;:\s]+$/g, '').trim())
+    .filter(piece => piece.split(/\s+/).length >= 4);
+
+const getLanguageBankHighlightTerms = (vocabulary: LanguageBankView) => {
+  const terms = [
+    ...vocabulary.topicVocabulary.map(item => item.expression),
+    ...vocabulary.expressionUpgrades.flatMap(item => frameHighlightPieces(item.better)),
+    ...vocabulary.expressionUpgrades
+      .filter(item => !/[.…]{2,}|\.{3}/.test(item.better))
+      .map(item => item.better),
+  ]
+    .map(item => item.trim())
+    .filter(item => item.length >= 6);
+  return Array.from(new Set(terms.map(item => item.toLowerCase())))
+    .map(lower => terms.find(item => item.toLowerCase() === lower) || lower)
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 12);
+};
+
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const markLanguageBankTerms = (text: string, terms: string[]) => {
+  let marked = text;
+  terms.forEach(term => {
+    const pattern = new RegExp(`\\b(${escapeRegExp(term)})\\b`, 'gi');
+    marked = marked.replace(pattern, '**$1**');
+  });
+  return marked;
+};
+
+const renderHighlightedModelAnswer = (text: string, terms: string[]) => {
+  if (!terms.length) return text;
+  const pattern = new RegExp(`(${terms.map(escapeRegExp).join('|')})`, 'gi');
+  return text.split(pattern).map((part, index) => (
+    terms.some(term => term.toLowerCase() === part.toLowerCase())
+      ? <mark key={`${part}-${index}`} className="bg-accent-gold/25 text-paper-ink rounded-sm px-1">{part}</mark>
+      : <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
+  ));
 };
 
 const averageWritingScore = (feedback: WritingFeedback) =>
@@ -204,7 +331,7 @@ const groupedLogicFeedback = (items: WritingFeedback['frameworkFeedback']) =>
     }))
     .filter(group => group.items.length);
 
-const getVocabularyUpgrade = (feedback: WritingFeedback) => {
+const getVocabularyUpgrade = (feedback: WritingFeedback): LanguageBankView => {
   const empty = {
     topicVocabulary: [] as WritingFeedback['vocabularyUpgrade']['topicVocabulary'],
     expressionUpgrades: [] as WritingFeedback['vocabularyUpgrade']['expressionUpgrades'],
@@ -233,29 +360,34 @@ const getVocabularyUpgrade = (feedback: WritingFeedback) => {
     .filter(item => item.dimension === 'LR')
     .flatMap(item => item.microUpgrades?.length
       ? item.microUpgrades.map(upgradeItem => ({
+          category: 'from_essay' as const,
           original: upgradeItem.original,
           better: upgradeItem.better,
           explanationZh: upgradeItem.explanationZh,
           reuseWhenZh: '下次写到相同意思时，直接复用升级后的短语，再补上本题具体内容。',
         }))
       : [{
+          category: 'from_essay' as const,
           original: shortenPhrase(item.original),
           better: shortenPhrase(item.correction),
           explanationZh: '把原文里比较口语或笼统的说法，换成更适合 Task 2 论证的短语。',
           reuseWhenZh: '下次表达同一意思时，先替换关键词组，再检查句子是否推进论点。',
         }]);
   const legacyWording: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] = (upgrade.userWordingUpgrades || []).map(item => ({
+    category: 'from_essay' as const,
     original: item.original,
     better: item.better,
     explanationZh: item.explanationZh,
     reuseWhenZh: '下次遇到相似意思时，优先整块替换原来的泛词。',
   }));
   const legacyCollocations: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] = (upgrade.collocationUpgrades || []).map(item => ({
+    category: 'argument_frame' as const,
     better: item,
     explanationZh: '这是比单个词更适合记忆的搭配块。',
     reuseWhenZh: '下次表达同一话题关系时，可以整块放进句子里。',
   }));
   const legacyFrames: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] = (upgrade.reusableSentenceFrames || []).map(item => ({
+    category: 'argument_frame' as const,
     better: item,
     explanationZh: '这是 Task 2 论证中可以复用的句架。',
     reuseWhenZh: '下次需要让步、转折、平衡观点或推进理由时使用。',
@@ -266,34 +398,51 @@ const getVocabularyUpgrade = (feedback: WritingFeedback) => {
     ...lrCorrections,
     ...legacyCollocations,
     ...legacyFrames,
+    ...(isRemoteWorkQuestion(feedback.question) ? remoteWorkArgumentFrames() : []),
   ]
     .map(item => ({
       ...item,
       original: item.original ? phraseLevel(item.original) : undefined,
       better: phraseLevel(item.better, 14),
     }))
-    .slice(0, 5);
+    .filter((item, index, items) => items.findIndex(candidate => candidate.better.toLowerCase() === item.better.toLowerCase()) === index)
+    .slice(0, 8);
+  const fallbackTopicVocabulary = isRemoteWorkQuestion(feedback.question)
+    ? remoteWorkTopicVocabulary()
+    : [
+        {
+          expression: 'social participation',
+          meaningZh: '社会参与，例如参与公共生活、社区活动或集体事务。',
+          usageZh: '用于社会类题目中讨论个人行为与社会整体之间的关系。',
+        },
+        {
+          expression: 'individual responsibility',
+          meaningZh: '个人责任，强调个人在社会或家庭中的义务。',
+          usageZh: '用于讨论某种选择是否只影响个人，还是会影响他人。',
+        },
+      ];
+  const mergedTopicVocabulary = isRemoteWorkQuestion(feedback.question)
+    ? [
+        ...topicVocabulary,
+        ...fallbackTopicVocabulary.filter(item => !topicVocabulary.some(existing => existing.expression.toLowerCase() === item.expression.toLowerCase())),
+      ].slice(0, 8)
+    : (topicVocabulary.length ? topicVocabulary : fallbackTopicVocabulary).slice(0, 8);
   return {
-    topicVocabulary: (topicVocabulary.length ? topicVocabulary : [
-      {
-        expression: 'long-term consequences',
-        meaningZh: '长期后果或影响。',
-        usageZh: '用于把观点从眼前现象推进到更深层影响。',
-      },
-      {
-        expression: 'public resources',
-        meaningZh: '公共资源，例如时间、资金、空间或政策支持。',
-        usageZh: '用于社会、政府、城市、教育类题目中讨论资源分配。',
-      },
-    ]).slice(0, 3),
+    topicVocabulary: mergedTopicVocabulary,
     expressionUpgrades,
   };
 };
 
-const getLanguageBankMission = (vocabulary: ReturnType<typeof getVocabularyUpgrade>) => [
-  ...vocabulary.topicVocabulary.slice(0, 2).map(item => `在修改稿中使用 "${item.expression}"：${item.usageZh}`),
-  ...vocabulary.expressionUpgrades.slice(0, 3).map(item => `尝试使用 "${item.better}"：${item.reuseWhenZh}`),
-].slice(0, 4);
+const getLanguageBankMission = (question: string) =>
+  isRemoteWorkQuestion(question)
+    ? [
+        '重写 BP2：承认一个远程办公缺点，再解释为什么它没有压过主要优势。',
+        '自然使用 2-3 个高亮表达，不要为了堆词而牺牲句子清晰度。',
+      ]
+    : [
+        '重写一个主体段：先承认一个缺点，再解释为什么它没有压过主要优势。',
+        '自然使用 2-3 个高亮表达，不要为了堆词而牺牲句子清晰度。',
+      ];
 
 const routeNotice = (
   route: { providerName: string; fallbackReason?: string; learnerReason: string },
@@ -762,7 +911,10 @@ export default function WritingTask2Practice() {
     const warnings = getEssayWarnings(feedback, isInsufficientTask2Sample(essay));
     const logicFeedback = getLogicFeedback(feedback);
     const vocabulary = getVocabularyUpgrade(feedback);
-    const missionItems = getLanguageBankMission(vocabulary);
+    const missionItems = getLanguageBankMission(feedback.question);
+    const fromEssayUpgrades = vocabulary.expressionUpgrades.filter(item => item.category === 'from_essay' || item.original);
+    const argumentFrames = vocabulary.expressionUpgrades.filter(item => item.category === 'argument_frame' || !item.original);
+    const highlightedModelAnswer = markLanguageBankTerms(feedback.modelAnswer, getLanguageBankHighlightTerms(vocabulary));
     const targetLevel = getTargetModelLevel(feedback);
     const warningItems = warnings.length
       ? warnings.map(item => `- ${item.title}: ${item.messageZh}`).join('\n')
@@ -771,7 +923,11 @@ export default function WritingTask2Practice() {
 ${vocabulary.topicVocabulary.length ? vocabulary.topicVocabulary.map(item => `- ${item.expression}\n  - 含义: ${item.meaningZh}\n  - 用法: ${item.usageZh}${item.example ? `\n  - Example: ${item.example}` : ''}`).join('\n') : '- No topic vocabulary returned.'}
 
 ### Expression Upgrade
-${vocabulary.expressionUpgrades.length ? vocabulary.expressionUpgrades.map(item => `- ${item.original ? `${item.original} -> ` : ''}${item.better}\n  - 为什么这样改: ${item.explanationZh}\n  - 什么时候复用: ${item.reuseWhenZh}${item.example ? `\n  - Example: ${item.example}` : ''}`).join('\n') : '- No expression upgrade returned.'}`;
+#### From Your Essay
+${fromEssayUpgrades.length ? fromEssayUpgrades.map(item => `- ${item.original ? `${item.original} -> ` : ''}${item.better}\n  - 为什么这样改: ${item.explanationZh}\n  - 什么时候复用: ${item.reuseWhenZh}${item.example ? `\n  - Example: ${item.example}` : ''}`).join('\n') : '- No phrase-level upgrade from this essay.'}
+
+#### Reusable Argument Frames
+${argumentFrames.length ? argumentFrames.map(item => `- ${item.better}\n  - 为什么这样改: ${item.explanationZh}\n  - 什么时候复用: ${item.reuseWhenZh}${item.example ? `\n  - Example: ${item.example}` : ''}`).join('\n') : '- No reusable argument frame returned.'}`;
     const logicItems = logicFeedback.length
       ? logicFeedback.map((item, index) => {
           const related = item.relatedCorrectionIds?.length
@@ -779,9 +935,8 @@ ${vocabulary.expressionUpgrades.length ? vocabulary.expressionUpgrades.map(item 
             : 'Paragraph-level issue: no single sentence correction fully solves this.';
           return `### Logic Issue ${index + 1}: ${item.issue}
 - Location: ${getDisplayLocation(item)}
-- 问题影响: ${item.suggestionZh}
-- 这次怎么改: ${item.paragraphFixZh || item.suggestionZh}
-- 下次迁移: ${item.transferGuidanceZh || defaultLogicTransfer(item)}
+- 这篇怎么改: ${item.paragraphFixZh || item.suggestionZh}
+- 下次自查: ${item.transferGuidanceZh || defaultLogicTransfer(item)}
 - Related: ${related}${item.exampleFrame ? `\n- Example frame: ${item.exampleFrame}` : ''}`;
         }).join('\n\n')
       : '- No logic-level issue returned.';
@@ -825,7 +980,7 @@ ${sentenceItems}
 ### Revision Mission
 ${missionItems.length ? missionItems.map(item => `- ${item}`).join('\n') : '- 下次修改时至少主动使用两个 Language Bank 表达。'}
 
-${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPersonalized ? '\n\nThis excerpt keeps your original position and fixes the main issues above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}`;
+${hasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPersonalized ? '\n\nHighlighted phrases come from the Language Bank above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}`;
     const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -845,7 +1000,14 @@ ${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPers
   const logicFeedback = feedback ? getLogicFeedback(feedback) : [];
   const logicGroups = feedback ? groupedLogicFeedback(logicFeedback) : [];
   const vocabularyUpgrade = feedback ? getVocabularyUpgrade(feedback) : null;
-  const revisionMission = vocabularyUpgrade ? getLanguageBankMission(vocabularyUpgrade) : [];
+  const revisionMission = feedback && vocabularyUpgrade ? getLanguageBankMission(feedback.question) : [];
+  const fromEssayUpgrades = vocabularyUpgrade
+    ? vocabularyUpgrade.expressionUpgrades.filter(item => item.category === 'from_essay' || item.original)
+    : [];
+  const argumentFrames = vocabularyUpgrade
+    ? vocabularyUpgrade.expressionUpgrades.filter(item => item.category === 'argument_frame' || !item.original)
+    : [];
+  const modelHighlightTerms = vocabularyUpgrade ? getLanguageBankHighlightTerms(vocabularyUpgrade) : [];
 
   return (
     <PageShell size="wide">
@@ -1099,15 +1261,31 @@ ${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPers
                     </div>
                     <div className="space-y-3">
                       <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Expression Upgrade</p>
-                      {vocabularyUpgrade.expressionUpgrades.map((item, index) => (
-                        <div key={`expression-${index}`} className="space-y-1">
-                          {item.original && <p className="text-sm leading-7 text-paper-ink/55 line-through">{item.original}</p>}
-                          <p className="text-base leading-7 font-bold">{item.better}</p>
-                          <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
-                          <p className="text-sm leading-7 text-paper-ink/55">{item.reuseWhenZh}</p>
-                          {item.example && <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm px-3 py-2">{item.example}</p>}
+                      {fromEssayUpgrades.length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35">From Your Essay</p>
+                          {fromEssayUpgrades.map((item, index) => (
+                            <div key={`from-essay-${index}`} className="space-y-1">
+                              {item.original && <p className="text-sm leading-7 text-paper-ink/55 line-through">{item.original}</p>}
+                              <p className="text-base leading-7 font-bold">{item.better}</p>
+                              <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
+                              <p className="text-sm leading-7 text-paper-ink/55">{item.reuseWhenZh}</p>
+                              {item.example && <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm px-3 py-2">{item.example}</p>}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+                      <div className="space-y-3">
+                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35">Reusable Argument Frames</p>
+                        {argumentFrames.map((item, index) => (
+                          <div key={`argument-frame-${index}`} className="space-y-1">
+                            <p className="text-base leading-7 font-bold">{item.better}</p>
+                            <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
+                            <p className="text-sm leading-7 text-paper-ink/55">{item.reuseWhenZh}</p>
+                            {item.example && <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm px-3 py-2">{item.example}</p>}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </PaperCard>
@@ -1173,17 +1351,13 @@ ${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPers
                               <h5 className="text-[17px] font-bold leading-7">{f.issue}</h5>
                             </div>
                             <div>
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">为什么影响分数</p>
-                              <p className="text-base leading-8 text-paper-ink/70">{f.suggestionZh}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">这次怎么改</p>
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">这篇怎么改</p>
                               <p className="text-base leading-8 text-paper-ink/70">
                                 {f.paragraphFixZh || f.suggestionZh}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次迁移</p>
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
                               <p className="text-base leading-8 text-paper-ink/70">{f.transferGuidanceZh || defaultLogicTransfer(f)}</p>
                             </div>
                             {f.relatedCorrectionIds?.length ? (
@@ -1248,7 +1422,7 @@ ${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPers
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                 {hasSubstantialModelAnswer ? (
                   <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap max-h-[420px] overflow-auto pr-1">
-                    {modelAnswerText}
+                    {renderHighlightedModelAnswer(modelAnswerText, modelHighlightTerms)}
                   </div>
                 ) : (
                   <p className="text-base leading-8 text-paper-ink/65">

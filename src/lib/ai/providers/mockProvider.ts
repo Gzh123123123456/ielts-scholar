@@ -122,6 +122,7 @@ export class MockProvider implements AIProvider {
       : isUnderLength
         ? '文章低于 250 词，训练估计会保守处理。请补足论点展开、例子和结论。'
         : '结构基本完整；下一步重点检查立场、段落推进和例证质量。';
+    const isRemoteWorkPrompt = /work from home|remote work|travelling to an office|traveling to an office/i.test(params.question);
 
     return {
       mode: 'practice',
@@ -138,17 +139,25 @@ export class MockProvider implements AIProvider {
         : [],
       frameworkFeedback: [
         {
-          issue: 'Framework needs sharper development',
+          issue: isRemoteWorkPrompt ? 'Disadvantages need a clearer paragraph role' : 'Framework needs sharper development',
           suggestionZh: isUnderLength
             ? '字数和段落展开不足时，考官很难看到完整立场、论证链和例证，因此 Task Response 和 Coherence 都会被保守评估。'
-            : '主体段如果只停留在判断句，缺少原因和例子，Task Response 会显得论证不充分，Coherence 也会缺少推进感。',
+            : isRemoteWorkPrompt
+              ? 'outweigh 类题目不能只写远程办公的好处；如果缺点没有被认真处理，考官会觉得任务回应不完整。'
+              : '主体段如果只停留在判断句，缺少原因和例子，Task Response 会显得论证不充分，Coherence 也会缺少推进感。',
           severity: isUnderLength ? 'fatal' : 'naturalness',
           location: 'Whole Essay',
           issueType: 'paragraph_development',
           relatedCorrectionIds: ['C1'],
-          paragraphFixZh: '这次先把每个主体段改成“主题句 -> 原因 -> 具体例子 -> 回扣立场”。如果 Phase 1 框架里已经有例子，但正文没有写出来，就把例子补进对应主体段，而不是继续打磨单句。',
-          exampleFrame: 'This is not to suggest that the opposing view has no value; rather, the main issue is...',
-          transferGuidanceZh: '下次写教育、科技、社会类双边题时，先检查每个主体段有没有完成自己的段落角色：让步段负责承认一边，主观点段负责证明你的立场。',
+          paragraphFixZh: isRemoteWorkPrompt
+            ? 'BP1 可以保留 flexible working arrangements、commuting time 和 widen the recruitment pool 这些优势。BP2 要先承认一个缺点，例如 face-to-face communication 变少、team cohesion 下降或 blurred work-life boundaries，然后解释这些问题可以通过固定会议和清晰管理来缓解，所以不超过主要优势。'
+            : '这次先把每个主体段改成“主题句 -> 原因 -> 具体例子 -> 回扣立场”。如果 Phase 1 框架里已经有例子，但正文没有写出来，就把例子补进对应主体段，而不是继续打磨单句。',
+          exampleFrame: isRemoteWorkPrompt
+            ? 'Although weaker team cohesion remains a concern, it can be addressed through regular check-ins, so it does not outweigh the benefits of flexibility.'
+            : 'This is not to suggest that the opposing view has no value; rather, the main issue is...',
+          transferGuidanceZh: isRemoteWorkPrompt
+            ? '下次遇到 advantages/disadvantages 或 outweigh 题，先列出“优势段”和“让步段”的角色：优势段证明好处，让步段承认一个真实缺点，再说明它为什么不足以改变你的总判断。'
+            : '下次写教育、科技、社会类双边题时，先检查每个主体段有没有完成自己的段落角色：让步段负责承认一边，主观点段负责证明你的立场。',
         },
       ],
       sentenceFeedback: [
@@ -199,44 +208,128 @@ export class MockProvider implements AIProvider {
         },
       ],
       vocabularyUpgrade: {
-        topicVocabulary: [
-          {
-            expression: 'academic autonomy',
-            meaningZh: '学生在学习方向上拥有一定选择权。',
-            usageZh: '用于讨论是否应该允许学生选择课程、专业或学习路径。',
-            example: 'Academic autonomy can make students more responsible for their learning.',
-          },
-          {
-            expression: 'long-term employability',
-            meaningZh: '长期就业竞争力，而不只是眼前找工作。',
-            usageZh: '用于把教育选择和未来职业发展连接起来。',
-            example: 'Practical subjects can improve students\' long-term employability.',
-          },
-        ],
-        expressionUpgrades: [
-          {
-            original: 'study what they want',
-            better: 'pursue subjects they are genuinely interested in',
-            explanationZh: '原表达意思能懂，但比较口语、范围太宽；升级后更适合教育类议论文。',
-            reuseWhenZh: '下次讨论兴趣、选课、学习动力或个人发展时使用。',
-            example: 'Students who pursue subjects they are genuinely interested in are more likely to study consistently.',
-          },
-          {
-            better: 'This is not to suggest that ..., but the stronger concern is ...',
-            explanationZh: '这是让步后回到自己主观点的句架，能避免两边观点松散并列。',
-            reuseWhenZh: '下次题目要求讨论两种看法，而你需要承认一边再强调自己的立场时使用。',
-            example: 'This is not to suggest that career prospects are irrelevant, but the stronger concern is whether students can sustain their motivation.',
-          },
-          {
-            better: 'connect personal interests with realistic career pathways',
-            explanationZh: '把“兴趣”和“就业”连接成一个更成熟的折中观点。',
-            reuseWhenZh: '下次教育、职业、专业选择类题目需要提出平衡方案时使用。',
-          },
-        ],
+        topicVocabulary: isRemoteWorkPrompt
+          ? [
+              {
+                expression: 'flexible working arrangements',
+                meaningZh: '灵活办公安排，例如在家办公、弹性时间或混合办公。',
+                usageZh: '用于写远程办公的主要优势，说明员工可以更自主地安排工作地点和时间。',
+                example: 'Flexible working arrangements can make employees more productive.',
+              },
+              {
+                expression: 'work-life balance',
+                meaningZh: '工作与生活之间的平衡。',
+                usageZh: '用于论证远程办公能减少通勤压力、给家庭和个人生活留出更多空间。',
+                example: 'Working from home may improve work-life balance.',
+              },
+              {
+                expression: 'commuting time',
+                meaningZh: '上下班通勤时间。',
+                usageZh: '用于解释在家办公的直接好处：节省时间、降低交通成本和疲劳感。',
+                example: 'Employees can save commuting time and start work with more energy.',
+              },
+              {
+                expression: 'widen the recruitment pool',
+                meaningZh: '扩大招聘范围，让公司可以招到不同地区的人才。',
+                usageZh: '用于写雇主层面的优势，尤其适合说明公司不再只依赖本地员工。',
+                example: 'Remote work can widen the recruitment pool for employers.',
+              },
+              {
+                expression: 'face-to-face communication',
+                meaningZh: '面对面沟通。',
+                usageZh: '用于写远程办公的缺点，例如沟通效率下降、误解增加或协作变慢。',
+                example: 'Some tasks still require face-to-face communication.',
+              },
+              {
+                expression: 'team cohesion',
+                meaningZh: '团队凝聚力。',
+                usageZh: '用于讨论长期远程办公可能削弱同事之间的信任、归属感和协作默契。',
+                example: 'A lack of informal contact may weaken team cohesion.',
+              },
+              {
+                expression: 'professional isolation',
+                meaningZh: '职业上的孤立感。',
+                usageZh: '用于写员工层面的负面影响，尤其是缺少同事支持、反馈和职场连接。',
+                example: 'Remote employees may experience professional isolation.',
+              },
+            ]
+          : [
+              {
+                expression: 'academic autonomy',
+                meaningZh: '学生在学习方向上拥有一定选择权。',
+                usageZh: '用于讨论是否应该允许学生选择课程、专业或学习路径。',
+                example: 'Academic autonomy can make students more responsible for their learning.',
+              },
+              {
+                expression: 'long-term employability',
+                meaningZh: '长期就业竞争力，而不只是眼前找工作。',
+                usageZh: '用于把教育选择和未来职业发展连接起来。',
+                example: 'Practical subjects can improve students\' long-term employability.',
+              },
+            ],
+        expressionUpgrades: isRemoteWorkPrompt
+          ? [
+              {
+                category: 'from_essay',
+                original: 'work at home',
+                better: 'work remotely',
+                explanationZh: 'work remotely 更简洁，也更符合远程办公话题的常见表达。',
+                reuseWhenZh: '下次讨论在家办公、线上办公或不去办公室时使用。',
+                example: 'Many employees now prefer to work remotely several days a week.',
+              },
+              {
+                category: 'argument_frame',
+                better: 'Although ... remains a concern, ...',
+                explanationZh: '用来承认远程办公的缺点，再转向你的判断，适合 outweigh 类题目。',
+                reuseWhenZh: '下次需要先承认一个反方问题，再说明它不是决定性问题时使用。',
+                example: 'Although weaker team cohesion remains a concern, it can be reduced through regular check-ins.',
+              },
+              {
+                category: 'argument_frame',
+                better: 'The main advantage is not simply ..., but ...',
+                explanationZh: '这个句架能把优势写得更深入，避免只停留在“方便”。',
+                reuseWhenZh: '下次想把一个表层优势推进到更深层影响时使用。',
+                example: 'The main advantage is not simply saving commuting time, but improving employees\' control over their day.',
+              },
+              {
+                category: 'argument_frame',
+                better: 'This can be addressed through ..., so it does not outweigh ...',
+                explanationZh: '适合处理缺点：先给解决方式，再说明该缺点不足以推翻优势。',
+                reuseWhenZh: '下次写 advantages outweigh disadvantages 时，用来压低反方缺点的权重。',
+                example: 'This can be addressed through clear supervision, so it does not outweigh the benefits of flexibility.',
+              },
+            ]
+          : [
+              {
+                category: 'from_essay',
+                original: 'study what they want',
+                better: 'pursue subjects they are genuinely interested in',
+                explanationZh: '原表达意思能懂，但比较口语、范围太宽；升级后更适合教育类议论文。',
+                reuseWhenZh: '下次讨论兴趣、选课、学习动力或个人发展时使用。',
+                example: 'Students who pursue subjects they are genuinely interested in are more likely to study consistently.',
+              },
+              {
+                category: 'argument_frame',
+                better: 'This is not to suggest that ..., but the stronger concern is ...',
+                explanationZh: '这是让步后回到自己主观点的句架，能避免两边观点松散并列。',
+                reuseWhenZh: '下次题目要求讨论两种看法，而你需要承认一边再强调自己的立场时使用。',
+                example: 'This is not to suggest that career prospects are irrelevant, but the stronger concern is whether students can sustain their motivation.',
+              },
+              {
+                category: 'argument_frame',
+                better: 'connect personal interests with realistic career pathways',
+                explanationZh: '把“兴趣”和“就业”连接成一个更成熟的折中观点。',
+                reuseWhenZh: '下次教育、职业、专业选择类题目需要提出平衡方案时使用。',
+              },
+            ],
       },
       modelAnswer: isUnderLength
-        ? 'A stronger revision could keep your position but expand it like this: students should have some academic autonomy because choosing subjects they are genuinely interested in can improve motivation and long-term learning. This is not to suggest that career prospects are irrelevant, but the stronger concern is whether students can connect personal interests with realistic career pathways.'
-        : `Based on your framework, a stronger version would keep the same position but make the paragraph logic more explicit: students should have some academic autonomy and be allowed to pursue subjects they are genuinely interested in, because motivation often leads to deeper learning and stronger long-term employability. This is not to suggest that practical value should be ignored; rather, schools can guide students to connect personal interests with realistic career pathways.`,
+        ? isRemoteWorkPrompt
+          ? 'A stronger revision could keep your position but expand it like this: flexible working arrangements help employees save commuting time and improve work-life balance. Although weaker face-to-face communication remains a concern, this can be addressed through regular meetings, so it does not outweigh the benefits of remote work.'
+          : 'A stronger revision could keep your position but expand it like this: students should have some academic autonomy because choosing subjects they are genuinely interested in can improve motivation and long-term learning. This is not to suggest that career prospects are irrelevant, but the stronger concern is whether students can connect personal interests with realistic career pathways.'
+        : isRemoteWorkPrompt
+          ? `Based on your framework, a stronger version would keep the same position but make the balance clearer: flexible working arrangements allow employees to save commuting time, improve work-life balance, and help companies widen the recruitment pool. Although weaker face-to-face communication and team cohesion remain real concerns, these problems can be addressed through scheduled meetings and clearer supervision, so they do not outweigh the benefits of remote work.`
+          : `Based on your framework, a stronger version would keep the same position but make the paragraph logic more explicit: students should have some academic autonomy and be allowed to pursue subjects they are genuinely interested in, because motivation often leads to deeper learning and stronger long-term employability. This is not to suggest that practical value should be ignored; rather, schools can guide students to connect personal interests with realistic career pathways.`,
       modelAnswerPersonalized: Boolean(params.finalFrameworkSummary || params.frameworkNotes || params.essay.trim()),
       modelAnswerTargetLevel: scores.taskResponse <= 5.5 ? 'Target Band 7.0 excerpt' : 'Target Band 7.5 excerpt',
       reusableArguments: [

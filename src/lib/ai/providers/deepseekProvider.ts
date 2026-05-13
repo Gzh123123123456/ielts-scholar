@@ -97,9 +97,9 @@ Use the supplied frameworkNotes and finalFrameworkSummary when available. Compar
 For frameworkFeedback, keep three Chinese roles distinct: suggestionZh = why this affects IELTS score; paragraphFixZh = how to revise this essay; transferGuidanceZh = how to avoid the pattern next time.
 Include relatedCorrectionIds when a sentence correction supports the same logic issue; otherwise leave it empty and give paragraph-level guidance.
 Avoid duplicating full sentence correction text inside frameworkFeedback.
-Return vocabularyUpgrade as a two-part Language Bank. topicVocabulary contains only topic-specific words/collocations/phrases, each with Chinese meaningZh and usageZh. expressionUpgrades contains learner phrase upgrades and reusable Task 2 argument frames, each with explanationZh and reuseWhenZh. Do not put writing-strategy advice in topicVocabulary.
+Return vocabularyUpgrade as a two-part Language Bank. topicVocabulary contains 5-8 topic-specific words/collocations/phrases with Chinese meaningZh and usageZh, covering both sides for advantages/disadvantages or outweigh tasks. expressionUpgrades contains both category="from_essay" phrase upgrades and category="argument_frame" reusable Task 2 frames. Do not put writing-strategy advice in topicVocabulary.
 Choose modelAnswerTargetLevel from the current training estimate: <=5.5 means "Target Band 7.0 excerpt"; 6.0-6.5 means "Target Band 7.5 excerpt"; 7.0 means "Target Band 7.5-8.0 excerpt"; 7.5+ means "Examiner-friendly refinement".
-The modelAnswer field must be a personalized target excerpt that preserves the user's position, fixes the main issues, and visibly reuses several Language Bank items. Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
+The modelAnswer field must be a personalized target excerpt that preserves the user's position, fixes the main issues, and reuses several Language Bank expressions verbatim where natural. Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
 
 ${writingSchemaInstruction}
 

@@ -136,6 +136,7 @@ export interface WritingFeedback {
       example?: string;
     }[];
     expressionUpgrades: {
+      category?: 'from_essay' | 'argument_frame';
       original?: string;
       better: string;
       explanationZh: string;
