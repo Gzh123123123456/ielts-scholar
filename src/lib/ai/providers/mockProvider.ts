@@ -325,15 +325,41 @@ export class MockProvider implements AIProvider {
               },
             ],
       },
-      modelAnswer: isUnderLength
-        ? isRemoteWorkPrompt
-          ? 'A stronger revision could keep your position but expand it like this: flexible working arrangements help employees save commuting time and improve work-life balance. Although weaker face-to-face communication remains a concern, this can be addressed through regular meetings, so it does not outweigh the benefits of remote work.'
-          : 'A stronger revision could keep your position but expand it like this: students should have some academic autonomy because choosing subjects they are genuinely interested in can improve motivation and long-term learning. This is not to suggest that career prospects are irrelevant, but the stronger concern is whether students can connect personal interests with realistic career pathways.'
-        : isRemoteWorkPrompt
-          ? `Based on your framework, a stronger version would keep the same position but make the balance clearer: flexible working arrangements allow employees to save commuting time, improve work-life balance, and help companies widen the recruitment pool. Although weaker face-to-face communication and team cohesion remain real concerns, these problems can be addressed through scheduled meetings and clearer supervision, so they do not outweigh the benefits of remote work.`
-          : `Based on your framework, a stronger version would keep the same position but make the paragraph logic more explicit: students should have some academic autonomy and be allowed to pursue subjects they are genuinely interested in, because motivation often leads to deeper learning and stronger long-term employability. This is not to suggest that practical value should be ignored; rather, schools can guide students to connect personal interests with realistic career pathways.`,
+      modelAnswer: isRemoteWorkPrompt
+        ? `In recent years, many employees have been allowed to work remotely instead of travelling to an office every day. In my view, this trend has more advantages than disadvantages, provided that companies manage communication carefully.
+
+The most obvious benefit is that flexible working arrangements give workers greater control over their daily routine. When people save commuting time, they can start work with more energy and use the extra time for rest, exercise, self-improvement or family responsibilities. This can improve work-life balance without necessarily reducing productivity. It can also benefit employers, because remote work may widen the recruitment pool and allow companies to hire skilled people who live far from the main office.
+
+Admittedly, the perceived drawbacks should not be ignored. Some tasks are easier when colleagues can rely on face-to-face communication, and a lack of informal contact may weaken team cohesion. In addition, employees who lack self-discipline may find it difficult to separate work from private life, which can lead to stress or professional isolation. However, these problems can be addressed through regular check-ins, clear deadlines and occasional office meetings, so they do not outweigh the benefits of flexibility.
+
+Overall, working from home is not suitable for every job or every employee, but it offers practical advantages for both workers and organisations. As long as companies maintain effective communication and reasonable supervision, the advantages of remote work are likely to be greater than its disadvantages.`
+        : `Many people believe that students should be free to choose the subjects they study, while others argue that schools and universities should guide them towards more practical fields. In my view, students need academic autonomy, but this freedom should be supported by realistic advice.
+
+The main reason is that learners are more likely to work hard when they can pursue subjects they are genuinely interested in. Interest often leads to deeper reading, more consistent practice and better long-term performance. For example, a student who enjoys design or computer science may spend extra time building projects outside class, which can gradually become evidence of real ability. In this sense, personal choice can improve both motivation and long-term employability.
+
+This is not to suggest that career prospects are irrelevant. Some teenagers may choose a subject only because it sounds attractive, without understanding the job market or the skills required. If schools ignore this problem, students may graduate with limited options. However, this risk can be reduced if teachers help them connect personal interests with realistic career pathways, such as combining creative subjects with business, technology or communication skills.
+
+Overall, students should not be forced into subjects chosen only by adults, because this may damage motivation and personal development. A better approach is to let them choose their main direction while giving them clear guidance about employment, transferable skills and future study routes.`,
+      modelAnswerAnnotations: isRemoteWorkPrompt
+        ? [
+            { quote: 'work remotely', type: 'expression_upgrade', labelZh: '更自然的话题表达' },
+            { quote: 'flexible working arrangements', type: 'topic_vocabulary', labelZh: '话题词汇' },
+            { quote: 'save commuting time', type: 'topic_vocabulary', labelZh: '话题词汇' },
+            { quote: 'work-life balance', type: 'topic_vocabulary', labelZh: '话题词汇' },
+            { quote: 'widen the recruitment pool', type: 'topic_vocabulary', labelZh: '话题词汇' },
+            { quote: 'the perceived drawbacks should not be ignored', type: 'expression_upgrade', labelZh: '让步框架' },
+            { quote: 'face-to-face communication', type: 'topic_vocabulary', labelZh: '话题词汇' },
+            { quote: 'team cohesion', type: 'topic_vocabulary', labelZh: '话题词汇' },
+            { quote: 'employees who lack self-discipline may find it difficult to separate work from private life', type: 'sentence_repair', labelZh: '句子层面升级' },
+            { quote: 'However, these problems can be addressed through regular check-ins, clear deadlines and occasional office meetings, so they do not outweigh the benefits of flexibility.', type: 'logic_repair', labelZh: '补足缺点段后的回扣' },
+          ]
+        : [
+            { quote: 'academic autonomy', type: 'topic_vocabulary', labelZh: '话题词汇' },
+            { quote: 'pursue subjects they are genuinely interested in', type: 'expression_upgrade', labelZh: '表达升级' },
+            { quote: 'connect personal interests with realistic career pathways', type: 'logic_repair', labelZh: '逻辑修复' },
+          ],
       modelAnswerPersonalized: Boolean(params.finalFrameworkSummary || params.frameworkNotes || params.essay.trim()),
-      modelAnswerTargetLevel: scores.taskResponse <= 5.5 ? 'Target Band 7.0 excerpt' : 'Target Band 7.5 excerpt',
+      modelAnswerTargetLevel: scores.taskResponse <= 5.5 ? 'Target Band 7.0' : 'Target Band 7.5',
       reusableArguments: [
         {
           argument: 'Personal interest leads to better academic performance',

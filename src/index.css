@@ -148,6 +148,41 @@
   line-height: inherit;
 }
 
+.model-answer-mark {
+  border-radius: 0.16rem;
+  color: inherit;
+  padding: 0.02em 0.14em;
+  line-height: inherit;
+}
+
+.model-answer-mark--topic {
+  background: rgba(166, 77, 50, 0.08);
+  border-bottom: 1px solid rgba(166, 77, 50, 0.24);
+}
+
+.model-answer-mark--expression {
+  background: rgba(75, 107, 79, 0.09);
+  border-bottom: 1px solid rgba(75, 107, 79, 0.24);
+}
+
+.model-answer-mark--sentence {
+  background: rgba(129, 93, 48, 0.09);
+  border-bottom: 1px solid rgba(129, 93, 48, 0.24);
+}
+
+.model-answer-mark--logic {
+  background: rgba(126, 60, 45, 0.10);
+  border-left: 2px solid rgba(166, 77, 50, 0.36);
+}
+
+.sentence-source-mark {
+  background: rgba(166, 77, 50, 0.08);
+  border-bottom: 1px solid rgba(166, 77, 50, 0.32);
+  border-radius: 0.14rem;
+  color: inherit;
+  padding: 0.02em 0.12em;
+}
+
 .ink-link {
   @apply text-accent-terracotta hover:underline font-medium;
 }

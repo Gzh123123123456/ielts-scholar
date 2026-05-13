@@ -146,6 +146,16 @@ const asStringArray = (value: unknown) =>
 
 const asRequiredStringArray = (value: unknown) => asStringArray(value) || [];
 
+const asModelAnswerAnnotationType = (
+  value: unknown,
+): NonNullable<WritingFeedback['modelAnswerAnnotations']>[number]['type'] =>
+  value === 'expression_upgrade' ||
+  value === 'sentence_repair' ||
+  value === 'logic_repair' ||
+  value === 'topic_vocabulary'
+    ? value
+    : 'topic_vocabulary';
+
 const phraseLevel = (text: string, maxWords = 14) => {
   const cleaned = text.replace(/[.!?;:]+$/g, '').replace(/\s+/g, ' ').trim();
   const words = cleaned.split(' ').filter(Boolean);
@@ -255,6 +265,13 @@ const sanitizeWritingTask2Feedback = (value: unknown): WritingFeedback | undefin
       expressionUpgrades,
     },
     modelAnswer: asString(value.modelAnswer),
+    modelAnswerAnnotations: Array.isArray(value.modelAnswerAnnotations)
+      ? value.modelAnswerAnnotations.filter(isObject).map(item => ({
+        quote: asString(item.quote),
+        type: asModelAnswerAnnotationType(item.type),
+        labelZh: asString(item.labelZh),
+      })).filter(item => item.quote)
+      : [],
     modelAnswerPersonalized: Boolean(value.modelAnswerPersonalized),
     modelAnswerTargetLevel: asOptionalString(value.modelAnswerTargetLevel),
     reusableArguments: Array.isArray(value.reusableArguments) ? value.reusableArguments as WritingFeedback['reusableArguments'] : [],

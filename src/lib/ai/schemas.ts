@@ -154,6 +154,11 @@ export interface WritingFeedback {
     reusableSentenceFrames?: string[];
   };
   modelAnswer: string;
+  modelAnswerAnnotations?: {
+    quote: string;
+    type: 'topic_vocabulary' | 'expression_upgrade' | 'sentence_repair' | 'logic_repair';
+    labelZh: string;
+  }[];
   modelAnswerPersonalized?: boolean;
   modelAnswerTargetLevel?: string;
   reusableArguments: {

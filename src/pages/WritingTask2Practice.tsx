@@ -147,6 +147,67 @@ const renderHighlightedModelAnswer = (text: string, terms: string[]) => {
   ));
 };
 
+type ModelAnswerAnnotation = NonNullable<WritingFeedback['modelAnswerAnnotations']>[number];
+
+const annotationClassNames: Record<ModelAnswerAnnotation['type'], string> = {
+  topic_vocabulary: 'model-answer-mark model-answer-mark--topic',
+  expression_upgrade: 'model-answer-mark model-answer-mark--expression',
+  sentence_repair: 'model-answer-mark model-answer-mark--sentence',
+  logic_repair: 'model-answer-mark model-answer-mark--logic',
+};
+
+const getValidModelAnswerAnnotations = (
+  text: string,
+  annotations?: WritingFeedback['modelAnswerAnnotations'],
+) =>
+  (annotations || [])
+    .filter(item => item.quote.trim() && text.includes(item.quote))
+    .filter((item, index, items) => items.findIndex(candidate => candidate.quote === item.quote) === index)
+    .sort((a, b) => b.quote.length - a.quote.length)
+    .slice(0, 14);
+
+const renderAnnotatedModelAnswer = (
+  text: string,
+  annotations: ModelAnswerAnnotation[],
+  fallbackTerms: string[],
+) => {
+  if (!annotations.length) return renderHighlightedModelAnswer(text, fallbackTerms);
+  const spans = annotations
+    .map(annotation => ({
+      annotation,
+      start: text.indexOf(annotation.quote),
+      end: text.indexOf(annotation.quote) + annotation.quote.length,
+    }))
+    .filter(span => span.start >= 0)
+    .sort((a, b) => a.start - b.start || b.end - a.end)
+    .reduce<{ annotation: ModelAnswerAnnotation; start: number; end: number }[]>((acc, span) => {
+      const previous = acc[acc.length - 1];
+      if (previous && span.start < previous.end) return acc;
+      acc.push(span);
+      return acc;
+    }, []);
+
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  spans.forEach((span, index) => {
+    if (span.start > cursor) {
+      nodes.push(<React.Fragment key={`text-${index}`}>{text.slice(cursor, span.start)}</React.Fragment>);
+    }
+    nodes.push(
+      <mark
+        key={`${span.annotation.type}-${span.start}`}
+        className={annotationClassNames[span.annotation.type]}
+        aria-label={span.annotation.labelZh}
+      >
+        {text.slice(span.start, span.end)}
+      </mark>,
+    );
+    cursor = span.end;
+  });
+  if (cursor < text.length) nodes.push(<React.Fragment key="text-end">{text.slice(cursor)}</React.Fragment>);
+  return nodes;
+};
+
 const averageWritingScore = (feedback: WritingFeedback) =>
   Math.round(((feedback.scores.taskResponse +
     feedback.scores.coherenceCohesion +
@@ -156,9 +217,9 @@ const averageWritingScore = (feedback: WritingFeedback) =>
 const getTargetModelLevel = (feedback: WritingFeedback) => {
   if (feedback.modelAnswerTargetLevel?.trim()) return feedback.modelAnswerTargetLevel.trim();
   const estimate = averageWritingScore(feedback);
-  if (estimate <= 5.5) return 'Target Band 7.0 excerpt';
-  if (estimate <= 6.5) return 'Target Band 7.5 excerpt';
-  if (estimate <= 7.0) return 'Target Band 7.5-8.0 excerpt';
+  if (estimate <= 5.5) return 'Target Band 7.0';
+  if (estimate <= 6.5) return 'Target Band 7.5';
+  if (estimate <= 7.0) return 'Target Band 7.5-8.0';
   return 'Examiner-friendly refinement';
 };
 
@@ -182,6 +243,68 @@ const getCorrectionIssues = (item: WritingFeedback['sentenceFeedback'][number]) 
     displayCategory(item.tag),
     displayDimension(item.dimension),
   ]).slice(0, 5);
+
+const conciseIssueLabels: Record<string, string> = {
+  lexical_precision: '表达不地道',
+  word_choice: '表达不地道',
+  collocation: '搭配不自然',
+  naturalness: '表达不地道',
+  tone: '语气不够客观',
+  task_response: '回应题目不清',
+  off_topic: '开头跑题',
+  paragraph_development: '论证展开不足',
+  sentence_boundary: '句子结构混乱',
+  article_plural_punctuation: '语法细节不稳',
+  grammar: '语法不准确',
+  grammatical_accuracy: '语法不准确',
+};
+
+const getConciseCorrectionIssue = (item: WritingFeedback['sentenceFeedback'][number]) => {
+  const source = `${item.issueType || ''} ${item.tag || ''} ${item.primaryIssue || ''}`.toLowerCase();
+  const key = Object.keys(conciseIssueLabels).find(label => source.includes(label));
+  if (key) return conciseIssueLabels[key];
+  if (item.dimension === 'LR') return '表达不地道';
+  if (item.dimension === 'TR') return '回应题目不清';
+  if (item.dimension === 'CC') return '句子衔接不清';
+  return '语法不准确';
+};
+
+const getProblemQuote = (item: WritingFeedback['sentenceFeedback'][number]) => {
+  const candidates = [
+    item.microUpgrades?.[0]?.original,
+    item.sourceQuote,
+  ]
+    .map(value => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  return candidates.find(value => value.length < item.original.trim().length && item.original.includes(value)) || '';
+};
+
+const renderOriginalSentence = (item: WritingFeedback['sentenceFeedback'][number]) => {
+  const quote = getProblemQuote(item);
+  if (!quote) return <span>{item.original}</span>;
+  const index = item.original.indexOf(quote);
+  if (index < 0) return <span>{item.original}</span>;
+  return (
+    <>
+      {item.original.slice(0, index)}
+      <mark className="sentence-source-mark">{quote}</mark>
+      {item.original.slice(index + quote.length)}
+    </>
+  );
+};
+
+const getVisibleMicroUpgrades = (item: WritingFeedback['sentenceFeedback'][number]) => {
+  const problemQuote = getProblemQuote(item).toLowerCase();
+  const unique = (item.microUpgrades || [])
+    .filter((upgrade, index, items) => (
+      items.findIndex(candidate => (
+        candidate.original.toLowerCase() === upgrade.original.toLowerCase() &&
+        candidate.better.toLowerCase() === upgrade.better.toLowerCase()
+      )) === index
+    ))
+    .filter(upgrade => upgrade.original.toLowerCase() !== problemQuote);
+  return unique.length > 1 ? unique : [];
+};
 
 const defaultSentenceTransfer = (item: WritingFeedback['sentenceFeedback'][number]) => {
   const tag = item.tag.toLowerCase();
@@ -269,7 +392,20 @@ const getDisplayLocation = (item: WritingFeedback['frameworkFeedback'][number]):
   return 'Unknown / General';
 };
 
-const getEssayWarnings = (feedback: WritingFeedback, isInsufficientSample: boolean) => {
+const normalizeWordCountWarning = (message: string, localWords: number) => {
+  const localWarning = `当前约 ${localWords} 词，低于 Task 2 的 250 词要求。请扩展论点、解释和例子。`;
+  const withoutProviderCount = message
+    .replace(/\b\d{1,3}\s+words?\b/gi, '')
+    .replace(/当前约\s*\d{1,3}\s*词/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (!withoutProviderCount || /under\s*250|低于\s*Task 2\s*的\s*250|低于\s*250|字数|word/i.test(withoutProviderCount)) {
+    return localWarning;
+  }
+  return `${localWarning} ${withoutProviderCount}`;
+};
+
+const getEssayWarnings = (feedback: WritingFeedback, isInsufficientSample: boolean, localWords: number) => {
   const explicit = Array.isArray(feedback.essayLevelWarnings) ? feedback.essayLevelWarnings : [];
   const legacy = feedback.frameworkFeedback
     .filter(item => isWarningIssue(item.issue))
@@ -283,9 +419,14 @@ const getEssayWarnings = (feedback: WritingFeedback, isInsufficientSample: boole
         messageZh: 'This response is under 250 words or too low-signal, so the training estimate is capped. Expand body paragraphs before treating the estimate as reliable.',
       }]
     : [];
+  const normalized = [...explicit, ...legacy, ...insufficient].map(item => (
+    isWordCountWarning(item)
+      ? { ...item, messageZh: normalizeWordCountWarning(item.messageZh, localWords) }
+      : item
+  ));
   const seen = new Set<string>();
-  const merged = [...explicit, ...legacy, ...insufficient].filter(item => {
-    const key = `${item.title}|${item.messageZh}`;
+  const merged = normalized.filter(item => {
+    const key = isWordCountWarning(item) ? 'local-word-count-warning' : `${item.title}|${item.messageZh}`;
     if (!item.messageZh || seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -630,9 +771,10 @@ export default function WritingTask2Practice() {
   const loadRandomQuestion = () => {
     cancelActiveAnalysis();
     const candidates = question && writingTask2.length > 1
-      ? writingTask2.filter(item => item.id !== question.id)
+      ? writingTask2.filter(item => item.id !== question.id && item.question !== question.question)
       : writingTask2;
-    const random = candidates[Math.floor(Math.random() * candidates.length)];
+    const pool = candidates.length ? candidates : writingTask2;
+    const random = pool[Math.floor(Math.random() * pool.length)];
     activeAttemptIdRef.current = createRecordId('wt2');
     restoredRecordRef.current = null;
     setQuestion(random);
@@ -664,7 +806,7 @@ export default function WritingTask2Practice() {
     setAnalyzedEssaySnapshot('');
     setFeedbackFallbackUsed(false);
     setProviderErrorMessage('');
-    setApiStatusMessage('');
+    setApiStatusMessage('Rewriting same question.');
     setFrameworkExtractMessage('');
     setRestoreMessage('');
     addDebugLog(`Started fresh rewrite for writing question: ${question.id}`);
@@ -1019,7 +1161,7 @@ export default function WritingTask2Practice() {
   const exportMarkdown = () => {
     if (!feedback) return;
     const resultEssay = feedback.essay || analyzedEssaySnapshot || essay;
-    const warnings = getEssayWarnings(feedback, isInsufficientTask2Sample(resultEssay));
+    const warnings = getEssayWarnings(feedback, isInsufficientTask2Sample(resultEssay), countWords(resultEssay));
     const logicFeedback = getLogicFeedback(feedback);
     const vocabulary = getVocabularyUpgrade(feedback);
     const missionItems = getLanguageBankMission(feedback, vocabulary);
@@ -1096,14 +1238,14 @@ ${logicItems}
 ## Sentence Corrections
 ${sentenceItems}
 
-## Target Model Excerpt / Revision Mission
+## Target Model Answer
 - Training estimate: ${formatBandEstimate(averageWritingScore(feedback))}
 - Target level: ${targetLevel}
 
-### Revision Mission
+### Next Rewrite Focus
 ${missionItems.length ? missionItems.map(item => `- ${item}`).join('\n') : '- 下次修改时至少主动使用两个 Language Bank 表达。'}
 
-${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPersonalized ? '\n\nHighlighted phrases come from the Language Bank above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}`;
+${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPersonalized ? '\n\nHighlighted phrases come from the Language Bank above.' : ''}` : '- No reliable personalized model answer for this attempt.'}`;
     const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1120,11 +1262,11 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
   const isPersonalizedModelAnswer = Boolean(feedback?.modelAnswerPersonalized);
   const hasCoachFeedback = frameworkChat.some((msg, index) => msg.role === 'ai' && index > 0);
-  const essayWarnings = feedback ? getEssayWarnings(feedback, isInsufficientSample) : [];
+  const essayWarnings = feedback ? getEssayWarnings(feedback, isInsufficientSample, countWords(resultEssay)) : [];
   const logicFeedback = feedback ? getLogicFeedback(feedback) : [];
   const logicGroups = feedback ? groupedLogicFeedback(logicFeedback) : [];
   const vocabularyUpgrade = feedback ? getVocabularyUpgrade(feedback) : null;
-  const revisionMission = feedback && vocabularyUpgrade ? getLanguageBankMission(feedback, vocabularyUpgrade) : [];
+  const revisionMission: string[] = [];
   const fromEssayUpgrades = vocabularyUpgrade
     ? vocabularyUpgrade.expressionUpgrades.filter(item => item.category === 'from_essay' || item.original)
     : [];
@@ -1132,6 +1274,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
     ? vocabularyUpgrade.expressionUpgrades.filter(item => item.category === 'argument_frame' || !item.original)
     : [];
   const modelHighlightTerms = vocabularyUpgrade && feedback ? getLanguageBankHighlightTerms(vocabularyUpgrade, feedback.sentenceFeedback) : [];
+  const modelAnswerAnnotations = feedback ? getValidModelAnswerAnnotations(modelAnswerText, feedback.modelAnswerAnnotations) : [];
 
   return (
     <PageShell size="wide">
@@ -1317,9 +1460,9 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               <div className="flex justify-between items-center bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest">
                 <span>WORD COUNT: {countWords(essay)}</span>
                 <div className="flex items-center gap-4">
-                  {question && (
-                    <SerifButton type="button" onClick={practiceSameQuestionAgain} variant="outline" className="text-xs">
-                      Rewrite same question
+                  {essay.trim() && (
+                    <SerifButton type="button" onClick={() => setEssay('')} variant="outline" className="text-xs">
+                      Clear draft
                     </SerifButton>
                   )}
                   {isAnalyzing && (
@@ -1389,7 +1532,6 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                           <p className="text-base leading-7 font-bold">{item.expression}</p>
                           <p className="text-sm leading-7 text-paper-ink/65">{item.meaningZh}</p>
                           <p className="text-sm leading-7 text-paper-ink/55">用于：{item.usageZh.replace(/^用于[:：]?/, '')}</p>
-                          {item.example && <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm px-3 py-2">{item.example}</p>}
                         </div>
                       )) : (
                         <p className="text-sm leading-7 text-paper-ink/50">本次没有可稳定提取的话题词。</p>
@@ -1407,10 +1549,6 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                               {item.explanationZh && !isGenericExpressionNote(item.explanationZh) && (
                                 <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
                               )}
-                              {item.reuseWhenZh && !isGenericExpressionNote(item.reuseWhenZh) && (
-                                <p className="text-sm leading-7 text-paper-ink/55">{item.reuseWhenZh}</p>
-                              )}
-                              {item.example && <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm px-3 py-2">{item.example}</p>}
                             </div>
                           ))}
                         </div>
@@ -1423,10 +1561,6 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                             {item.explanationZh && !isGenericExpressionNote(item.explanationZh) && (
                               <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
                             )}
-                            {item.reuseWhenZh && !isGenericExpressionNote(item.reuseWhenZh) && (
-                              <p className="text-sm leading-7 text-paper-ink/55">{item.reuseWhenZh}</p>
-                            )}
-                            {item.example && <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm px-3 py-2">{item.example}</p>}
                           </div>
                         ))}
                       </div>
@@ -1442,28 +1576,28 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   <ShieldCheck className="w-4 h-4 text-green-700" /> Sentence Corrections
                 </h3>
                 <div className="space-y-4">
-                  {feedback.sentenceFeedback.map((item, i) => (
+                  {feedback.sentenceFeedback.map((item, i) => {
+                    const visibleMicroUpgrades = getVisibleMicroUpgrades(item);
+                    return (
                     <PaperCard key={i} className="border-l-2 border-l-paper-ink/20">
                       <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">
                         Correction #{item.correctionNumber || i + 1}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 mb-3 text-[10px] uppercase font-sans font-bold">
-                        {getCorrectionIssues(item).map(issue => (
-                          <span key={issue} className="border border-paper-ink/10 bg-paper-ink/5 text-paper-ink/55 px-2 py-1 rounded-sm">
-                            {issue}
-                          </span>
-                        ))}
+                      <div className="mb-3">
+                        <span className="border border-paper-ink/10 bg-paper-ink/5 text-paper-ink/55 px-2 py-1 rounded-sm text-[10px] uppercase font-sans font-bold tracking-widest">
+                          {getConciseCorrectionIssue(item)}
+                        </span>
                       </div>
-                      <div className="text-base text-paper-ink/60 line-through mb-2 leading-7">{item.original}</div>
+                      <div className="text-base text-paper-ink/60 mb-2 leading-7">{renderOriginalSentence(item)}</div>
                       <div className="text-[17px] font-bold mb-3 leading-8">{item.correction}</div>
                       <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">为什么要改</p>
                       <p className="text-sm leading-7 text-paper-ink-muted bg-paper-ink/5 p-3 rounded mb-3">{item.explanationZh}</p>
                       <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
                       <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">{item.transferGuidanceZh || defaultSentenceTransfer(item)}</p>
-                      {item.microUpgrades?.length ? (
+                      {visibleMicroUpgrades.length ? (
                         <div className="mt-3 space-y-2">
                           <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Micro upgrades</p>
-                          {item.microUpgrades.map((upgrade, upgradeIndex) => (
+                          {visibleMicroUpgrades.map((upgrade, upgradeIndex) => (
                             <div key={`${upgrade.original}-${upgradeIndex}`} className="text-sm leading-7 text-paper-ink/70 border border-paper-ink/10 bg-paper-50/70 rounded-sm px-3 py-2">
                               <span className="line-through text-paper-ink/45">{upgrade.original}</span>
                               <span className="mx-2 text-paper-ink/30">-&gt;</span>
@@ -1474,7 +1608,8 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                         </div>
                       ) : null}
                     </PaperCard>
-                  ))}
+                  );
+                  })}
                 </div>
               </section>
 
@@ -1507,21 +1642,6 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                               <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
                               <p className="text-base leading-8 text-paper-ink/70">{normalizeLearnerChineseText(f.transferGuidanceZh) || defaultLogicTransfer()}</p>
                             </div>
-                            {f.relatedCorrectionIds?.length ? (
-                              <div className="flex flex-wrap gap-2">
-                                <span className="text-xs font-sans text-paper-ink/45 self-center">Related:</span>
-                                {f.relatedCorrectionIds.map(id => (
-                                  <span key={id} className="text-[10px] font-sans font-bold uppercase tracking-widest border border-paper-ink/10 bg-paper-50 px-2 py-1 rounded-sm">
-                                    Correction #{id.replace(/^C/i, '')}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
-                            {f.exampleFrame && (
-                              <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">
-                                Example frame: {f.exampleFrame}
-                              </p>
-                            )}
                           </div>
                         </div>
                       ))}
@@ -1537,14 +1657,14 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
 
             <PaperCard className="min-h-[220px]">
               <h3 className="text-sm font-bold uppercase tracking-widest mb-2">
-                Target Model Excerpt / Revision Mission
+                Target Model Answer
               </h3>
               <div className="flex flex-wrap gap-2 mb-4 text-[10px] font-sans font-bold uppercase tracking-widest">
                 <span className="border border-paper-ink/10 bg-paper-ink/5 px-2 py-1 rounded-sm text-paper-ink/55">
                   Training estimate {formatBandEstimate(averageWritingScore(feedback))}
                 </span>
                 <span className="border border-accent-terracotta/20 bg-accent-terracotta/5 px-2 py-1 rounded-sm text-accent-terracotta">
-                  {getTargetModelLevel(feedback)}
+                  Target level: {getTargetModelLevel(feedback)}
                 </span>
               </div>
               {hasSubstantialModelAnswer && isPersonalizedModelAnswer && (
@@ -1552,26 +1672,16 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   这段保留你的原始立场和主要思路，并示范复用上面的 Language Bank 表达。
                 </p>
               )}
-              {revisionMission.length > 0 && (
-                <div className="mb-4 rounded-sm border border-paper-ink/10 bg-paper-50/70 p-3">
-                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">Revision Mission</p>
-                  <ul className="space-y-1 text-sm leading-7 text-paper-ink/70">
-                    {revisionMission.map(item => (
-                      <li key={item}>- {item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                 {hasSubstantialModelAnswer ? (
                   <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap max-h-[420px] overflow-auto pr-1">
-                    {renderHighlightedModelAnswer(modelAnswerText, modelHighlightTerms)}
+                    {renderAnnotatedModelAnswer(modelAnswerText, modelAnswerAnnotations, modelHighlightTerms)}
                   </div>
                 ) : (
                   <p className="text-base leading-8 text-paper-ink/65">
                     {isInsufficientSample
                       ? 'Model-answer text is hidden for this insufficient sample so the saved record does not look more reliable than it is.'
-                      : 'No substantial model answer excerpt was returned for this attempt.'}
+                      : 'No substantial model answer was returned for this attempt.'}
                   </p>
                 )}
               </div>

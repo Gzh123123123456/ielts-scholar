@@ -947,11 +947,41 @@ const averageWritingScore = (scores: WritingFeedback['scores']): number =>
   ) / 4);
 
 const getWritingTargetLevel = (estimate: number): string => {
-  if (estimate <= 5.5) return 'Target Band 7.0 excerpt';
-  if (estimate <= 6.5) return 'Target Band 7.5 excerpt';
-  if (estimate <= 7.0) return 'Target Band 7.5-8.0 excerpt';
+  if (estimate <= 5.5) return 'Target Band 7.0';
+  if (estimate <= 6.5) return 'Target Band 7.5';
+  if (estimate <= 7.0) return 'Target Band 7.5-8.0';
   return 'Examiner-friendly refinement';
 };
+
+const normalizeModelAnswerAnnotations = (
+  value: unknown,
+  modelAnswer: string,
+): WritingFeedback['modelAnswerAnnotations'] =>
+  (Array.isArray(value) ? value : [])
+    .map(item => {
+      const record = isRecord(item) ? item : {};
+      const quote = typeof record.quote === 'string' ? record.quote.trim() : '';
+      const type = record.type;
+      const labelZh = typeof record.labelZh === 'string' && record.labelZh.trim()
+        ? record.labelZh.trim()
+        : '示范修改';
+      if (
+        !quote ||
+        !modelAnswer.includes(quote) ||
+        (
+          type !== 'topic_vocabulary' &&
+          type !== 'expression_upgrade' &&
+          type !== 'sentence_repair' &&
+          type !== 'logic_repair'
+        )
+      ) {
+        return null;
+      }
+      return { quote, type, labelZh };
+    })
+    .filter((item): item is NonNullable<WritingFeedback['modelAnswerAnnotations']>[number] => Boolean(item))
+    .filter((item, index, items) => items.findIndex(candidate => candidate.quote === item.quote) === index)
+    .slice(0, 14);
 
 const buildWritingTask2Markdown = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>): string => {
   const warnings = feedback.essayLevelWarnings.length
@@ -1026,14 +1056,14 @@ ${logicItems}
 ## Sentence Corrections
 ${sentenceItems}
 
-## Target Model Excerpt / Revision Mission
+## Target Model Answer
 - Training estimate: ${formatBandEstimate(estimate)}
 - Target level: ${feedback.modelAnswerTargetLevel || getWritingTargetLevel(estimate)}
 
-### Revision Mission
+### Next Rewrite Focus
 ${missionItems.length ? missionItems.map(item => `- ${item}`).join('\n') : '- 下次修改时至少主动使用两个 Language Bank 表达。'}
 
-${feedback.modelAnswerPersonalized ? 'Highlighted phrases come from the Language Bank above.' : 'Provider did not mark this excerpt as personalized.'}
+${feedback.modelAnswerPersonalized ? 'Highlighted phrases come from the Language Bank above.' : 'Provider did not mark this answer as personalized.'}
 
 ${highlightedModelAnswer}`;
 };
@@ -1161,6 +1191,12 @@ const normalizeWritingFeedback = (
   const vocabularyUpgrade = buildLocalVocabularyUpgrade(source, request, sentenceFeedback, validationErrors);
   const firstTopicExpression = vocabularyUpgrade.topicVocabulary[0]?.expression || 'topic-specific language';
   const firstExpressionUpgrade = vocabularyUpgrade.expressionUpgrades[0]?.better || 'a clearer argument frame';
+  const normalizedModelAnswer = asString(
+    source.modelAnswer,
+    `A stronger revision should keep your main position, use topic language such as "${firstTopicExpression}", and apply "${firstExpressionUpgrade}" where it helps the argument sound clearer.`,
+    'modelAnswer',
+    validationErrors,
+  );
 
   const feedbackWithoutMarkdown: Omit<WritingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -1176,12 +1212,8 @@ const normalizeWritingFeedback = (
     ],
     sentenceFeedback,
     vocabularyUpgrade,
-    modelAnswer: asString(
-      source.modelAnswer,
-      `A stronger revision should keep your main position, use topic language such as "${firstTopicExpression}", and apply "${firstExpressionUpgrade}" where it helps the argument sound clearer.`,
-      'modelAnswer',
-      validationErrors,
-    ),
+    modelAnswer: normalizedModelAnswer,
+    modelAnswerAnnotations: normalizeModelAnswerAnnotations(source.modelAnswerAnnotations, normalizedModelAnswer),
     modelAnswerPersonalized: source.modelAnswerPersonalized === true,
     modelAnswerTargetLevel: targetLevel,
     reusableArguments: asArray(source.reusableArguments, 'reusableArguments', validationErrors).map((item, index) => {
