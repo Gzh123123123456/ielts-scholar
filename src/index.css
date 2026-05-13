@@ -175,12 +175,19 @@
   border-left: 2px solid rgba(166, 77, 50, 0.36);
 }
 
-.sentence-source-mark {
-  background: rgba(166, 77, 50, 0.08);
-  border-bottom: 1px solid rgba(166, 77, 50, 0.32);
-  border-radius: 0.14rem;
-  color: inherit;
+.correction-source-mark {
+  background: rgba(60, 47, 47, 0.055);
+  border-bottom: 1px solid rgba(60, 47, 47, 0.28);
+  border-radius: 0.12rem;
+  color: rgba(60, 47, 47, 0.66);
   padding: 0.02em 0.12em;
+  text-decoration: line-through;
+  text-decoration-color: rgba(60, 47, 47, 0.42);
+  text-decoration-thickness: 1px;
+}
+
+.correction-source-sentence {
+  color: rgba(60, 47, 47, 0.58);
 }
 
 .ink-link {

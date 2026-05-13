@@ -270,24 +270,31 @@ const getConciseCorrectionIssue = (item: WritingFeedback['sentenceFeedback'][num
 };
 
 const getProblemQuote = (item: WritingFeedback['sentenceFeedback'][number]) => {
+  const original = item.original.trim();
+  const isPhraseLevelSource = (value: string) => {
+    if (!value || !original.includes(value)) return false;
+    const sourceWords = countWords(value);
+    const originalWords = countWords(original);
+    return value.length < original.length * 0.82 && sourceWords < Math.max(originalWords - 2, 2);
+  };
   const candidates = [
     item.microUpgrades?.[0]?.original,
     item.sourceQuote,
   ]
     .map(value => value?.trim())
     .filter((value): value is string => Boolean(value));
-  return candidates.find(value => value.length < item.original.trim().length && item.original.includes(value)) || '';
+  return candidates.find(isPhraseLevelSource) || '';
 };
 
 const renderOriginalSentence = (item: WritingFeedback['sentenceFeedback'][number]) => {
   const quote = getProblemQuote(item);
-  if (!quote) return <span>{item.original}</span>;
+  if (!quote) return <span className="correction-source-sentence">{item.original}</span>;
   const index = item.original.indexOf(quote);
   if (index < 0) return <span>{item.original}</span>;
   return (
     <>
       {item.original.slice(0, index)}
-      <mark className="sentence-source-mark">{quote}</mark>
+      <mark className="correction-source-mark">{quote}</mark>
       {item.original.slice(index + quote.length)}
     </>
   );
@@ -304,6 +311,17 @@ const getVisibleMicroUpgrades = (item: WritingFeedback['sentenceFeedback'][numbe
     ))
     .filter(upgrade => upgrade.original.toLowerCase() !== problemQuote);
   return unique.length > 1 ? unique : [];
+};
+
+const getVisibleTransferGuidance = (item: WritingFeedback['sentenceFeedback'][number]) => {
+  const guidance = (item.transferGuidanceZh || defaultSentenceTransfer(item)).trim();
+  if (!guidance || guidance.length > 110 || similarFeedbackText(guidance, item.explanationZh)) return '';
+  return guidance;
+};
+
+const getShortUsageNote = (usageZh?: string) => {
+  const usage = (usageZh || '').replace(/^用于[:：]?/, '').trim();
+  return usage && usage.length <= 58 ? usage : '';
 };
 
 const defaultSentenceTransfer = (item: WritingFeedback['sentenceFeedback'][number]) => {
@@ -1452,16 +1470,23 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                 <textarea
                   value={essay}
                   onChange={(e) => setEssay(e.target.value)}
+                  readOnly={isAnalyzing}
+                  aria-readonly={isAnalyzing}
                   placeholder="Start writing your 250+ word essay here..."
                   autoFocus
-                  className="w-full min-h-[720px] p-8 bg-transparent border border-transparent rounded-sm font-serif text-xl leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                  className={`w-full min-h-[720px] p-8 bg-transparent border border-transparent rounded-sm font-serif text-xl leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] ${isAnalyzing ? 'cursor-default bg-paper-ink/[0.025] text-paper-ink/70' : ''}`}
                 />
               </PaperCard>
-              <div className="flex justify-between items-center bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest">
+              <div className="flex flex-col gap-3 bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest sm:flex-row sm:items-center sm:justify-between">
                 <span>WORD COUNT: {countWords(essay)}</span>
+                {isAnalyzing && (
+                  <span className="text-[11px] normal-case tracking-normal text-paper-ink/55">
+                    Analyzing the submitted version. Stop analysis to edit again.
+                  </span>
+                )}
                 <div className="flex items-center gap-4">
                   {essay.trim() && (
-                    <SerifButton type="button" onClick={() => setEssay('')} variant="outline" className="text-xs">
+                    <SerifButton type="button" onClick={() => setEssay('')} disabled={isAnalyzing} variant="outline" className="text-xs">
                       Clear draft
                     </SerifButton>
                   )}
@@ -1531,7 +1556,9 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                         <div key={`topic-${index}`} className="space-y-1">
                           <p className="text-base leading-7 font-bold">{item.expression}</p>
                           <p className="text-sm leading-7 text-paper-ink/65">{item.meaningZh}</p>
-                          <p className="text-sm leading-7 text-paper-ink/55">用于：{item.usageZh.replace(/^用于[:：]?/, '')}</p>
+                          {getShortUsageNote(item.usageZh) && (
+                            <p className="text-sm leading-7 text-paper-ink/55">用于：{getShortUsageNote(item.usageZh)}</p>
+                          )}
                         </div>
                       )) : (
                         <p className="text-sm leading-7 text-paper-ink/50">本次没有可稳定提取的话题词。</p>
@@ -1578,6 +1605,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                 <div className="space-y-4">
                   {feedback.sentenceFeedback.map((item, i) => {
                     const visibleMicroUpgrades = getVisibleMicroUpgrades(item);
+                    const visibleTransferGuidance = getVisibleTransferGuidance(item);
                     return (
                     <PaperCard key={i} className="border-l-2 border-l-paper-ink/20">
                       <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">
@@ -1592,8 +1620,12 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                       <div className="text-[17px] font-bold mb-3 leading-8">{item.correction}</div>
                       <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">为什么要改</p>
                       <p className="text-sm leading-7 text-paper-ink-muted bg-paper-ink/5 p-3 rounded mb-3">{item.explanationZh}</p>
-                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
-                      <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">{item.transferGuidanceZh || defaultSentenceTransfer(item)}</p>
+                      {visibleTransferGuidance && (
+                        <>
+                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
+                          <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">{visibleTransferGuidance}</p>
+                        </>
+                      )}
                       {visibleMicroUpgrades.length ? (
                         <div className="mt-3 space-y-2">
                           <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Micro upgrades</p>
@@ -1659,6 +1691,9 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               <h3 className="text-sm font-bold uppercase tracking-widest mb-2">
                 Target Model Answer
               </h3>
+              <p className="text-sm leading-7 text-paper-ink/55 mb-3">
+                高亮处表示范文吸收了上方 Language Bank 表达或关键修改建议。
+              </p>
               <div className="flex flex-wrap gap-2 mb-4 text-[10px] font-sans font-bold uppercase tracking-widest">
                 <span className="border border-paper-ink/10 bg-paper-ink/5 px-2 py-1 rounded-sm text-paper-ink/55">
                   Training estimate {formatBandEstimate(averageWritingScore(feedback))}
@@ -1674,7 +1709,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               )}
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                 {hasSubstantialModelAnswer ? (
-                  <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap max-h-[420px] overflow-auto pr-1">
+                  <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap">
                     {renderAnnotatedModelAnswer(modelAnswerText, modelAnswerAnnotations, modelHighlightTerms)}
                   </div>
                 ) : (

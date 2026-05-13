@@ -115,7 +115,7 @@ const buildWritingLengthWarning = (
   const label = task === 'task1' ? 'Writing Task 1' : 'Writing Task 2';
   if (words >= minimum) return null;
   return {
-    title: words <= 20 ? 'Insufficient sample warning' : 'Essay development warning',
+    title: words <= 20 ? 'Insufficient sample warning' : 'Under-length response',
     messageZh: words <= 20
       ? `${insufficientSampleMessageZh(label, minimum)} Expand this into a complete response before treating the estimate as reliable.`
       : `${label} is under ${minimum} words, so the training estimate is capped. Expand body paragraphs before treating the estimate as reliable.`,
@@ -685,6 +685,11 @@ const isFrameworkLevelIssue = (issue: string, suggestionZh: string, issueType?: 
   return !/provider output was malformed/i.test(text);
 };
 
+const isGlobalEssayWarning = (title: string, message: string): boolean => {
+  const text = `${title} ${message}`.toLowerCase();
+  return /under[- ]?length|under\s*\d+\s*words?|word count|insufficient sample|very low[- ]signal|low[- ]signal|prompt mismatch|off[- ]task|not an essay|only notes|outline|unreliable training estimate|copied prompt|no original answer|fragmented|too fragmented|too short/.test(text);
+};
+
 const defaultParagraphFix = (issue: string, location?: string): string =>
   `先重写${logicLocationZh(location)}的段落功能：用一句清楚的中心句回答题目，再补一个原因和一个具体例子，最后检查该段是否回扣你的总立场。`;
 
@@ -1126,7 +1131,8 @@ const normalizeWritingFeedback = (
         messageZh: asString(record.messageZh ?? record.message, FALLBACK_TEXT, `essayLevelWarnings[${index}].messageZh`, validationErrors),
       };
     })
-    .filter(item => item.messageZh !== FALLBACK_TEXT);
+    .filter(item => item.messageZh !== FALLBACK_TEXT)
+    .filter(item => isGlobalEssayWarning(item.title, item.messageZh));
   const frameworkFeedback = asArray(source.frameworkFeedback, 'frameworkFeedback', validationErrors)
     .map((item, index) => {
       const record = isRecord(item) ? item : {};
