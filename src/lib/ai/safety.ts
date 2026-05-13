@@ -667,10 +667,10 @@ const isFrameworkLevelIssue = (issue: string, suggestionZh: string, issueType?: 
 };
 
 const defaultParagraphFix = (issue: string, location?: string): string =>
-  `先重写 ${location || 'relevant part'} 的段落功能：用一句清楚的中心句回答题目，再补一个原因和一个具体例子，最后检查该段是否回扣你的总立场。`;
+  `先重写${logicLocationZh(location)}的段落功能：用一句清楚的中心句回答题目，再补一个原因和一个具体例子，最后检查该段是否回扣你的总立场。`;
 
-const defaultLogicTransfer = (location?: string): string =>
-  `下次写同类题时，先给 ${location || '这一段'} 写一句“本段任务”，确认它是在回答题目要求，而不是只写一个相关但松散的观点。`;
+const defaultLogicTransfer = (): string =>
+  '下次先判断这一部分的作用：提出立场、承认反方，还是证明主观点。';
 
 const defaultSentenceTransfer = (dimension: WritingFeedback['sentenceFeedback'][number]['dimension'], tag: string): string => {
   const normalized = tag.toLowerCase();
@@ -705,6 +705,31 @@ const normalizeLimitedStringArray = (
 const sameGuidanceText = (a?: string, b?: string): boolean =>
   Boolean(a && b && a.replace(/\s+/g, '').trim() === b.replace(/\s+/g, '').trim());
 
+type LogicLocation = NonNullable<WritingFeedback['frameworkFeedback'][number]['location']>;
+
+const logicLocationLabels: Record<LogicLocation, string> = {
+  'Whole Essay': '整篇文章',
+  Introduction: '开头段',
+  'Body Paragraph 1': '主体段一',
+  'Body Paragraph 2': '主体段二',
+  Conclusion: '结尾段',
+  'Unknown / General': '相关部分',
+};
+
+const logicLocationZh = (location?: string): string =>
+  location && location in logicLocationLabels ? logicLocationLabels[location as LogicLocation] : '相关部分';
+
+const normalizeLearnerChineseText = (text?: string): string =>
+  (text || '')
+    .replace(/\bWhole Essay\b/g, '整篇文章')
+    .replace(/\bIntroduction\b/g, '开头段')
+    .replace(/\bBody Paragraph 1\b/g, '主体段一')
+    .replace(/\bBody Paragraph 2\b/g, '主体段二')
+    .replace(/\bConclusion\b/g, '结尾段')
+    .replace(/\bUnknown \/ General\b/g, '相关部分')
+    .replace(/Paragraph-level issue: no single sentence correction fully solves this\.?/gi, '')
+    .trim();
+
 const phraseLevel = (text: string, maxWords = 7): string => {
   const cleaned = text
     .replace(/[.!?;:]+$/g, '')
@@ -716,60 +741,6 @@ const phraseLevel = (text: string, maxWords = 7): string => {
 
 const isWritingStrategyExpression = (expression: string): boolean =>
   /balanced approach|clear position|support (the )?argument|concrete evidence|paragraph development|topic sentence|task response|coherence|cohesion|rewrite|develop an argument|long-term consequences|public resources/i.test(expression);
-
-const isRemoteWorkQuestion = (question: string): boolean =>
-  /work from home|working from home|remote work|remote working|travelling to an office|traveling to an office|office-based/i.test(question.toLowerCase());
-
-const remoteWorkTopicVocabulary = (): WritingFeedback['vocabularyUpgrade']['topicVocabulary'] => [
-  {
-    expression: 'flexible working arrangements',
-    meaningZh: '灵活办公安排，例如在家办公、弹性时间或混合办公。',
-    usageZh: '用于写远程办公的主要优势，说明员工可以更自主地安排工作地点和时间。',
-    example: 'Flexible working arrangements can make employees more productive.',
-  },
-  {
-    expression: 'work-life balance',
-    meaningZh: '工作与生活之间的平衡。',
-    usageZh: '用于论证远程办公能减少通勤压力、给家庭和个人生活留出更多空间。',
-    example: 'Working from home may improve work-life balance.',
-  },
-  {
-    expression: 'commuting time',
-    meaningZh: '上下班通勤时间。',
-    usageZh: '用于解释在家办公的直接好处：节省时间、降低交通成本和疲劳感。',
-    example: 'Employees can save commuting time and start work with more energy.',
-  },
-  {
-    expression: 'widen the recruitment pool',
-    meaningZh: '扩大招聘范围，让公司可以招到不同地区的人才。',
-    usageZh: '用于写雇主层面的优势，尤其适合说明公司不再只依赖本地员工。',
-    example: 'Remote work can widen the recruitment pool for employers.',
-  },
-  {
-    expression: 'face-to-face communication',
-    meaningZh: '面对面沟通。',
-    usageZh: '用于写远程办公的缺点，例如沟通效率下降、误解增加或协作变慢。',
-    example: 'Some tasks still require face-to-face communication.',
-  },
-  {
-    expression: 'team cohesion',
-    meaningZh: '团队凝聚力。',
-    usageZh: '用于讨论长期远程办公可能削弱同事之间的信任、归属感和协作默契。',
-    example: 'A lack of informal contact may weaken team cohesion.',
-  },
-  {
-    expression: 'professional isolation',
-    meaningZh: '职业上的孤立感。',
-    usageZh: '用于写员工层面的负面影响，尤其是缺少同事支持、反馈和职场连接。',
-    example: 'Remote employees may experience professional isolation.',
-  },
-  {
-    expression: 'blurred work-life boundaries',
-    meaningZh: '工作和生活边界变模糊。',
-    usageZh: '用于写远程办公的反面：员工可能更难下班，压力反而增加。',
-    example: 'Working at home can create blurred work-life boundaries.',
-  },
-];
 
 const normalizeTopicVocabularyItem = (
   item: unknown,
@@ -829,13 +800,13 @@ const normalizeExpressionUpgradeItem = (
     better: phraseLevel(better, 14),
     explanationZh: asString(
       record.explanationZh,
-      original ? '把原文中偏口语或笼统的说法，换成更适合 Task 2 论证的表达。' : '这是本题可复用的论证句架。',
+      '',
       `vocabularyUpgrade.expressionUpgrades[${index}].explanationZh`,
       validationErrors,
     ),
     reuseWhenZh: asString(
       record.reuseWhenZh,
-      original ? '下次遇到相似意思时，优先整块替换原来的泛词。' : '下次需要让步、转折或推进论证时可以套用，但要填入本题具体内容。',
+      '',
       `vocabularyUpgrade.expressionUpgrades[${index}].reuseWhenZh`,
       validationErrors,
     ),
@@ -843,68 +814,21 @@ const normalizeExpressionUpgradeItem = (
   };
 };
 
-const buildFallbackTopicVocabulary = (question: string): WritingFeedback['vocabularyUpgrade']['topicVocabulary'] => {
-  const lower = question.toLowerCase();
-  if (isRemoteWorkQuestion(question)) return remoteWorkTopicVocabulary();
-  if (/educat|student|school|university|subject|academic/.test(lower)) {
-    return [
-      {
-        expression: 'academic autonomy',
-        meaningZh: '学生在学习方向上拥有一定选择权。',
-        usageZh: '用于讨论是否应该允许学生选择专业、课程或学习路径。',
-        example: 'Academic autonomy can increase students\' motivation.',
-      },
-      {
-        expression: 'long-term employability',
-        meaningZh: '长期就业竞争力，而不只是眼前找工作。',
-        usageZh: '用于连接教育选择和未来职业发展。',
-        example: 'Practical subjects may improve long-term employability.',
-      },
-    ];
-  }
-  return [
-    {
-      expression: 'social participation',
-      meaningZh: '社会参与，例如参与公共生活、社区活动或集体事务。',
-      usageZh: '用于社会类题目中讨论个人行为与社会整体之间的关系。',
-      example: 'Social participation can strengthen local communities.',
-    },
-    {
-      expression: 'individual responsibility',
-      meaningZh: '个人责任，强调个人在社会或家庭中的义务。',
-      usageZh: '用于讨论某种选择是否只影响个人，还是会影响他人。',
-      example: 'Individual responsibility is important when personal choices affect others.',
-    },
-  ];
+const languageBankMissionItems = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>): string[] => {
+  const mission = feedback.vocabularyUpgrade.expressionUpgrades.length
+    ? '重写最关键的一个主体段：先完成段落任务，再自然使用 2-3 个上方表达。'
+    : '优先修正上方 Logic Review 指出的主要问题，再检查句子是否清晰。';
+  const firstFix = normalizeLearnerChineseText(feedback.frameworkFeedback[0]?.paragraphFixZh);
+  return sameGuidanceText(mission, firstFix) ? [] : [mission];
 };
-
-const languageBankMissionItems = (question: string): string[] =>
-  isRemoteWorkQuestion(question)
-    ? [
-        '重写 BP2：承认一个远程办公缺点，再解释为什么它没有压过主要优势。',
-        '自然使用 2-3 个高亮表达，不要为了堆词而牺牲句子清晰度。',
-      ]
-    : [
-        '重写一个主体段：先承认一个缺点，再解释为什么它没有压过主要优势。',
-        '自然使用 2-3 个高亮表达，不要为了堆词而牺牲句子清晰度。',
-      ];
-
-const frameHighlightPieces = (frame: string): string[] =>
-  frame
-    .split(/\.\.\.|…/g)
-    .map(piece => piece.replace(/^[,.;:\s]+|[,.;:\s]+$/g, '').trim())
-    .filter(piece => piece.split(/\s+/).length >= 4);
 
 const getLanguageBankHighlightTerms = (vocabulary: WritingFeedback['vocabularyUpgrade']): string[] => {
   const terms = [
     ...vocabulary.topicVocabulary.map(item => item.expression),
-    ...vocabulary.expressionUpgrades.flatMap(item => frameHighlightPieces(item.better)),
-    ...vocabulary.expressionUpgrades
-      .filter(item => !/[.…]{2,}|\.{3}/.test(item.better))
-      .map(item => item.better),
+    ...vocabulary.expressionUpgrades.map(item => item.better),
   ]
     .map(item => item.trim())
-    .filter(item => item.length >= 6);
+    .filter(item => item.length >= 6 && !/\.{3}|…/.test(item));
   return Array.from(new Set(terms.map(item => item.toLowerCase())))
     .map(lower => terms.find(item => item.toLowerCase() === lower) || lower)
     .sort((a, b) => b.length - a.length)
@@ -923,36 +847,13 @@ const markLanguageBankTerms = (text: string, terms: string[]): string => {
   return marked;
 };
 
-const remoteWorkArgumentFrames = (): WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] => [
-  {
-    category: 'argument_frame',
-    better: 'Although ... remains a concern, ...',
-    explanationZh: '用来承认远程办公的缺点，再转向你的判断，适合 outweigh 类题目。',
-    reuseWhenZh: '下次需要先承认一个反方问题，再说明它不是决定性问题时使用。',
-    example: 'Although weaker team cohesion remains a concern, it can be reduced through regular check-ins.',
-  },
-  {
-    category: 'argument_frame',
-    better: 'The main advantage is not simply ..., but ...',
-    explanationZh: '这个句架能把优势写得更深入，避免只停留在“方便”。',
-    reuseWhenZh: '下次想把一个表层优势推进到更深层影响时使用。',
-    example: 'The main advantage is not simply saving time, but giving employees greater control over their working day.',
-  },
-  {
-    category: 'argument_frame',
-    better: 'This can be addressed through ..., so it does not outweigh ...',
-    explanationZh: '适合处理缺点：先给解决方式，再说明该缺点不足以推翻优势。',
-    reuseWhenZh: '下次写 advantages outweigh disadvantages 时，用来压低反方缺点的权重。',
-    example: 'This can be addressed through scheduled meetings, so it does not outweigh the benefits of flexibility.',
-  },
-  {
-    category: 'argument_frame',
-    better: 'In the long run, this may reshape ...',
-    explanationZh: '用于把远程办公的影响从个人层面推进到长期职场变化。',
-    reuseWhenZh: '下次需要写长期趋势、工作模式或社会变化时使用。',
-    example: 'In the long run, this may reshape how companies recruit and manage employees.',
-  },
-];
+const expressionDetailLines = (
+  item: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number],
+): string => [
+  item.explanationZh ? `  - 为什么这样改: ${item.explanationZh}` : '',
+  item.reuseWhenZh ? `  - 什么时候复用: ${item.reuseWhenZh}` : '',
+  item.example ? `  - Example: ${item.example}` : '',
+].filter(Boolean).join('\n');
 
 const buildLocalVocabularyUpgrade = (
   source: Record<string, unknown>,
@@ -966,7 +867,8 @@ const buildLocalVocabularyUpgrade = (
     .filter((item): item is WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number] => Boolean(item));
   const legacyWording = (Array.isArray(vocabSource.userWordingUpgrades) ? vocabSource.userWordingUpgrades : [])
     .map((item, index) => normalizeExpressionUpgradeItem(item, index, validationErrors))
-    .filter((item): item is WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number] => Boolean(item));
+    .filter((item): item is WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number] => Boolean(item))
+    .map(item => ({ ...item, category: 'from_essay' as const, reuseWhenZh: item.reuseWhenZh || '' }));
   const legacyCollocations = (Array.isArray(vocabSource.collocationUpgrades)
     ? normalizeLimitedStringArray(vocabSource.collocationUpgrades, 'vocabularyUpgrade.collocationUpgrades', validationErrors, 2)
     : [])
@@ -974,8 +876,8 @@ const buildLocalVocabularyUpgrade = (
     .map(item => ({
       category: 'argument_frame' as const,
       better: item,
-      explanationZh: '这是比单个词更适合记忆的搭配块。',
-      reuseWhenZh: '下次表达同一话题关系时，可以整块放进句子里。',
+      explanationZh: '',
+      reuseWhenZh: '',
     }));
   const legacyFrames = (Array.isArray(vocabSource.reusableSentenceFrames)
     ? normalizeLimitedStringArray(vocabSource.reusableSentenceFrames, 'vocabularyUpgrade.reusableSentenceFrames', validationErrors, 2)
@@ -983,8 +885,8 @@ const buildLocalVocabularyUpgrade = (
     .map(item => ({
       category: 'argument_frame' as const,
       better: item,
-      explanationZh: '这是 Task 2 论证中可以复用的句架。',
-      reuseWhenZh: '下次需要让步、转折、平衡观点或推进理由时使用。',
+      explanationZh: '',
+      reuseWhenZh: '',
     }));
   const microFromCorrections = sentenceFeedback
     .flatMap(item => item.microUpgrades || [])
@@ -992,51 +894,28 @@ const buildLocalVocabularyUpgrade = (
       category: 'from_essay' as const,
       original: phraseLevel(item.original),
       better: phraseLevel(item.better),
-      explanationZh: item.explanationZh || '把原文中偏口语或笼统的说法，换成更适合 Task 2 论证的短语。',
-      reuseWhenZh: '下次写到相同意思时，直接复用升级后的短语，再补上本题具体内容。',
+      explanationZh: item.explanationZh || '',
+      reuseWhenZh: '',
     }))
     .slice(0, 3);
   const topicWords = (Array.isArray(vocabSource.topicVocabulary) ? vocabSource.topicVocabulary : [])
     .map((item, index) => normalizeTopicVocabularyItem(item, index, validationErrors))
     .filter((item): item is WritingFeedback['vocabularyUpgrade']['topicVocabulary'][number] => Boolean(item))
     .slice(0, 8);
-  const topicVocabulary = (() => {
-    if (!isRemoteWorkQuestion(request.question)) {
-      return topicWords.length ? topicWords : buildFallbackTopicVocabulary(request.question);
-    }
-    const fallback = remoteWorkTopicVocabulary();
-    const merged = [...topicWords, ...fallback.filter(item => !topicWords.some(existing => existing.expression.toLowerCase() === item.expression.toLowerCase()))];
-    return merged.slice(0, 8);
-  })();
+  const topicVocabulary = topicWords;
   const expressionUpgrades = [
     ...expressionFromProvider,
     ...legacyWording,
     ...microFromCorrections,
     ...legacyCollocations,
     ...legacyFrames,
-    ...(isRemoteWorkQuestion(request.question) ? remoteWorkArgumentFrames() : []),
   ]
     .filter((item, index, items) => items.findIndex(candidate => candidate.better.toLowerCase() === item.better.toLowerCase()) === index)
     .slice(0, 8);
 
   return {
     topicVocabulary,
-    expressionUpgrades: expressionUpgrades.length ? expressionUpgrades : [
-      {
-        category: 'from_essay',
-        original: 'study what they want',
-        better: 'pursue subjects they are genuinely interested in',
-        explanationZh: '把泛泛的 want 换成更具体的学习动机表达，更像 Task 2 论证语言。',
-        reuseWhenZh: '下次讨论选择、兴趣、学习动力或职业方向时使用。',
-        example: 'Students should be allowed to pursue subjects they are genuinely interested in.',
-      },
-      {
-        category: 'argument_frame',
-        better: 'This is not to suggest that ..., but the stronger concern is ...',
-        explanationZh: '这是让步后回到自己主观点的论证句架。',
-        reuseWhenZh: '下次题目要求讨论两边观点，而你需要承认一边再强调另一边时使用。',
-      },
-    ],
+    expressionUpgrades,
   };
 };
 
@@ -1065,31 +944,31 @@ const buildWritingTask2Markdown = (feedback: Omit<WritingFeedback, 'obsidianMark
   const vocabularyItems = [
     '### Topic Vocabulary',
     ...(vocabulary.topicVocabulary.length
-      ? vocabulary.topicVocabulary.map(item => `- ${item.expression}\n  - 含义: ${item.meaningZh}\n  - 用法: ${item.usageZh}${item.example ? `\n  - Example: ${item.example}` : ''}`)
+      ? vocabulary.topicVocabulary.map(item => `- ${item.expression}\n  - 含义: ${item.meaningZh}\n  - 用于: ${item.usageZh.replace(/^用于[:：]?/, '')}${item.example ? `\n  - Example: ${item.example}` : ''}`)
       : ['- No topic vocabulary returned.']),
     '',
     '### Expression Upgrade',
     '',
     '#### From Your Essay',
     ...(fromEssayUpgrades.length
-      ? fromEssayUpgrades.map(item => `- ${item.original ? `${item.original} -> ` : ''}${item.better}\n  - 为什么这样改: ${item.explanationZh}\n  - 什么时候复用: ${item.reuseWhenZh}${item.example ? `\n  - Example: ${item.example}` : ''}`)
+      ? fromEssayUpgrades.map(item => `- ${item.original ? `${item.original} -> ` : ''}${item.better}${expressionDetailLines(item) ? `\n${expressionDetailLines(item)}` : ''}`)
       : ['- No phrase-level upgrade from this essay.']),
     '',
     '#### Reusable Argument Frames',
     ...(argumentFrames.length
-      ? argumentFrames.map(item => `- ${item.better}\n  - 为什么这样改: ${item.explanationZh}\n  - 什么时候复用: ${item.reuseWhenZh}${item.example ? `\n  - Example: ${item.example}` : ''}`)
+      ? argumentFrames.map(item => `- ${item.better}${expressionDetailLines(item) ? `\n${expressionDetailLines(item)}` : ''}`)
       : ['- No expression upgrade returned.']),
   ].join('\n');
-  const missionItems = languageBankMissionItems(feedback.question);
+  const missionItems = languageBankMissionItems(feedback);
   const highlightedModelAnswer = markLanguageBankTerms(feedback.modelAnswer, getLanguageBankHighlightTerms(vocabulary));
   const logicItems = feedback.frameworkFeedback.length
     ? feedback.frameworkFeedback.map((item, index) => {
         const related = item.relatedCorrectionIds?.length
           ? item.relatedCorrectionIds.map(id => `Correction #${id.replace(/^C/i, '')}`).join(', ')
           : 'Paragraph-level revision';
-        return `### ${index + 1}. ${item.location || 'Unknown / General'} - ${item.issue}
-- 这篇怎么改: ${item.paragraphFixZh || defaultParagraphFix(item.issue, item.location)}
-- 下次自查: ${item.transferGuidanceZh || defaultLogicTransfer(item.location)}
+        return `### ${index + 1}. ${logicLocationZh(item.location)} - ${item.issue}
+- 这篇怎么改: ${normalizeLearnerChineseText(item.paragraphFixZh) || defaultParagraphFix(item.issue, item.location)}
+- 下次自查: ${normalizeLearnerChineseText(item.transferGuidanceZh) || defaultLogicTransfer()}
 - Related: ${related}${item.exampleFrame ? `\n- Example frame: ${item.exampleFrame}` : ''}`;
       }).join('\n\n')
     : '- No logic-level issue returned.';
@@ -1163,7 +1042,13 @@ const normalizeWritingFeedback = (
       id: normalizeCorrectionId(record.id ?? record.correctionNumber, index),
       correctionNumber: index + 1,
       paragraph: typeof record.paragraph === 'string' && record.paragraph.trim() ? record.paragraph.trim() : undefined,
+      sourceQuote: typeof record.sourceQuote === 'string' && record.sourceQuote.trim()
+        ? record.sourceQuote.trim()
+        : typeof record.original === 'string' && record.original.trim()
+          ? record.original.trim()
+          : undefined,
       issueType: typeof record.issueType === 'string' && record.issueType.trim() ? record.issueType.trim() : undefined,
+      severity: normalizeSeverity(record.severity, `sentenceFeedback[${index}].severity`, validationErrors),
       primaryIssue,
       secondaryIssues: normalizeSecondaryIssues(record.secondaryIssues, primaryIssue),
       microUpgrades: normalizeMicroUpgrades(record.microUpgrades),
@@ -1223,7 +1108,7 @@ const normalizeWritingFeedback = (
         && !sameGuidanceText(rawTransferGuidance, suggestionZh)
         && !sameGuidanceText(rawTransferGuidance, paragraphFixZh)
         ? rawTransferGuidance
-        : defaultLogicTransfer(location);
+        : defaultLogicTransfer();
       return {
         issue,
         suggestionZh,
@@ -1235,7 +1120,7 @@ const normalizeWritingFeedback = (
         exampleFrame: typeof record.exampleFrame === 'string' && record.exampleFrame.trim()
           ? record.exampleFrame.trim()
           : defaultExampleFrame(issue),
-        transferGuidanceZh: normalizeTransferGuidance(transferGuidanceZh, defaultLogicTransfer(location)),
+        transferGuidanceZh: normalizeTransferGuidance(transferGuidanceZh, defaultLogicTransfer()),
       };
     })
     .filter(item => !/under-length|insufficient sample|extremely insufficient/i.test(item.issue))

@@ -146,6 +146,116 @@ const asStringArray = (value: unknown) =>
 
 const asRequiredStringArray = (value: unknown) => asStringArray(value) || [];
 
+const phraseLevel = (text: string, maxWords = 14) => {
+  const cleaned = text.replace(/[.!?;:]+$/g, '').replace(/\s+/g, ' ').trim();
+  const words = cleaned.split(' ').filter(Boolean);
+  return words.length <= maxWords ? cleaned : words.slice(0, maxWords).join(' ');
+};
+
+const sanitizeTask2TopicVocabulary = (value: unknown): WritingFeedback['vocabularyUpgrade']['topicVocabulary'] =>
+  Array.isArray(value)
+    ? value.map((item): WritingFeedback['vocabularyUpgrade']['topicVocabulary'][number] | null => {
+      if (typeof item === 'string') {
+        const expression = phraseLevel(item, 8);
+        return expression ? { expression, meaningZh: '', usageZh: '' } : null;
+      }
+      if (!isObject(item)) return null;
+      const expression = phraseLevel(asString(item.expression ?? item.term ?? item.phrase), 8);
+      if (!expression) return null;
+      return {
+        expression,
+        meaningZh: asString(item.meaningZh ?? item.meaning),
+        usageZh: asString(item.usageZh ?? item.usage ?? item.explanationZh),
+        example: asOptionalString(item.example),
+      };
+    }).filter((item): item is WritingFeedback['vocabularyUpgrade']['topicVocabulary'][number] => Boolean(item))
+    : [];
+
+const sanitizeTask2ExpressionUpgrade = (
+  item: unknown,
+  categoryFallback?: 'from_essay' | 'argument_frame',
+): WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number] | null => {
+  if (typeof item === 'string') {
+    const better = phraseLevel(item);
+    return better ? { category: categoryFallback || 'argument_frame', better, explanationZh: '', reuseWhenZh: '' } : null;
+  }
+  if (!isObject(item)) return null;
+  const original = phraseLevel(asString(item.original), 7);
+  const better = phraseLevel(asString(item.better ?? item.frame ?? item.expression));
+  if (!better) return null;
+  return {
+    category: item.category === 'from_essay' || item.type === 'from_essay' || original
+      ? 'from_essay'
+      : categoryFallback || 'argument_frame',
+    original: original || undefined,
+    better,
+    explanationZh: asString(item.explanationZh),
+    reuseWhenZh: asString(item.reuseWhenZh),
+    example: asOptionalString(item.example),
+  };
+};
+
+const sanitizeWritingTask2Feedback = (value: unknown): WritingFeedback | undefined => {
+  if (!isObject(value)) return undefined;
+  const scores = isObject(value.scores) ? value.scores : {};
+  const vocabularySource = isObject(value.vocabularyUpgrade) ? value.vocabularyUpgrade : {};
+  const expressionUpgrades = [
+    ...(Array.isArray(vocabularySource.expressionUpgrades) ? vocabularySource.expressionUpgrades : [])
+      .map(item => sanitizeTask2ExpressionUpgrade(item)),
+    ...(Array.isArray(vocabularySource.userWordingUpgrades) ? vocabularySource.userWordingUpgrades : [])
+      .map(item => sanitizeTask2ExpressionUpgrade(item, 'from_essay')),
+    ...(Array.isArray(vocabularySource.collocationUpgrades) ? vocabularySource.collocationUpgrades : [])
+      .map(item => sanitizeTask2ExpressionUpgrade(item, 'argument_frame')),
+    ...(Array.isArray(vocabularySource.reusableSentenceFrames) ? vocabularySource.reusableSentenceFrames : [])
+      .map(item => sanitizeTask2ExpressionUpgrade(item, 'argument_frame')),
+  ]
+    .filter((item): item is WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number] => Boolean(item))
+    .filter((item, index, items) => items.findIndex(candidate => candidate.better.toLowerCase() === item.better.toLowerCase()) === index);
+
+  return {
+    ...(value as Partial<WritingFeedback>),
+    mode: 'practice',
+    module: 'writing',
+    task: 'task2',
+    question: asString(value.question),
+    essay: asString(value.essay),
+    scores: {
+      taskResponse: typeof scores.taskResponse === 'number' ? scores.taskResponse : 0,
+      coherenceCohesion: typeof scores.coherenceCohesion === 'number' ? scores.coherenceCohesion : 0,
+      lexicalResource: typeof scores.lexicalResource === 'number' ? scores.lexicalResource : 0,
+      grammaticalRangeAccuracy: typeof scores.grammaticalRangeAccuracy === 'number' ? scores.grammaticalRangeAccuracy : 0,
+    },
+    frameworkFeedback: Array.isArray(value.frameworkFeedback) ? value.frameworkFeedback as WritingFeedback['frameworkFeedback'] : [],
+    essayLevelWarnings: Array.isArray(value.essayLevelWarnings) ? value.essayLevelWarnings as WritingFeedback['essayLevelWarnings'] : [],
+    sentenceFeedback: Array.isArray(value.sentenceFeedback)
+      ? value.sentenceFeedback.filter(isObject).map((item, index): WritingFeedback['sentenceFeedback'][number] => ({
+        ...(item as Partial<WritingFeedback['sentenceFeedback'][number]>),
+        id: asString(item.id, `C${index + 1}`),
+        correctionNumber: typeof item.correctionNumber === 'number' ? item.correctionNumber : index + 1,
+        paragraph: asOptionalString(item.paragraph),
+        sourceQuote: asString(item.sourceQuote, asString(item.original)) || undefined,
+        issueType: asOptionalString(item.issueType),
+        severity: item.severity === 'fatal' || item.severity === 'preserved' || item.severity === 'naturalness' ? item.severity : undefined,
+        original: asString(item.original),
+        correction: asString(item.correction),
+        dimension: item.dimension === 'TR' || item.dimension === 'CC' || item.dimension === 'LR' || item.dimension === 'GRA' ? item.dimension : 'GRA',
+        tag: asString(item.tag, 'provider_safety'),
+        explanationZh: asString(item.explanationZh),
+        microUpgrades: Array.isArray(item.microUpgrades) ? item.microUpgrades as WritingFeedback['sentenceFeedback'][number]['microUpgrades'] : [],
+      }))
+      : [],
+    vocabularyUpgrade: {
+      topicVocabulary: sanitizeTask2TopicVocabulary(vocabularySource.topicVocabulary),
+      expressionUpgrades,
+    },
+    modelAnswer: asString(value.modelAnswer),
+    modelAnswerPersonalized: Boolean(value.modelAnswerPersonalized),
+    modelAnswerTargetLevel: asOptionalString(value.modelAnswerTargetLevel),
+    reusableArguments: Array.isArray(value.reusableArguments) ? value.reusableArguments as WritingFeedback['reusableArguments'] : [],
+    obsidianMarkdown: asString(value.obsidianMarkdown),
+  };
+};
+
 const asTask1QuickPlan = (value: unknown): WritingTask1QuickPlan => {
   const source = isObject(value) ? value : {};
   return {
@@ -256,6 +366,7 @@ const sanitizeWritingTask2Record = (value: unknown): WritingTask2PracticeRecord 
       ? value.latestFrameworkCoach as unknown as WritingFrameworkCoachFeedback
       : undefined,
     essay: asString(value.essay),
+    feedback: sanitizeWritingTask2Feedback(value.feedback),
     feedbackFallbackUsed: Boolean(value.feedbackFallbackUsed),
   };
 };

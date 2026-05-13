@@ -122,6 +122,8 @@ export class MockProvider implements AIProvider {
       : isUnderLength
         ? '文章低于 250 词，训练估计会保守处理。请补足论点展开、例子和结论。'
         : '结构基本完整；下一步重点检查立场、段落推进和例证质量。';
+    // Mock/demo fixture only: production topic vocabulary must come from real provider output,
+    // not from UI or safety-layer keyword rules.
     const isRemoteWorkPrompt = /work from home|remote work|travelling to an office|traveling to an office/i.test(params.question);
 
     return {

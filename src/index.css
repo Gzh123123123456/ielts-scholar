@@ -139,6 +139,15 @@
   @apply text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70 border border-accent-terracotta/15 rounded-sm px-2 py-0.5;
 }
 
+.language-bank-mark {
+  background: rgba(166, 77, 50, 0.09);
+  border-bottom: 1px solid rgba(166, 77, 50, 0.26);
+  border-radius: 0.18rem;
+  color: inherit;
+  padding: 0.02em 0.16em;
+  line-height: inherit;
+}
+
 .ink-link {
   @apply text-accent-terracotta hover:underline font-medium;
 }

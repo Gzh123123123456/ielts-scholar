@@ -113,7 +113,9 @@ export interface WritingFeedback {
     id?: string;
     correctionNumber?: number;
     paragraph?: string;
+    sourceQuote?: string;
     issueType?: string;
+    severity?: 'fatal' | 'naturalness' | 'preserved';
     primaryIssue?: string;
     secondaryIssues?: string[];
     microUpgrades?: {
