@@ -206,34 +206,94 @@ const groupedLogicFeedback = (items: WritingFeedback['frameworkFeedback']) =>
 
 const getVocabularyUpgrade = (feedback: WritingFeedback) => {
   const empty = {
-    topicVocabulary: [] as string[],
-    userWordingUpgrades: [] as WritingFeedback['vocabularyUpgrade']['userWordingUpgrades'],
-    collocationUpgrades: [] as string[],
-    reusableSentenceFrames: [] as string[],
+    topicVocabulary: [] as WritingFeedback['vocabularyUpgrade']['topicVocabulary'],
+    expressionUpgrades: [] as WritingFeedback['vocabularyUpgrade']['expressionUpgrades'],
   };
-  const upgrade = feedback.vocabularyUpgrade || empty;
-  const lrCorrections = feedback.sentenceFeedback
+  const upgrade = (feedback.vocabularyUpgrade || empty) as WritingFeedback['vocabularyUpgrade'] & {
+    userWordingUpgrades?: { original: string; better: string; explanationZh: string }[];
+    collocationUpgrades?: string[];
+    reusableSentenceFrames?: string[];
+  };
+  const topicVocabulary = (upgrade.topicVocabulary || [])
+    .map((item: unknown) => {
+      if (typeof item === 'string') {
+        return {
+          expression: item,
+          meaningZh: '本题语境中的可复用话题词。',
+          usageZh: '用于讨论题目中的具体对象或影响，不要当成万能作文套话。',
+        };
+      }
+      if (item && typeof item === 'object' && 'expression' in item) {
+        return item as WritingFeedback['vocabularyUpgrade']['topicVocabulary'][number];
+      }
+      return null;
+    })
+    .filter((item): item is WritingFeedback['vocabularyUpgrade']['topicVocabulary'][number] => Boolean(item));
+  const lrCorrections: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] = feedback.sentenceFeedback
     .filter(item => item.dimension === 'LR')
     .flatMap(item => item.microUpgrades?.length
-      ? item.microUpgrades
+      ? item.microUpgrades.map(upgradeItem => ({
+          original: upgradeItem.original,
+          better: upgradeItem.better,
+          explanationZh: upgradeItem.explanationZh,
+          reuseWhenZh: '下次写到相同意思时，直接复用升级后的短语，再补上本题具体内容。',
+        }))
       : [{
           original: shortenPhrase(item.original),
           better: shortenPhrase(item.correction),
-          explanationZh: '短语级升级，避免重复完整句子修改。',
+          explanationZh: '把原文里比较口语或笼统的说法，换成更适合 Task 2 论证的短语。',
+          reuseWhenZh: '下次表达同一意思时，先替换关键词组，再检查句子是否推进论点。',
         }]);
+  const legacyWording: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] = (upgrade.userWordingUpgrades || []).map(item => ({
+    original: item.original,
+    better: item.better,
+    explanationZh: item.explanationZh,
+    reuseWhenZh: '下次遇到相似意思时，优先整块替换原来的泛词。',
+  }));
+  const legacyCollocations: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] = (upgrade.collocationUpgrades || []).map(item => ({
+    better: item,
+    explanationZh: '这是比单个词更适合记忆的搭配块。',
+    reuseWhenZh: '下次表达同一话题关系时，可以整块放进句子里。',
+  }));
+  const legacyFrames: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] = (upgrade.reusableSentenceFrames || []).map(item => ({
+    better: item,
+    explanationZh: '这是 Task 2 论证中可以复用的句架。',
+    reuseWhenZh: '下次需要让步、转折、平衡观点或推进理由时使用。',
+  }));
+  const expressionUpgrades: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'] = [
+    ...(upgrade.expressionUpgrades || []),
+    ...legacyWording,
+    ...lrCorrections,
+    ...legacyCollocations,
+    ...legacyFrames,
+  ]
+    .map(item => ({
+      ...item,
+      original: item.original ? phraseLevel(item.original) : undefined,
+      better: phraseLevel(item.better, 14),
+    }))
+    .slice(0, 5);
   return {
-    topicVocabulary: (upgrade.topicVocabulary?.length ? upgrade.topicVocabulary : ['a balanced approach', 'long-term consequence']).slice(0, 2),
-    userWordingUpgrades: [...(upgrade.userWordingUpgrades || []), ...lrCorrections]
-      .map(item => ({
-        ...item,
-        original: phraseLevel(item.original),
-        better: phraseLevel(item.better),
-      }))
-      .slice(0, 2),
-    collocationUpgrades: (upgrade.collocationUpgrades?.length ? upgrade.collocationUpgrades : ['develop a clear position', 'support the argument with concrete evidence']).slice(0, 2),
-    reusableSentenceFrames: (upgrade.reusableSentenceFrames?.length ? upgrade.reusableSentenceFrames : ['This is not to suggest that ..., but ...', 'A more balanced view is that ...']).slice(0, 2),
+    topicVocabulary: (topicVocabulary.length ? topicVocabulary : [
+      {
+        expression: 'long-term consequences',
+        meaningZh: '长期后果或影响。',
+        usageZh: '用于把观点从眼前现象推进到更深层影响。',
+      },
+      {
+        expression: 'public resources',
+        meaningZh: '公共资源，例如时间、资金、空间或政策支持。',
+        usageZh: '用于社会、政府、城市、教育类题目中讨论资源分配。',
+      },
+    ]).slice(0, 3),
+    expressionUpgrades,
   };
 };
+
+const getLanguageBankMission = (vocabulary: ReturnType<typeof getVocabularyUpgrade>) => [
+  ...vocabulary.topicVocabulary.slice(0, 2).map(item => `在修改稿中使用 "${item.expression}"：${item.usageZh}`),
+  ...vocabulary.expressionUpgrades.slice(0, 3).map(item => `尝试使用 "${item.better}"：${item.reuseWhenZh}`),
+].slice(0, 4);
 
 const routeNotice = (
   route: { providerName: string; fallbackReason?: string; learnerReason: string },
@@ -702,21 +762,16 @@ export default function WritingTask2Practice() {
     const warnings = getEssayWarnings(feedback, isInsufficientTask2Sample(essay));
     const logicFeedback = getLogicFeedback(feedback);
     const vocabulary = getVocabularyUpgrade(feedback);
+    const missionItems = getLanguageBankMission(vocabulary);
     const targetLevel = getTargetModelLevel(feedback);
     const warningItems = warnings.length
       ? warnings.map(item => `- ${item.title}: ${item.messageZh}`).join('\n')
       : '- No essay-level warning.';
     const vocabularyItems = `### Topic Vocabulary
-${vocabulary.topicVocabulary.length ? vocabulary.topicVocabulary.map(item => `- ${item}`).join('\n') : '- No topic vocabulary returned.'}
+${vocabulary.topicVocabulary.length ? vocabulary.topicVocabulary.map(item => `- ${item.expression}\n  - 含义: ${item.meaningZh}\n  - 用法: ${item.usageZh}${item.example ? `\n  - Example: ${item.example}` : ''}`).join('\n') : '- No topic vocabulary returned.'}
 
-### From Your Essay
-${vocabulary.userWordingUpgrades.length ? vocabulary.userWordingUpgrades.map(item => `- ${item.original} -> ${item.better}\n  - ${item.explanationZh}`).join('\n') : '- No phrase-level wording upgrade returned.'}
-
-### Collocations
-${vocabulary.collocationUpgrades.length ? vocabulary.collocationUpgrades.map(item => `- ${item}`).join('\n') : '- No collocation returned.'}
-
-### Argument Frames
-${vocabulary.reusableSentenceFrames.length ? vocabulary.reusableSentenceFrames.map(item => `- ${item}`).join('\n') : '- No argument frame returned.'}`;
+### Expression Upgrade
+${vocabulary.expressionUpgrades.length ? vocabulary.expressionUpgrades.map(item => `- ${item.original ? `${item.original} -> ` : ''}${item.better}\n  - 为什么这样改: ${item.explanationZh}\n  - 什么时候复用: ${item.reuseWhenZh}${item.example ? `\n  - Example: ${item.example}` : ''}`).join('\n') : '- No expression upgrade returned.'}`;
     const logicItems = logicFeedback.length
       ? logicFeedback.map((item, index) => {
           const related = item.relatedCorrectionIds?.length
@@ -754,7 +809,7 @@ ${feedback.essay}
 ## Essay-level Warnings
 ${warningItems}
 
-## Vocabulary & Expression Upgrade
+## Language Bank
 ${vocabularyItems}
 
 ## Logic & Structure Review
@@ -766,6 +821,9 @@ ${sentenceItems}
 ## Target Model Excerpt / Revision Mission
 - Training estimate: ${formatBandEstimate(averageWritingScore(feedback))}
 - Target level: ${targetLevel}
+
+### Revision Mission
+${missionItems.length ? missionItems.map(item => `- ${item}`).join('\n') : '- 下次修改时至少主动使用两个 Language Bank 表达。'}
 
 ${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPersonalized ? '\n\nThis excerpt keeps your original position and fixes the main issues above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}`;
     const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
@@ -787,6 +845,7 @@ ${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPers
   const logicFeedback = feedback ? getLogicFeedback(feedback) : [];
   const logicGroups = feedback ? groupedLogicFeedback(logicFeedback) : [];
   const vocabularyUpgrade = feedback ? getVocabularyUpgrade(feedback) : null;
+  const revisionMission = vocabularyUpgrade ? getLanguageBankMission(vocabularyUpgrade) : [];
 
   return (
     <PageShell size="wide">
@@ -1024,35 +1083,30 @@ ${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPers
 
             {vocabularyUpgrade && (
               <section>
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Vocabulary & Expression Upgrade</h3>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Language Bank</h3>
                 <PaperCard className="bg-paper-ink/[0.02]">
                   <div className="grid gap-5 md:grid-cols-2">
                     <div className="space-y-3">
                       <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Topic Vocabulary</p>
                       {vocabularyUpgrade.topicVocabulary.map((item, index) => (
-                        <p key={`topic-${index}`} className="text-base leading-7 text-paper-ink/75">{item}</p>
-                      ))}
-                    </div>
-                    <div className="space-y-3">
-                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">From Your Essay</p>
-                      {vocabularyUpgrade.userWordingUpgrades.map((item, index) => (
-                        <div key={`wording-${index}`}>
-                          <p className="text-sm leading-7 text-paper-ink/55 line-through">{item.original}</p>
-                          <p className="text-base leading-7 font-bold">{item.better}</p>
-                          <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
+                        <div key={`topic-${index}`} className="space-y-1">
+                          <p className="text-base leading-7 font-bold">{item.expression}</p>
+                          <p className="text-sm leading-7 text-paper-ink/65">{item.meaningZh}</p>
+                          <p className="text-sm leading-7 text-paper-ink/55">{item.usageZh}</p>
+                          {item.example && <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm px-3 py-2">{item.example}</p>}
                         </div>
                       ))}
                     </div>
                     <div className="space-y-3">
-                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Collocations</p>
-                      {vocabularyUpgrade.collocationUpgrades.map((item, index) => (
-                        <p key={`collocation-${index}`} className="text-base leading-7 text-paper-ink/75">{item}</p>
-                      ))}
-                    </div>
-                    <div className="space-y-3">
-                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Argument Frames</p>
-                      {vocabularyUpgrade.reusableSentenceFrames.map((item, index) => (
-                        <p key={`frame-${index}`} className="text-base leading-7 text-paper-ink/75">{item}</p>
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Expression Upgrade</p>
+                      {vocabularyUpgrade.expressionUpgrades.map((item, index) => (
+                        <div key={`expression-${index}`} className="space-y-1">
+                          {item.original && <p className="text-sm leading-7 text-paper-ink/55 line-through">{item.original}</p>}
+                          <p className="text-base leading-7 font-bold">{item.better}</p>
+                          <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
+                          <p className="text-sm leading-7 text-paper-ink/55">{item.reuseWhenZh}</p>
+                          {item.example && <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm px-3 py-2">{item.example}</p>}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -1178,8 +1232,18 @@ ${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPers
               </div>
               {hasSubstantialModelAnswer && isPersonalizedModelAnswer && (
                 <p className="text-sm leading-7 text-paper-ink/60 mb-4">
-                  这段保留你的原始立场和主要思路，只把上面的逻辑、句子和表达问题集中修好。
+                  这段保留你的原始立场和主要思路，并示范复用上面的 Language Bank 表达。
                 </p>
+              )}
+              {revisionMission.length > 0 && (
+                <div className="mb-4 rounded-sm border border-paper-ink/10 bg-paper-50/70 p-3">
+                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">Revision Mission</p>
+                  <ul className="space-y-1 text-sm leading-7 text-paper-ink/70">
+                    {revisionMission.map(item => (
+                      <li key={item}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                 {hasSubstantialModelAnswer ? (

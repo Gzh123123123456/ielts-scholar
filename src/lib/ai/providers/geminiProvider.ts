@@ -66,10 +66,8 @@ export const writingSchemaInstruction = `The JSON object must match this exact k
     "explanationZh": "string"
   }],
   "vocabularyUpgrade": {
-    "topicVocabulary": ["string"],
-    "userWordingUpgrades": [{ "original": "string", "better": "string", "explanationZh": "string" }],
-    "collocationUpgrades": ["string"],
-    "reusableSentenceFrames": ["string"]
+    "topicVocabulary": [{ "expression": "string", "meaningZh": "string", "usageZh": "string", "example": "string" }],
+    "expressionUpgrades": [{ "original": "string", "better": "string", "explanationZh": "string", "reuseWhenZh": "string", "example": "string" }]
   },
   "modelAnswer": "string",
   "modelAnswerPersonalized": true,
@@ -240,22 +238,16 @@ Set "task" to the exact input task value. For this V1 flow it is normally "task2
 Separate big-picture task response / paragraph logic problems from sentence-level corrections.
 Return essayLevelWarnings separately for global warnings only: under-length response, insufficient sample, unreliable training estimate. Do not put these in frameworkFeedback.
 Use sentenceFeedback for direct local sentence corrections only. Give every sentence correction a stable id like C1, C2, C3.
-For each sentenceFeedback item include primaryIssue and secondaryIssues for internal structure, but assume the UI will show them as an ordered issue list, not as Primary/Secondary labels.
-Capture all meaningful local problems in a sentence, including spelling, capitalization, articles, singular/plural, punctuation, sentence boundary, preposition, collocation, word choice, grammar, clarity, logic, and task response. Do not skip minor errors just because a larger issue exists in the same sentence.
-Use microUpgrades for small reusable phrase fixes, and transferGuidanceZh for a next-time self-check rule in natural Chinese.
+For sentenceFeedback, include primaryIssue, secondaryIssues, microUpgrades, and transferGuidanceZh when they help the learner revise.
 Use frameworkFeedback for Logic & Structure Review only: task response, off-topic or irrelevant opening, missing advantage/disadvantage coverage, weak position, missing paragraph development, paragraph order/structure, lack of examples/support.
 Do not put pure lexical, grammar, or local wording issues into frameworkFeedback unless they directly affect task response or structure.
 Use the supplied frameworkNotes and finalFrameworkSummary when available. Compare the plan with the essay, and point out where the essay failed to deliver the planned position, paragraph role, example, concession, or balance.
-For each frameworkFeedback item, include relatedCorrectionIds when a sentence correction supports the same issue.
-Link logic issues accurately: irrelevant/off-topic introductions link to introduction/task-response corrections; missing advantages/disadvantages link to concession/balance/body corrections; weak position links to thesis or conclusion corrections.
-If no sentence correction covers the logic issue, leave relatedCorrectionIds empty and include paragraphFixZh plus one optional English exampleFrame.
-For every frameworkFeedback item include location, issueType, suggestionZh as whyItMattersZh, paragraphFixZh, relatedCorrectionIds, exampleFrame, and transferGuidanceZh.
-Logic feedback must sound like a Chinese IELTS teacher: paragraph-specific, direct, and practical. Explain what is wrong, why it hurts IELTS score, what to add/remove/rewrite, and how to avoid the pattern in similar future tasks. Avoid generic advice such as "rewrite around one clear idea."
+For frameworkFeedback, keep three Chinese roles distinct: suggestionZh = why this affects IELTS score; paragraphFixZh = how to revise this essay; transferGuidanceZh = how to avoid the pattern next time.
+Include relatedCorrectionIds when a sentence correction supports the same logic issue; otherwise leave it empty and give paragraph-level guidance.
 Avoid duplicating full sentence correction text inside frameworkFeedback.
-Return vocabularyUpgrade as a compact learning bank with 4-8 total items across topicVocabulary, userWordingUpgrades, collocationUpgrades, and reusableSentenceFrames. Keep these exact learner groups: Topic Vocabulary, From Your Essay, Collocations, Argument Frames.
-Vocabulary may reuse problems found in sentence corrections, but convert them into reusable expression patterns, habit fixes, and transfer guidance. Do not duplicate full sentence correction pairs. userWordingUpgrades must be phrase-level, not whole copied sentences. Normal relevant essays should not receive an empty vocabularyUpgrade.
+Return vocabularyUpgrade as a two-part Language Bank. topicVocabulary contains only topic-specific words/collocations/phrases, each with Chinese meaningZh and usageZh. expressionUpgrades contains learner phrase upgrades and reusable Task 2 argument frames, each with explanationZh and reuseWhenZh. Do not put writing-strategy advice in topicVocabulary.
 Choose modelAnswerTargetLevel from the current training estimate: <=5.5 means "Target Band 7.0 excerpt"; 6.0-6.5 means "Target Band 7.5 excerpt"; 7.0 means "Target Band 7.5-8.0 excerpt"; 7.5+ means "Examiner-friendly refinement".
-The modelAnswer field must be a personalized target excerpt: preserve the user's position and main ideas when possible, use the provided framework notes/summary, fix the logic/sentence/vocabulary issues above, and match modelAnswerTargetLevel. Do not produce a generic Band 9 essay or introduce many new arguments. Set modelAnswerPersonalized to true only when the excerpt uses the user's essay/framework context; otherwise false.
+The modelAnswer field must be a personalized target excerpt that preserves the user's position, fixes the main issues, and visibly reuses several Language Bank items. Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
 
 ${writingSchemaInstruction}
 

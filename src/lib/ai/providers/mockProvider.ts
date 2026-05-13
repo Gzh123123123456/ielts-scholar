@@ -139,7 +139,9 @@ export class MockProvider implements AIProvider {
       frameworkFeedback: [
         {
           issue: 'Framework needs sharper development',
-          suggestionZh: lengthNote,
+          suggestionZh: isUnderLength
+            ? '字数和段落展开不足时，考官很难看到完整立场、论证链和例证，因此 Task Response 和 Coherence 都会被保守评估。'
+            : '主体段如果只停留在判断句，缺少原因和例子，Task Response 会显得论证不充分，Coherence 也会缺少推进感。',
           severity: isUnderLength ? 'fatal' : 'naturalness',
           location: 'Whole Essay',
           issueType: 'paragraph_development',
@@ -160,7 +162,7 @@ export class MockProvider implements AIProvider {
             {
               original: 'study what they want',
               better: 'pursue subjects they are genuinely interested in',
-              explanationZh: '短语级升级，比完整句子替换更容易复用。',
+              explanationZh: '把 want 这种泛词换成更具体的学习动机表达，后面更容易接原因和例子。',
             },
           ],
           transferGuidanceZh: '下次遇到 want / good / bad 这类泛词，先换成更具体的学术短语，再检查这句话是否已经回应题目立场。',
@@ -197,20 +199,44 @@ export class MockProvider implements AIProvider {
         },
       ],
       vocabularyUpgrade: {
-        topicVocabulary: ['academic autonomy', 'long-term employability'],
-        userWordingUpgrades: [
+        topicVocabulary: [
+          {
+            expression: 'academic autonomy',
+            meaningZh: '学生在学习方向上拥有一定选择权。',
+            usageZh: '用于讨论是否应该允许学生选择课程、专业或学习路径。',
+            example: 'Academic autonomy can make students more responsible for their learning.',
+          },
+          {
+            expression: 'long-term employability',
+            meaningZh: '长期就业竞争力，而不只是眼前找工作。',
+            usageZh: '用于把教育选择和未来职业发展连接起来。',
+            example: 'Practical subjects can improve students\' long-term employability.',
+          },
+        ],
+        expressionUpgrades: [
           {
             original: 'study what they want',
             better: 'pursue subjects they are genuinely interested in',
-            explanationZh: 'This is more precise for education Task 2 topics than the vague phrase what they want.',
+            explanationZh: '原表达意思能懂，但比较口语、范围太宽；升级后更适合教育类议论文。',
+            reuseWhenZh: '下次讨论兴趣、选课、学习动力或个人发展时使用。',
+            example: 'Students who pursue subjects they are genuinely interested in are more likely to study consistently.',
+          },
+          {
+            better: 'This is not to suggest that ..., but the stronger concern is ...',
+            explanationZh: '这是让步后回到自己主观点的句架，能避免两边观点松散并列。',
+            reuseWhenZh: '下次题目要求讨论两种看法，而你需要承认一边再强调自己的立场时使用。',
+            example: 'This is not to suggest that career prospects are irrelevant, but the stronger concern is whether students can sustain their motivation.',
+          },
+          {
+            better: 'connect personal interests with realistic career pathways',
+            explanationZh: '把“兴趣”和“就业”连接成一个更成熟的折中观点。',
+            reuseWhenZh: '下次教育、职业、专业选择类题目需要提出平衡方案时使用。',
           },
         ],
-        collocationUpgrades: ['develop a clear career pathway', 'make an informed academic choice'],
-        reusableSentenceFrames: ['This is not to suggest that ..., but ...', 'A more balanced approach would be to ...'],
       },
       modelAnswer: isUnderLength
-        ? 'This sample is too short for a high training estimate. A complete response should state a clear position, develop two body paragraphs with specific reasoning, and finish with a concise conclusion.'
-        : `Based on your framework, a stronger version would keep the same position but make the paragraph logic more explicit: individuals should have room to pursue subjects they are genuinely interested in, because motivation often leads to deeper learning and better long-term performance. This does not mean practical value should be ignored; rather, schools can guide students to connect personal interests with realistic career pathways.`,
+        ? 'A stronger revision could keep your position but expand it like this: students should have some academic autonomy because choosing subjects they are genuinely interested in can improve motivation and long-term learning. This is not to suggest that career prospects are irrelevant, but the stronger concern is whether students can connect personal interests with realistic career pathways.'
+        : `Based on your framework, a stronger version would keep the same position but make the paragraph logic more explicit: students should have some academic autonomy and be allowed to pursue subjects they are genuinely interested in, because motivation often leads to deeper learning and stronger long-term employability. This is not to suggest that practical value should be ignored; rather, schools can guide students to connect personal interests with realistic career pathways.`,
       modelAnswerPersonalized: Boolean(params.finalFrameworkSummary || params.frameworkNotes || params.essay.trim()),
       modelAnswerTargetLevel: scores.taskResponse <= 5.5 ? 'Target Band 7.0 excerpt' : 'Target Band 7.5 excerpt',
       reusableArguments: [

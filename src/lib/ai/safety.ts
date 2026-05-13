@@ -597,7 +597,7 @@ const normalizeMicroUpgrades = (
       const better = typeof record.better === 'string' ? record.better.trim() : '';
       const explanationZh = typeof record.explanationZh === 'string' && record.explanationZh.trim()
         ? record.explanationZh.trim()
-        : '短语级升级，适合保留到同类作文中复用。';
+        : '这个短语比原表达更准确，适合在同类作文中整块复用。';
       return { original, better, explanationZh };
     })
     .filter(item => item.original && item.better)
@@ -702,6 +702,9 @@ const normalizeLimitedStringArray = (
     .filter(Boolean)
     .slice(0, maxItems);
 
+const sameGuidanceText = (a?: string, b?: string): boolean =>
+  Boolean(a && b && a.replace(/\s+/g, '').trim() === b.replace(/\s+/g, '').trim());
+
 const phraseLevel = (text: string, maxWords = 7): string => {
   const cleaned = text
     .replace(/[.!?;:]+$/g, '')
@@ -711,6 +714,117 @@ const phraseLevel = (text: string, maxWords = 7): string => {
   return words.length <= maxWords ? cleaned : words.slice(0, maxWords).join(' ');
 };
 
+const isWritingStrategyExpression = (expression: string): boolean =>
+  /clear position|support (the )?argument|concrete evidence|paragraph development|topic sentence|task response|coherence|cohesion|rewrite|develop an argument/i.test(expression);
+
+const normalizeTopicVocabularyItem = (
+  item: unknown,
+  index: number,
+  validationErrors: string[],
+): WritingFeedback['vocabularyUpgrade']['topicVocabulary'][number] | null => {
+  if (typeof item === 'string') {
+    const expression = item.trim();
+    if (!expression || isWritingStrategyExpression(expression)) return null;
+    return {
+      expression,
+      meaningZh: '本题语境中的可复用话题词。',
+      usageZh: '用于讨论题目中的具体对象或影响，不要当成万能作文套话。',
+    };
+  }
+
+  const record = isRecord(item) ? item : {};
+  if (!isRecord(item)) {
+    validationErrors.push(`vocabularyUpgrade.topicVocabulary[${index}] missing or invalid object`);
+    return null;
+  }
+  const expression = asString(record.expression ?? record.term ?? record.phrase, '', `vocabularyUpgrade.topicVocabulary[${index}].expression`, validationErrors);
+  if (!expression || isWritingStrategyExpression(expression)) return null;
+  return {
+    expression: phraseLevel(expression, 8),
+    meaningZh: asString(record.meaningZh ?? record.meaning, '本题语境中的可复用话题词。', `vocabularyUpgrade.topicVocabulary[${index}].meaningZh`, validationErrors),
+    usageZh: asString(record.usageZh ?? record.explanationZh ?? record.usage, '用于讨论题目中的具体对象或影响，不要当成万能作文套话。', `vocabularyUpgrade.topicVocabulary[${index}].usageZh`, validationErrors),
+    example: typeof record.example === 'string' && record.example.trim() ? record.example.trim() : undefined,
+  };
+};
+
+const normalizeExpressionUpgradeItem = (
+  item: unknown,
+  index: number,
+  validationErrors: string[],
+): WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number] | null => {
+  const record = isRecord(item) ? item : {};
+  if (!isRecord(item)) {
+    validationErrors.push(`vocabularyUpgrade.expressionUpgrades[${index}] missing or invalid object`);
+    return null;
+  }
+  const original = typeof record.original === 'string' && record.original.trim()
+    ? phraseLevel(record.original)
+    : undefined;
+  const better = asString(
+    record.better ?? record.frame ?? record.expression,
+    '',
+    `vocabularyUpgrade.expressionUpgrades[${index}].better`,
+    validationErrors,
+  );
+  if (!better) return null;
+  return {
+    original,
+    better: phraseLevel(better, 14),
+    explanationZh: asString(
+      record.explanationZh,
+      original ? '把原文中偏口语或笼统的说法，换成更适合 Task 2 论证的表达。' : '这是本题可复用的论证句架。',
+      `vocabularyUpgrade.expressionUpgrades[${index}].explanationZh`,
+      validationErrors,
+    ),
+    reuseWhenZh: asString(
+      record.reuseWhenZh,
+      original ? '下次遇到相似意思时，优先整块替换原来的泛词。' : '下次需要让步、转折或推进论证时可以套用，但要填入本题具体内容。',
+      `vocabularyUpgrade.expressionUpgrades[${index}].reuseWhenZh`,
+      validationErrors,
+    ),
+    example: typeof record.example === 'string' && record.example.trim() ? record.example.trim() : undefined,
+  };
+};
+
+const buildFallbackTopicVocabulary = (question: string): WritingFeedback['vocabularyUpgrade']['topicVocabulary'] => {
+  const lower = question.toLowerCase();
+  if (/educat|student|school|university|subject|academic/.test(lower)) {
+    return [
+      {
+        expression: 'academic autonomy',
+        meaningZh: '学生在学习方向上拥有一定选择权。',
+        usageZh: '用于讨论是否应该允许学生选择专业、课程或学习路径。',
+        example: 'Academic autonomy can increase students\' motivation.',
+      },
+      {
+        expression: 'long-term employability',
+        meaningZh: '长期就业竞争力，而不只是眼前找工作。',
+        usageZh: '用于连接教育选择和未来职业发展。',
+        example: 'Practical subjects may improve long-term employability.',
+      },
+    ];
+  }
+  return [
+    {
+      expression: 'long-term consequences',
+      meaningZh: '长期后果或影响。',
+      usageZh: '用于把观点从眼前现象推进到更深层影响。',
+      example: 'The long-term consequences should not be ignored.',
+    },
+    {
+      expression: 'public resources',
+      meaningZh: '公共资源，例如时间、资金、空间或政策支持。',
+      usageZh: '用于社会、政府、城市、教育类题目中讨论资源分配。',
+      example: 'Public resources should be used where they create wider benefits.',
+    },
+  ];
+};
+
+const languageBankMissionItems = (vocabulary: WritingFeedback['vocabularyUpgrade']): string[] => [
+  ...vocabulary.topicVocabulary.slice(0, 2).map(item => `在修改稿中使用 "${item.expression}"：${item.usageZh}`),
+  ...vocabulary.expressionUpgrades.slice(0, 3).map(item => `尝试使用 "${item.better}"：${item.reuseWhenZh}`),
+].slice(0, 4);
+
 const buildLocalVocabularyUpgrade = (
   source: Record<string, unknown>,
   request: WritingRequest,
@@ -718,48 +832,65 @@ const buildLocalVocabularyUpgrade = (
   validationErrors: string[],
 ): WritingFeedback['vocabularyUpgrade'] => {
   const vocabSource = isRecord(source.vocabularyUpgrade) ? source.vocabularyUpgrade : {};
-  const wordingFromProvider = (Array.isArray(vocabSource.userWordingUpgrades) ? vocabSource.userWordingUpgrades : [])
-    .map((item, index) => {
-      const record = isRecord(item) ? item : {};
-      return {
-        original: phraseLevel(asString(record.original, '', `vocabularyUpgrade.userWordingUpgrades[${index}].original`, validationErrors)),
-        better: phraseLevel(asString(record.better, '', `vocabularyUpgrade.userWordingUpgrades[${index}].better`, validationErrors)),
-        explanationZh: asString(record.explanationZh, '更自然或更贴合本题的表达。', `vocabularyUpgrade.userWordingUpgrades[${index}].explanationZh`, validationErrors),
-      };
-    })
-    .filter(item => item.original && item.better)
-    .slice(0, 3);
+  const expressionFromProvider = (Array.isArray(vocabSource.expressionUpgrades) ? vocabSource.expressionUpgrades : [])
+    .map((item, index) => normalizeExpressionUpgradeItem(item, index, validationErrors))
+    .filter((item): item is WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number] => Boolean(item));
+  const legacyWording = (Array.isArray(vocabSource.userWordingUpgrades) ? vocabSource.userWordingUpgrades : [])
+    .map((item, index) => normalizeExpressionUpgradeItem(item, index, validationErrors))
+    .filter((item): item is WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number] => Boolean(item));
+  const legacyCollocations = (Array.isArray(vocabSource.collocationUpgrades)
+    ? normalizeLimitedStringArray(vocabSource.collocationUpgrades, 'vocabularyUpgrade.collocationUpgrades', validationErrors, 2)
+    : [])
+    .filter(item => !isWritingStrategyExpression(item))
+    .map(item => ({
+      better: item,
+      explanationZh: '这是比单个词更适合记忆的搭配块。',
+      reuseWhenZh: '下次表达同一话题关系时，可以整块放进句子里。',
+    }));
+  const legacyFrames = (Array.isArray(vocabSource.reusableSentenceFrames)
+    ? normalizeLimitedStringArray(vocabSource.reusableSentenceFrames, 'vocabularyUpgrade.reusableSentenceFrames', validationErrors, 2)
+    : [])
+    .map(item => ({
+      better: item,
+      explanationZh: '这是 Task 2 论证中可以复用的句架。',
+      reuseWhenZh: '下次需要让步、转折、平衡观点或推进理由时使用。',
+    }));
   const microFromCorrections = sentenceFeedback
     .flatMap(item => item.microUpgrades || [])
     .map(item => ({
-      ...item,
       original: phraseLevel(item.original),
       better: phraseLevel(item.better),
+      explanationZh: item.explanationZh || '把原文中偏口语或笼统的说法，换成更适合 Task 2 论证的短语。',
+      reuseWhenZh: '下次写到相同意思时，直接复用升级后的短语，再补上本题具体内容。',
     }))
-    .slice(0, Math.max(0, 2 - wordingFromProvider.length));
-  const topicWords = Array.isArray(vocabSource.topicVocabulary)
-    ? normalizeLimitedStringArray(vocabSource.topicVocabulary, 'vocabularyUpgrade.topicVocabulary', validationErrors, 3)
-    : [];
-  const collocations = Array.isArray(vocabSource.collocationUpgrades)
-    ? normalizeLimitedStringArray(vocabSource.collocationUpgrades, 'vocabularyUpgrade.collocationUpgrades', validationErrors, 3)
-    : [];
-  const frames = Array.isArray(vocabSource.reusableSentenceFrames)
-    ? normalizeLimitedStringArray(vocabSource.reusableSentenceFrames, 'vocabularyUpgrade.reusableSentenceFrames', validationErrors, 3)
-    : [];
+    .slice(0, 2);
+  const topicWords = (Array.isArray(vocabSource.topicVocabulary) ? vocabSource.topicVocabulary : [])
+    .map((item, index) => normalizeTopicVocabularyItem(item, index, validationErrors))
+    .filter((item): item is WritingFeedback['vocabularyUpgrade']['topicVocabulary'][number] => Boolean(item))
+    .slice(0, 4);
+  const expressionUpgrades = [
+    ...expressionFromProvider,
+    ...legacyWording,
+    ...microFromCorrections,
+    ...legacyCollocations,
+    ...legacyFrames,
+  ].slice(0, 5);
 
   return {
-    topicVocabulary: topicWords.length ? topicWords : [
-      'a balanced approach',
-      request.question.toLowerCase().includes('education') ? 'academic autonomy' : 'long-term consequence',
-    ],
-    userWordingUpgrades: [...wordingFromProvider, ...microFromCorrections].slice(0, 2),
-    collocationUpgrades: collocations.length ? collocations : [
-      'develop a clear position',
-      'support the argument with concrete evidence',
-    ],
-    reusableSentenceFrames: frames.length ? frames : [
-      'This is not to suggest that ..., but ...',
-      'A more balanced view is that ...',
+    topicVocabulary: topicWords.length ? topicWords : buildFallbackTopicVocabulary(request.question),
+    expressionUpgrades: expressionUpgrades.length ? expressionUpgrades : [
+      {
+        original: 'study what they want',
+        better: 'pursue subjects they are genuinely interested in',
+        explanationZh: '把泛泛的 want 换成更具体的学习动机表达，更像 Task 2 论证语言。',
+        reuseWhenZh: '下次讨论选择、兴趣、学习动力或职业方向时使用。',
+        example: 'Students should be allowed to pursue subjects they are genuinely interested in.',
+      },
+      {
+        better: 'This is not to suggest that ..., but the stronger concern is ...',
+        explanationZh: '这是让步后回到自己主观点的论证句架。',
+        reuseWhenZh: '下次题目要求讨论两边观点，而你需要承认一边再强调另一边时使用。',
+      },
     ],
   };
 };
@@ -786,19 +917,16 @@ const buildWritingTask2Markdown = (feedback: Omit<WritingFeedback, 'obsidianMark
   const vocabulary = feedback.vocabularyUpgrade;
   const vocabularyItems = [
     '### Topic Vocabulary',
-    ...(vocabulary.topicVocabulary.length ? vocabulary.topicVocabulary.map(item => `- ${item}`) : ['- No topic vocabulary returned.']),
+    ...(vocabulary.topicVocabulary.length
+      ? vocabulary.topicVocabulary.map(item => `- ${item.expression}\n  - 含义: ${item.meaningZh}\n  - 用法: ${item.usageZh}${item.example ? `\n  - Example: ${item.example}` : ''}`)
+      : ['- No topic vocabulary returned.']),
     '',
-    '### From Your Essay',
-    ...(vocabulary.userWordingUpgrades.length
-      ? vocabulary.userWordingUpgrades.map(item => `- ${item.original} -> ${item.better}\n  - ${item.explanationZh}`)
-      : ['- No phrase-level wording upgrade returned.']),
-    '',
-    '### Collocations',
-    ...(vocabulary.collocationUpgrades.length ? vocabulary.collocationUpgrades.map(item => `- ${item}`) : ['- No collocation returned.']),
-    '',
-    '### Argument Frames',
-    ...(vocabulary.reusableSentenceFrames.length ? vocabulary.reusableSentenceFrames.map(item => `- ${item}`) : ['- No argument frame returned.']),
+    '### Expression Upgrade',
+    ...(vocabulary.expressionUpgrades.length
+      ? vocabulary.expressionUpgrades.map(item => `- ${item.original ? `${item.original} -> ` : ''}${item.better}\n  - 为什么这样改: ${item.explanationZh}\n  - 什么时候复用: ${item.reuseWhenZh}${item.example ? `\n  - Example: ${item.example}` : ''}`)
+      : ['- No expression upgrade returned.']),
   ].join('\n');
+  const missionItems = languageBankMissionItems(vocabulary);
   const logicItems = feedback.frameworkFeedback.length
     ? feedback.frameworkFeedback.map((item, index) => {
         const related = item.relatedCorrectionIds?.length
@@ -837,7 +965,7 @@ ${feedback.essay}
 ## Essay-level Warnings
 ${warnings}
 
-## Vocabulary & Expression Upgrade
+## Language Bank
 ${vocabularyItems}
 
 ## Logic & Structure Review
@@ -849,6 +977,9 @@ ${sentenceItems}
 ## Target Model Excerpt / Revision Mission
 - Training estimate: ${formatBandEstimate(estimate)}
 - Target level: ${feedback.modelAnswerTargetLevel || getWritingTargetLevel(estimate)}
+
+### Revision Mission
+${missionItems.length ? missionItems.map(item => `- ${item}`).join('\n') : '- 下次修改时至少主动使用两个 Language Bank 表达。'}
 
 ${feedback.modelAnswerPersonalized ? 'This excerpt preserves the learner direction and repairs the main issues above.' : 'Provider did not mark this excerpt as personalized.'}
 
@@ -892,7 +1023,7 @@ const normalizeWritingFeedback = (
       tag,
       explanationZh: asString(
         record.explanationZh,
-        'Provider feedback was incomplete; this item was normalized safely.',
+        '这处表达需要修改，因为它会影响句子的准确度或论证清晰度。',
         `sentenceFeedback[${index}].explanationZh`,
         validationErrors,
       ),
@@ -915,7 +1046,7 @@ const normalizeWritingFeedback = (
       const issue = asString(record.issue, FALLBACK_TEXT, `frameworkFeedback[${index}].issue`, validationErrors);
       const suggestionZh = asString(
         record.suggestionZh,
-        'Provider feedback was incomplete; this item was normalized safely.',
+        '这个问题会影响 Task Response 或 Coherence，因为考官看不到清楚的任务回应和段落推进。',
         `frameworkFeedback[${index}].suggestionZh`,
         validationErrors,
       );
@@ -925,6 +1056,20 @@ const normalizeWritingFeedback = (
         const explicit = normalizeRelatedCorrectionIds(record.relatedCorrectionIds, validCorrectionIds);
         return explicit.length ? explicit : inferRelatedCorrectionIds(issue, suggestionZh, location, sentenceFeedback);
       })();
+      const rawParagraphFix = typeof record.paragraphFixZh === 'string' && record.paragraphFixZh.trim()
+        ? record.paragraphFixZh.trim()
+        : '';
+      const rawTransferGuidance = typeof record.transferGuidanceZh === 'string' && record.transferGuidanceZh.trim()
+        ? record.transferGuidanceZh.trim()
+        : '';
+      const paragraphFixZh = rawParagraphFix && !sameGuidanceText(rawParagraphFix, suggestionZh)
+        ? rawParagraphFix
+        : defaultParagraphFix(issue, location);
+      const transferGuidanceZh = rawTransferGuidance
+        && !sameGuidanceText(rawTransferGuidance, suggestionZh)
+        && !sameGuidanceText(rawTransferGuidance, paragraphFixZh)
+        ? rawTransferGuidance
+        : defaultLogicTransfer(location);
       return {
         issue,
         suggestionZh,
@@ -932,13 +1077,11 @@ const normalizeWritingFeedback = (
         location,
         issueType,
         relatedCorrectionIds,
-        paragraphFixZh: typeof record.paragraphFixZh === 'string' && record.paragraphFixZh.trim()
-          ? record.paragraphFixZh.trim()
-          : defaultParagraphFix(issue, location),
+        paragraphFixZh,
         exampleFrame: typeof record.exampleFrame === 'string' && record.exampleFrame.trim()
           ? record.exampleFrame.trim()
           : defaultExampleFrame(issue),
-        transferGuidanceZh: normalizeTransferGuidance(record.transferGuidanceZh, defaultLogicTransfer(location)),
+        transferGuidanceZh: normalizeTransferGuidance(transferGuidanceZh, defaultLogicTransfer(location)),
       };
     })
     .filter(item => !/under-length|insufficient sample|extremely insufficient/i.test(item.issue))
@@ -957,6 +1100,9 @@ const normalizeWritingFeedback = (
   const targetLevel = typeof source.modelAnswerTargetLevel === 'string' && source.modelAnswerTargetLevel.trim()
     ? source.modelAnswerTargetLevel.trim()
     : getWritingTargetLevel(averageWritingScore(scoresNormalized));
+  const vocabularyUpgrade = buildLocalVocabularyUpgrade(source, request, sentenceFeedback, validationErrors);
+  const firstTopicExpression = vocabularyUpgrade.topicVocabulary[0]?.expression || 'topic-specific language';
+  const firstExpressionUpgrade = vocabularyUpgrade.expressionUpgrades[0]?.better || 'a clearer argument frame';
 
   const feedbackWithoutMarkdown: Omit<WritingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -971,10 +1117,10 @@ const normalizeWritingFeedback = (
       ...sourceWarnings,
     ],
     sentenceFeedback,
-    vocabularyUpgrade: buildLocalVocabularyUpgrade(source, request, sentenceFeedback, validationErrors),
+    vocabularyUpgrade,
     modelAnswer: asString(
       source.modelAnswer,
-      'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
+      `A stronger revision should keep your main position, use topic language such as "${firstTopicExpression}", and apply "${firstExpressionUpgrade}" where it helps the argument sound clearer.`,
       'modelAnswer',
       validationErrors,
     ),
@@ -992,7 +1138,7 @@ const normalizeWritingFeedback = (
         ),
         explanationZh: asString(
           record.explanationZh,
-          'Provider feedback was incomplete; this item was normalized safely.',
+          '这个论点可以迁移到相近题目，但需要配合具体例子使用。',
           `reusableArguments[${index}].explanationZh`,
           validationErrors,
         ),

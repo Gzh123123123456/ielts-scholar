@@ -129,14 +129,26 @@ export interface WritingFeedback {
     explanationZh: string;
   }[];
   vocabularyUpgrade: {
-    topicVocabulary: string[];
-    userWordingUpgrades: {
+    topicVocabulary: {
+      expression: string;
+      meaningZh: string;
+      usageZh: string;
+      example?: string;
+    }[];
+    expressionUpgrades: {
+      original?: string;
+      better: string;
+      explanationZh: string;
+      reuseWhenZh: string;
+      example?: string;
+    }[];
+    userWordingUpgrades?: {
       original: string;
       better: string;
       explanationZh: string;
     }[];
-    collocationUpgrades: string[];
-    reusableSentenceFrames: string[];
+    collocationUpgrades?: string[];
+    reusableSentenceFrames?: string[];
   };
   modelAnswer: string;
   modelAnswerPersonalized?: boolean;
