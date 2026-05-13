@@ -1,6 +1,6 @@
 # Product Design Principles
 
-_Last updated: 2026-05-09_
+_Last updated: 2026-05-13_
 
 This document is the long-term product design source of truth for IELTS Scholar.
 It applies to all modules, all phases, and all future implementation work.
@@ -103,6 +103,9 @@ Argument Frames
 - Universal academic essay phrases can exist, but only in small numbers and only when strongly relevant.
 - Generic filler should not dominate.
 - Topic vocabulary should be **visibly connected to the task topic**.
+- Topic Vocabulary should remain topic-specific and should not become writing strategy.
+- Expression Upgrade should focus on phrase/frame upgrades and avoid repeated generic explanations.
+- Production logic should remain topic-agnostic. Topic examples in mock/demo fixtures must not become hardcoded product logic.
 - Normal relevant responses should **not** produce an empty vocabulary section.
 
 ### Universal Phrases
@@ -134,6 +137,10 @@ Each major logic issue should help the learner understand:
 
 After V1.3 annotated essay overlay is implemented:
 
+- My Essay source marking should use grey/problem marking or strikethrough-style source marking for original problems.
+- Target Model Answer learning highlights are a different visual language: they show recommended expressions / repairs used in the final answer.
+- Phrase-level issues should mark only the exact problematic phrase when possible.
+- Whole-sentence rewrite should be reserved for cases where no reliable phrase-level source exists or the sentence-level logic/function is the issue.
 - Old large Sentence-level Correction cards may become **default-collapsed**.
 - Long-term direction: old large correction cards may eventually be **removed**.
 - However, overlay content must **not** be compressed or weakened just to look neat.
@@ -141,9 +148,17 @@ After V1.3 annotated essay overlay is implemented:
 
 Overlay should be a lightweight but complete correction panel, not a tiny tooltip that cuts learning value.
 
+## H. Target Model Answer Principles
+
+- Target Model Answer should be a full training target answer, not a short excerpt.
+- Acceptable target length is about 280-350 words.
+- It should preserve the learner's position, fix the highest-priority Logic Review issue, and integrate Language Bank / Expression Upgrade / key corrections.
+- It should not be presented as an official IELTS guarantee.
+- Highlight explanation should stay low-noise. If moved later, use a small `高亮说明` label near the model answer body rather than a large legend/table or many colors.
+
 ---
 
-## H. Agent Role Boundary
+## I. Agent Role Boundary
 
 ### Claude Code — current role
 

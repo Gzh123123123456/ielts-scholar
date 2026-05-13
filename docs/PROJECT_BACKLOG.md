@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-13 (final handoff)_
+_Last updated: 2026-05-13 (daily closeout)_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -52,6 +52,8 @@ _Last updated: 2026-05-13 (final handoff)_
 - **Done Task 2 feedback hierarchy**: Phase 3 separates essay-level warnings, logic/structure review, sentence-level corrections, and vocabulary/expression upgrades.
 - **Done Task 2 feedback hierarchy**: under-length is treated as a global warning, pure lexical issues stay out of big-picture logic cards, and logic issues link to correction numbers when relevant.
 - **Done Task 2 feedback content refinement**: Vocabulary & Expression Upgrade is a compact learning bank; sentence corrections support primary issue, secondary issues, and micro upgrades; personalized model excerpts can use learner essay/framework context.
+- **Done Task 2 Phase 3 visual semantics polish**: Phase 3 is now a lower-noise revision workspace. Language Bank remains compact; Sentence Corrections use grey/problem source marking instead of model-answer learning highlights; Target Model Answer is a full answer in page flow with no inner scroll; Submit for Analysis locks the editor while analysis runs.
+- **Done Task 2 analysis lifecycle repair**: submitted essay snapshots are preserved; Phase 3 uses `feedback.essay` / submitted snapshot instead of mutable live editor text; stale provider responses are ignored through run-id protection; timeout/stop preserves essay text and avoids fake feedback; Practice this question again creates a fresh same-question attempt; New Question avoids the current prompt when alternatives exist.
 - Require user edit/confirm before moving to Phase 2.
 
 ### 2b) Future UI Consistency Notes
@@ -167,7 +169,7 @@ _Last updated: 2026-05-13 (final handoff)_
 
 ## P1 Future — Writing Task 2 Phase 3 (Codex Priority)
 
-**Done 2026-05-13 (Codex implementation pass)**: learner-facing Phase 3 repair completed across UI rendering, feedback schema/normalization, provider prompts, Mock Provider output, and markdown export.
+**Done 2026-05-13 (Codex implementation pass + daily closeout polish)**: learner-facing Phase 3 repair completed across UI rendering, feedback schema/normalization, provider prompts, Mock Provider output, markdown export, analysis lifecycle, and visual semantics.
 
 ### Vocabulary & Expression Upgrade Redesign
 
@@ -183,6 +185,9 @@ Implemented according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 - `From Your Essay` must be phrase-level.
 - Universal academic phrases are allowed in small, strongly relevant doses.
 - Normal relevant input should not produce an empty vocabulary section.
+- Topic Vocabulary must remain topic-specific and must not become writing strategy.
+- Expression Upgrade should focus on phrase/frame upgrades and avoid repeated generic explanations.
+- Production logic must remain topic-agnostic. Remote-work examples are mock/demo fixtures only and must not become hardcoded UI/safety/provider-routing logic.
 
 ### Logic Review — Revision Roadmap
 
@@ -190,16 +195,31 @@ Implemented according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 - Each major logic issue should explain what, why, and what to do.
 - Avoid generic fixes; prefer task-specific guidance.
 
-### Personalized Model Answer Excerpt
+### Target Model Answer
 
-- Now uses target training level wording and remains a learner-specific upgraded direction, not a generic Band 9 essay.
-- Preserves learner's position and main ideas where available; fixes the specific Phase 3 issues.
+- Reworked from Target Model Excerpt / Revision Mission into Target Model Answer.
+- Target Model Answer should be a full answer, not a short excerpt.
+- Acceptable target length is about 280-350 words.
+- It should preserve the learner's position, fix the highest-priority Logic Review issue, and integrate Language Bank / Expression Upgrade / key corrections.
+- It is a training target model, not an official IELTS guarantee.
+- Known follow-up: the highlight explanation exists but is too easy to miss. Move it closer to the model answer body later and use a small low-noise `高亮说明` label. Do not add a large legend/table or many colors.
+
+### Sentence Corrections
+
+- Correction cards are lower-noise and should show one concise issue label by default.
+- Sentence Corrections and future My Essay annotation should use grey/problem marking or strikethrough-style source marking, not Target Model Answer learning-highlight styling.
+- Phrase-level issues should mark only the exact problematic phrase when possible.
+- Whole-sentence rewrite should be reserved for cases where no reliable phrase-level source exists or the sentence-level logic/function is the issue.
+- Preserve `sourceQuote`, `severity`, `issueType`, and `microUpgrades` for future annotation work.
 
 ---
 
 ## P1 Future — V1.3 Annotated Essay Overlay
 
-- Source-text underline / marker / overlay is future work.
+- Next planned product task: Annotated Essay interaction / My Essay annotation. Do not start without an explicit implementation prompt.
+- Goal: integrate Sentence Corrections into My Essay source text.
+- Likely behavior: underline/problem-mark exact source spans; click/hover opens correction overlay; overlay shows original issue, correction, Chinese explanation, and related Language Bank / Logic Review.
+- Source-text underline / marker / overlay is future work until that slice starts.
 - After overlay works, old large sentence correction cards can default-collapse.
 - Long-term direction: old large cards may eventually be removed.
 - Overlay must be aesthetically clean but must not compress or weaken content.

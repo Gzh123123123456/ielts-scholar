@@ -1,5 +1,27 @@
 # Decision Log
 
+## [2026-05-13] Writing Task 2 Phase 3 Daily Closeout
+- **Decision**: Close the Writing Task 2 Phase 3 repair as a low-noise revision workspace, not an AI report page.
+- **Implemented**:
+  - Language Bank was split/cleaned into Topic Vocabulary and Expression Upgrade.
+  - Topic Vocabulary should remain topic-specific and should not become writing strategy.
+  - Expression Upgrade should focus on phrase/frame upgrades and avoid repeated generic explanations.
+  - Production logic must remain topic-agnostic; remote-work examples are mock/demo fixtures only, not hardcoded product logic.
+  - Submit for Analysis now preserves the submitted essay snapshot and locks the Phase 2 editor while analysis is running.
+  - Phase 3 results use `feedback.essay` / submitted snapshot rather than mutable live editor text.
+  - Stale provider responses are ignored through run-id protection.
+  - Timeout/stop/failure preserve essay text, avoid fake feedback, and do not move to Phase 3.
+  - Same-question rewrite / Practice this question again creates a fresh attempt; New Question chooses a different prompt when possible.
+  - Target Model Excerpt / Revision Mission was reworked into Target Model Answer.
+  - Target Model Answer should be a full training target answer, about 280-350 words, preserving learner position, fixing the highest-priority Logic Review issue, and integrating Language Bank / Expression Upgrade / key corrections.
+  - Sentence Correction cards were reduced in noise and now use grey/problem or strikethrough-style source marking, not Target Model Answer learning-highlight styling.
+  - Phrase-level issues should mark only the exact problematic phrase when possible. Whole-sentence rewrite is reserved for cases where no reliable phrase-level source exists or the sentence-level logic/function is the issue.
+  - `sourceQuote`, `severity`, `issueType`, and `microUpgrades` remain preserved for future annotation work.
+- **Known follow-up**: Target Model Answer highlight explanation already exists but is too easy to miss. Move it closer to the model answer body later and use a small low-noise `高亮说明` label. Do not add a large legend/table or many colors.
+- **Next planned task**: Annotated Essay interaction / My Essay annotation. Integrate Sentence Corrections into My Essay source text; likely behavior is source-span problem marking with click/hover correction overlay showing original issue, correction, Chinese explanation, related Language Bank, and related Logic Review. Do not start this task without explicit scope.
+- **Collaboration workflow confirmed**: Claude Code handles docs/status/lint/build/verification only unless explicitly instructed; Codex handles main product implementation; GitHub is the sync point; merge/push happens only during daily closeout or explicit approval; future prompts should include plain-language verification steps.
+- **Explicitly unchanged**: no interactive annotation overlay, no click popovers, no dot markers, no provider routing changes, no `.env.local` / API key edits, no server/auth/database/RAG, no Speaking feature work.
+
 ## [2026-05-13] Speaking Note Standard Final Handoff
 - **Decision**: Finalize the Speaking note standard design. Do not create new versions, do not split by part, do not over-engineer P0/P1/P2.
 - **Reason**: The standard has been validated across three full Topic Session notes (Work, Accommodation, Hometown). Further iteration on the format itself is diminishing returns. The remaining work is product implementation.
