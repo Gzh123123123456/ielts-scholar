@@ -581,6 +581,12 @@ const normalizeSecondaryIssues = (
     .filter(item => item.toLowerCase() !== primaryIssue.toLowerCase())
     .slice(0, 3);
 
+const normalizeTransferGuidance = (
+  value: unknown,
+  fallback: string,
+): string =>
+  typeof value === 'string' && value.trim() ? value.trim() : fallback;
+
 const normalizeMicroUpgrades = (
   value: unknown,
 ): WritingFeedback['sentenceFeedback'][number]['microUpgrades'] =>
@@ -663,6 +669,20 @@ const isFrameworkLevelIssue = (issue: string, suggestionZh: string, issueType?: 
 const defaultParagraphFix = (issue: string, location?: string): string =>
   `先重写 ${location || 'relevant part'} 的段落功能：用一句清楚的中心句回答题目，再补一个原因和一个具体例子，最后检查该段是否回扣你的总立场。`;
 
+const defaultLogicTransfer = (location?: string): string =>
+  `下次写同类题时，先给 ${location || '这一段'} 写一句“本段任务”，确认它是在回答题目要求，而不是只写一个相关但松散的观点。`;
+
+const defaultSentenceTransfer = (dimension: WritingFeedback['sentenceFeedback'][number]['dimension'], tag: string): string => {
+  const normalized = tag.toLowerCase();
+  if (/spelling|capital/.test(normalized)) return '下次交卷前最后 30 秒专门扫一遍大小写和拼写，尤其是句首、专有名词和高频抽象词。';
+  if (/article|singular|plural|noun/.test(normalized)) return '下次写名词短语时，先问自己：可数吗？单数还是复数？前面需不需要 a / the / zero article。';
+  if (/punctuation|sentence_boundary/.test(normalized)) return '下次遇到两个完整分句时，不要只用逗号硬连；改用句号、分号，或 because / although / which 等连接。';
+  if (/preposition|collocation|word_choice|lexical/.test(normalized) || dimension === 'LR') return '下次不要只背单词，要按“动词 + 名词 / 形容词 + 名词”的搭配整块复用。';
+  if (dimension === 'TR') return '下次每写一句都回看题目关键词，确认这句话是在推进立场、回应任务，而不是只提供背景。';
+  if (dimension === 'CC') return '下次段落内按“主题句 -> 原因 -> 例子 -> 回扣立场”检查，避免句子之间只是并列堆放。';
+  return '下次写完这一类句子后，把主谓、时态、单复数和搭配一起检查，不要只看大意是否通顺。';
+};
+
 const defaultExampleFrame = (issue: string): string => {
   const text = issue.toLowerCase();
   if (/introduction|opening|position|thesis/.test(text)) return 'While this view has some merit, I would argue that...';
@@ -682,6 +702,15 @@ const normalizeLimitedStringArray = (
     .filter(Boolean)
     .slice(0, maxItems);
 
+const phraseLevel = (text: string, maxWords = 7): string => {
+  const cleaned = text
+    .replace(/[.!?;:]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const words = cleaned.split(' ').filter(Boolean);
+  return words.length <= maxWords ? cleaned : words.slice(0, maxWords).join(' ');
+};
+
 const buildLocalVocabularyUpgrade = (
   source: Record<string, unknown>,
   request: WritingRequest,
@@ -693,8 +722,8 @@ const buildLocalVocabularyUpgrade = (
     .map((item, index) => {
       const record = isRecord(item) ? item : {};
       return {
-        original: asString(record.original, '', `vocabularyUpgrade.userWordingUpgrades[${index}].original`, validationErrors),
-        better: asString(record.better, '', `vocabularyUpgrade.userWordingUpgrades[${index}].better`, validationErrors),
+        original: phraseLevel(asString(record.original, '', `vocabularyUpgrade.userWordingUpgrades[${index}].original`, validationErrors)),
+        better: phraseLevel(asString(record.better, '', `vocabularyUpgrade.userWordingUpgrades[${index}].better`, validationErrors)),
         explanationZh: asString(record.explanationZh, '更自然或更贴合本题的表达。', `vocabularyUpgrade.userWordingUpgrades[${index}].explanationZh`, validationErrors),
       };
     })
@@ -702,6 +731,11 @@ const buildLocalVocabularyUpgrade = (
     .slice(0, 3);
   const microFromCorrections = sentenceFeedback
     .flatMap(item => item.microUpgrades || [])
+    .map(item => ({
+      ...item,
+      original: phraseLevel(item.original),
+      better: phraseLevel(item.better),
+    }))
     .slice(0, Math.max(0, 2 - wordingFromProvider.length));
   const topicWords = Array.isArray(vocabSource.topicVocabulary)
     ? normalizeLimitedStringArray(vocabSource.topicVocabulary, 'vocabularyUpgrade.topicVocabulary', validationErrors, 3)
@@ -728,6 +762,97 @@ const buildLocalVocabularyUpgrade = (
       'A more balanced view is that ...',
     ],
   };
+};
+
+const averageWritingScore = (scores: WritingFeedback['scores']): number =>
+  roundToHalfBand((
+    scores.taskResponse +
+    scores.coherenceCohesion +
+    scores.lexicalResource +
+    scores.grammaticalRangeAccuracy
+  ) / 4);
+
+const getWritingTargetLevel = (estimate: number): string => {
+  if (estimate <= 5.5) return 'Target Band 7.0 excerpt';
+  if (estimate <= 6.5) return 'Target Band 7.5 excerpt';
+  if (estimate <= 7.0) return 'Target Band 7.5-8.0 excerpt';
+  return 'Examiner-friendly refinement';
+};
+
+const buildWritingTask2Markdown = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>): string => {
+  const warnings = feedback.essayLevelWarnings.length
+    ? feedback.essayLevelWarnings.map(item => `- ${item.title}: ${item.messageZh}`).join('\n')
+    : '- No essay-level warning.';
+  const vocabulary = feedback.vocabularyUpgrade;
+  const vocabularyItems = [
+    '### Topic Vocabulary',
+    ...(vocabulary.topicVocabulary.length ? vocabulary.topicVocabulary.map(item => `- ${item}`) : ['- No topic vocabulary returned.']),
+    '',
+    '### From Your Essay',
+    ...(vocabulary.userWordingUpgrades.length
+      ? vocabulary.userWordingUpgrades.map(item => `- ${item.original} -> ${item.better}\n  - ${item.explanationZh}`)
+      : ['- No phrase-level wording upgrade returned.']),
+    '',
+    '### Collocations',
+    ...(vocabulary.collocationUpgrades.length ? vocabulary.collocationUpgrades.map(item => `- ${item}`) : ['- No collocation returned.']),
+    '',
+    '### Argument Frames',
+    ...(vocabulary.reusableSentenceFrames.length ? vocabulary.reusableSentenceFrames.map(item => `- ${item}`) : ['- No argument frame returned.']),
+  ].join('\n');
+  const logicItems = feedback.frameworkFeedback.length
+    ? feedback.frameworkFeedback.map((item, index) => {
+        const related = item.relatedCorrectionIds?.length
+          ? item.relatedCorrectionIds.map(id => `Correction #${id.replace(/^C/i, '')}`).join(', ')
+          : 'Paragraph-level revision';
+        return `### ${index + 1}. ${item.location || 'Unknown / General'} - ${item.issue}
+- 问题影响: ${item.suggestionZh}
+- 这次怎么改: ${item.paragraphFixZh || defaultParagraphFix(item.issue, item.location)}
+- 下次迁移: ${item.transferGuidanceZh || defaultLogicTransfer(item.location)}
+- Related: ${related}${item.exampleFrame ? `\n- Example frame: ${item.exampleFrame}` : ''}`;
+      }).join('\n\n')
+    : '- No logic-level issue returned.';
+  const sentenceItems = feedback.sentenceFeedback.length
+    ? feedback.sentenceFeedback.map((item, index) => {
+        const issueList = [item.primaryIssue, ...(item.secondaryIssues || [])]
+          .filter((issue): issue is string => Boolean(issue?.trim()));
+        return `### Correction #${item.correctionNumber || index + 1}
+- Issues: ${issueList.length ? issueList.join(' / ') : item.tag}
+- Original: ${item.original}
+- Suggested revision: ${item.correction}
+- 为什么要改: ${item.explanationZh}
+- 下次自查: ${item.transferGuidanceZh || defaultSentenceTransfer(item.dimension, item.tag)}
+${item.microUpgrades?.length ? `- Micro upgrades:\n${item.microUpgrades.map(upgrade => `  - ${upgrade.original} -> ${upgrade.better}: ${upgrade.explanationZh}`).join('\n')}` : ''}`;
+      }).join('\n\n')
+    : '- No sentence-level correction returned.';
+  const estimate = averageWritingScore(feedback.scores);
+
+  return `# IELTS Writing Task 2 Note
+
+## Prompt
+${feedback.question}
+
+## My Essay
+${feedback.essay}
+
+## Essay-level Warnings
+${warnings}
+
+## Vocabulary & Expression Upgrade
+${vocabularyItems}
+
+## Logic & Structure Review
+${logicItems}
+
+## Sentence Corrections
+${sentenceItems}
+
+## Target Model Excerpt / Revision Mission
+- Training estimate: ${formatBandEstimate(estimate)}
+- Target level: ${feedback.modelAnswerTargetLevel || getWritingTargetLevel(estimate)}
+
+${feedback.modelAnswerPersonalized ? 'This excerpt preserves the learner direction and repairs the main issues above.' : 'Provider did not mark this excerpt as personalized.'}
+
+${feedback.modelAnswer}`;
 };
 
 const normalizeWritingFeedback = (
@@ -757,6 +882,10 @@ const normalizeWritingFeedback = (
       primaryIssue,
       secondaryIssues: normalizeSecondaryIssues(record.secondaryIssues, primaryIssue),
       microUpgrades: normalizeMicroUpgrades(record.microUpgrades),
+      transferGuidanceZh: normalizeTransferGuidance(
+        record.transferGuidanceZh,
+        defaultSentenceTransfer(dimension, tag),
+      ),
       original: asString(record.original, FALLBACK_TEXT, `sentenceFeedback[${index}].original`, validationErrors),
       correction: asString(record.correction, FALLBACK_TEXT, `sentenceFeedback[${index}].correction`, validationErrors),
       dimension,
@@ -809,27 +938,33 @@ const normalizeWritingFeedback = (
         exampleFrame: typeof record.exampleFrame === 'string' && record.exampleFrame.trim()
           ? record.exampleFrame.trim()
           : defaultExampleFrame(issue),
+        transferGuidanceZh: normalizeTransferGuidance(record.transferGuidanceZh, defaultLogicTransfer(location)),
       };
     })
     .filter(item => !/under-length|insufficient sample|extremely insufficient/i.test(item.issue))
     .filter(item => isFrameworkLevelIssue(item.issue, item.suggestionZh, item.issueType));
 
-  return {
+  const scoresNormalized = {
+    taskResponse: applyLengthCap(asNumber(scores.taskResponse, 'scores.taskResponse', validationErrors), essayWords, 250),
+    coherenceCohesion: applyLengthCap(asNumber(scores.coherenceCohesion, 'scores.coherenceCohesion', validationErrors), essayWords, 250),
+    lexicalResource: applyLengthCap(asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors), essayWords, 250),
+    grammaticalRangeAccuracy: applyLengthCap(
+      asNumber(scores.grammaticalRangeAccuracy, 'scores.grammaticalRangeAccuracy', validationErrors),
+      essayWords,
+      250,
+    ),
+  };
+  const targetLevel = typeof source.modelAnswerTargetLevel === 'string' && source.modelAnswerTargetLevel.trim()
+    ? source.modelAnswerTargetLevel.trim()
+    : getWritingTargetLevel(averageWritingScore(scoresNormalized));
+
+  const feedbackWithoutMarkdown: Omit<WritingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
     module: 'writing',
     task,
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     essay: asString(source.essay, request.essay || FALLBACK_TEXT, 'essay', validationErrors),
-    scores: {
-      taskResponse: applyLengthCap(asNumber(scores.taskResponse, 'scores.taskResponse', validationErrors), essayWords, 250),
-      coherenceCohesion: applyLengthCap(asNumber(scores.coherenceCohesion, 'scores.coherenceCohesion', validationErrors), essayWords, 250),
-      lexicalResource: applyLengthCap(asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors), essayWords, 250),
-      grammaticalRangeAccuracy: applyLengthCap(
-        asNumber(scores.grammaticalRangeAccuracy, 'scores.grammaticalRangeAccuracy', validationErrors),
-        essayWords,
-        250,
-      ),
-    },
+    scores: scoresNormalized,
     frameworkFeedback,
     essayLevelWarnings: [
       ...(lengthWarning ? [lengthWarning] : []),
@@ -844,6 +979,7 @@ const normalizeWritingFeedback = (
       validationErrors,
     ),
     modelAnswerPersonalized: source.modelAnswerPersonalized === true,
+    modelAnswerTargetLevel: targetLevel,
     reusableArguments: asArray(source.reusableArguments, 'reusableArguments', validationErrors).map((item, index) => {
       const record = isRecord(item) ? item : {};
       if (!isRecord(item)) validationErrors.push(`reusableArguments[${index}] missing or invalid object`);
@@ -862,12 +998,11 @@ const normalizeWritingFeedback = (
         ),
       };
     }),
-    obsidianMarkdown: asString(
-      source.obsidianMarkdown,
-      '# IELTS Writing Note\n\nProvider output was malformed or incomplete. Please retry analysis.',
-      'obsidianMarkdown',
-      validationErrors,
-    ),
+  };
+
+  return {
+    ...feedbackWithoutMarkdown,
+    obsidianMarkdown: buildWritingTask2Markdown(feedbackWithoutMarkdown),
   };
 };
 

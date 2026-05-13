@@ -144,8 +144,9 @@ export class MockProvider implements AIProvider {
           location: 'Whole Essay',
           issueType: 'paragraph_development',
           relatedCorrectionIds: ['C1'],
-          paragraphFixZh: 'Build each body paragraph around one clear topic sentence, then add one reason and one concrete example before polishing local wording.',
+          paragraphFixZh: '这次先把每个主体段改成“主题句 -> 原因 -> 具体例子 -> 回扣立场”。如果 Phase 1 框架里已经有例子，但正文没有写出来，就把例子补进对应主体段，而不是继续打磨单句。',
           exampleFrame: 'This is not to suggest that the opposing view has no value; rather, the main issue is...',
+          transferGuidanceZh: '下次写教育、科技、社会类双边题时，先检查每个主体段有没有完成自己的段落角色：让步段负责承认一边，主观点段负责证明你的立场。',
         },
       ],
       sentenceFeedback: [
@@ -154,7 +155,7 @@ export class MockProvider implements AIProvider {
           paragraph: 'Introduction',
           issueType: 'lexical_precision',
           primaryIssue: 'Lexical precision',
-          secondaryIssues: ['Task response clarity'],
+          secondaryIssues: ['Task response clarity', 'Sentence boundary'],
           microUpgrades: [
             {
               original: 'study what they want',
@@ -162,11 +163,37 @@ export class MockProvider implements AIProvider {
               explanationZh: '短语级升级，比完整句子替换更容易复用。',
             },
           ],
+          transferGuidanceZh: '下次遇到 want / good / bad 这类泛词，先换成更具体的学术短语，再检查这句话是否已经回应题目立场。',
           original: 'People should study what they want.',
           correction: 'Individuals should be encouraged to pursue subjects they are passionate about.',
           dimension: 'LR',
           tag: 'lexical_precision',
           explanationZh: '可以用更正式、更准确的表达替代口语化词组，但前提是先把文章写成完整论证。',
+        },
+        {
+          id: 'C2',
+          paragraph: 'Body Paragraph 1',
+          issueType: 'article_plural_punctuation',
+          primaryIssue: 'Grammar accuracy',
+          secondaryIssues: ['Article', 'Plural form', 'Punctuation'],
+          microUpgrades: [
+            {
+              original: 'a important reason',
+              better: 'an important reason',
+              explanationZh: '元音音素前用 an，这是小错，但会影响 GRA 的稳定感。',
+            },
+            {
+              original: 'many student',
+              better: 'many students',
+              explanationZh: 'many 后面需要复数名词，写完数量词要立刻回看名词形式。',
+            },
+          ],
+          transferGuidanceZh: '下次写完主体段后，单独扫一遍 a/an/the、many + 复数、逗号连接两个完整句这些小错误。',
+          original: 'A important reason is that many student feel motivated, they can learn more.',
+          correction: 'An important reason is that many students feel more motivated, so they can learn more effectively.',
+          dimension: 'GRA',
+          tag: 'article_plural_punctuation',
+          explanationZh: '这句话同时有冠词、单复数和逗号连接句的问题。大逻辑成立时，小语法也要补齐，否则会压低语法准确度。',
         },
       ],
       vocabularyUpgrade: {
@@ -185,6 +212,7 @@ export class MockProvider implements AIProvider {
         ? 'This sample is too short for a high training estimate. A complete response should state a clear position, develop two body paragraphs with specific reasoning, and finish with a concise conclusion.'
         : `Based on your framework, a stronger version would keep the same position but make the paragraph logic more explicit: individuals should have room to pursue subjects they are genuinely interested in, because motivation often leads to deeper learning and better long-term performance. This does not mean practical value should be ignored; rather, schools can guide students to connect personal interests with realistic career pathways.`,
       modelAnswerPersonalized: Boolean(params.finalFrameworkSummary || params.frameworkNotes || params.essay.trim()),
+      modelAnswerTargetLevel: scores.taskResponse <= 5.5 ? 'Target Band 7.0 excerpt' : 'Target Band 7.5 excerpt',
       reusableArguments: [
         {
           argument: 'Personal interest leads to better academic performance',

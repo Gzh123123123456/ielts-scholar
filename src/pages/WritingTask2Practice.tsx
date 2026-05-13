@@ -83,6 +83,62 @@ const shortenPhrase = (text: string, maxWords = 8) => {
   return `${words.slice(0, maxWords).join(' ')}...`;
 };
 
+const phraseLevel = (text: string, maxWords = 7) => {
+  const cleaned = text.replace(/[.!?;:]+$/g, '').replace(/\s+/g, ' ').trim();
+  const words = cleaned.split(' ').filter(Boolean);
+  return words.length <= maxWords ? cleaned : words.slice(0, maxWords).join(' ');
+};
+
+const averageWritingScore = (feedback: WritingFeedback) =>
+  Math.round(((feedback.scores.taskResponse +
+    feedback.scores.coherenceCohesion +
+    feedback.scores.lexicalResource +
+    feedback.scores.grammaticalRangeAccuracy) / 4) * 2) / 2;
+
+const getTargetModelLevel = (feedback: WritingFeedback) => {
+  if (feedback.modelAnswerTargetLevel?.trim()) return feedback.modelAnswerTargetLevel.trim();
+  const estimate = averageWritingScore(feedback);
+  if (estimate <= 5.5) return 'Target Band 7.0 excerpt';
+  if (estimate <= 6.5) return 'Target Band 7.5 excerpt';
+  if (estimate <= 7.0) return 'Target Band 7.5-8.0 excerpt';
+  return 'Examiner-friendly refinement';
+};
+
+const uniqueStrings = (items: (string | undefined)[]) => {
+  const seen = new Set<string>();
+  return items
+    .map(item => item?.trim())
+    .filter((item): item is string => Boolean(item))
+    .filter(item => {
+      const key = item.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
+const getCorrectionIssues = (item: WritingFeedback['sentenceFeedback'][number]) =>
+  uniqueStrings([
+    item.primaryIssue,
+    ...(item.secondaryIssues || []),
+    displayCategory(item.tag),
+    displayDimension(item.dimension),
+  ]).slice(0, 5);
+
+const defaultSentenceTransfer = (item: WritingFeedback['sentenceFeedback'][number]) => {
+  const tag = item.tag.toLowerCase();
+  if (/spelling|capital/.test(tag)) return '下次最后通读时专门扫一遍大小写和拼写，不要只看论点是否完整。';
+  if (/article|plural|singular|noun/.test(tag)) return '下次检查名词短语：可数不可数、单复数、a / the 是否需要。';
+  if (/punctuation|sentence_boundary/.test(tag)) return '下次看到两个完整分句时，优先用句号、分号或明确连接词，不要只用逗号连接。';
+  if (item.dimension === 'LR') return '下次按短语块记忆表达，优先复用搭配，而不是临场逐词翻译。';
+  if (item.dimension === 'TR') return '下次每写一句都回看题目关键词，确认它在推进任务回应。';
+  if (item.dimension === 'CC') return '下次用“主题句 -> 原因 -> 例子 -> 回扣”检查段落推进。';
+  return '下次写完后同时检查主谓、时态、单复数、搭配和标点。';
+};
+
+const defaultLogicTransfer = (item: WritingFeedback['frameworkFeedback'][number]) =>
+  `下次写同类题时，先给 ${getDisplayLocation(item)} 写一句段落任务，确认它承担的是题目要求中的一个明确功能。`;
+
 type LogicLocation = NonNullable<WritingFeedback['frameworkFeedback'][number]['location']>;
 
 const logicLocationOrder: LogicLocation[] = [
@@ -167,7 +223,13 @@ const getVocabularyUpgrade = (feedback: WritingFeedback) => {
         }]);
   return {
     topicVocabulary: (upgrade.topicVocabulary?.length ? upgrade.topicVocabulary : ['a balanced approach', 'long-term consequence']).slice(0, 2),
-    userWordingUpgrades: [...(upgrade.userWordingUpgrades || []), ...lrCorrections].slice(0, 2),
+    userWordingUpgrades: [...(upgrade.userWordingUpgrades || []), ...lrCorrections]
+      .map(item => ({
+        ...item,
+        original: phraseLevel(item.original),
+        better: phraseLevel(item.better),
+      }))
+      .slice(0, 2),
     collocationUpgrades: (upgrade.collocationUpgrades?.length ? upgrade.collocationUpgrades : ['develop a clear position', 'support the argument with concrete evidence']).slice(0, 2),
     reusableSentenceFrames: (upgrade.reusableSentenceFrames?.length ? upgrade.reusableSentenceFrames : ['This is not to suggest that ..., but ...', 'A more balanced view is that ...']).slice(0, 2),
   };
@@ -640,9 +702,21 @@ export default function WritingTask2Practice() {
     const warnings = getEssayWarnings(feedback, isInsufficientTask2Sample(essay));
     const logicFeedback = getLogicFeedback(feedback);
     const vocabulary = getVocabularyUpgrade(feedback);
+    const targetLevel = getTargetModelLevel(feedback);
     const warningItems = warnings.length
       ? warnings.map(item => `- ${item.title}: ${item.messageZh}`).join('\n')
       : '- No essay-level warning.';
+    const vocabularyItems = `### Topic Vocabulary
+${vocabulary.topicVocabulary.length ? vocabulary.topicVocabulary.map(item => `- ${item}`).join('\n') : '- No topic vocabulary returned.'}
+
+### From Your Essay
+${vocabulary.userWordingUpgrades.length ? vocabulary.userWordingUpgrades.map(item => `- ${item.original} -> ${item.better}\n  - ${item.explanationZh}`).join('\n') : '- No phrase-level wording upgrade returned.'}
+
+### Collocations
+${vocabulary.collocationUpgrades.length ? vocabulary.collocationUpgrades.map(item => `- ${item}`).join('\n') : '- No collocation returned.'}
+
+### Argument Frames
+${vocabulary.reusableSentenceFrames.length ? vocabulary.reusableSentenceFrames.map(item => `- ${item}`).join('\n') : '- No argument frame returned.'}`;
     const logicItems = logicFeedback.length
       ? logicFeedback.map((item, index) => {
           const related = item.relatedCorrectionIds?.length
@@ -650,49 +724,50 @@ export default function WritingTask2Practice() {
             : 'Paragraph-level issue: no single sentence correction fully solves this.';
           return `### Logic Issue ${index + 1}: ${item.issue}
 - Location: ${getDisplayLocation(item)}
-- Why it matters: ${item.suggestionZh}
-- Big-picture fix: ${item.paragraphFixZh || item.suggestionZh}
+- 问题影响: ${item.suggestionZh}
+- 这次怎么改: ${item.paragraphFixZh || item.suggestionZh}
+- 下次迁移: ${item.transferGuidanceZh || defaultLogicTransfer(item)}
 - Related: ${related}${item.exampleFrame ? `\n- Example frame: ${item.exampleFrame}` : ''}`;
         }).join('\n\n')
       : '- No logic-level issue returned.';
     const sentenceItems = feedback.sentenceFeedback.length
-      ? feedback.sentenceFeedback.map((item, index) => `### Correction #${item.correctionNumber || index + 1}
-- Primary issue: ${item.primaryIssue || displayDimension(item.dimension)}
-${item.secondaryIssues?.length ? `- Secondary issues: ${item.secondaryIssues.join(', ')}
-` : ''}- Original: ${item.original}
+      ? feedback.sentenceFeedback.map((item, index) => {
+          const issues = getCorrectionIssues(item);
+          return `### Correction #${item.correctionNumber || index + 1}
+- Issues: ${issues.join(' / ')}
+- Original: ${item.original}
 - Suggested revision: ${item.correction}
-- Why it matters: ${item.explanationZh}
+- 为什么要改: ${item.explanationZh}
+- 下次自查: ${item.transferGuidanceZh || defaultSentenceTransfer(item)}
 ${item.microUpgrades?.length ? `- Micro upgrades:
-${item.microUpgrades.map(upgrade => `  - ${upgrade.original} -> ${upgrade.better}: ${upgrade.explanationZh}`).join('\n')}` : ''}`).join('\n\n')
+${item.microUpgrades.map(upgrade => `  - ${upgrade.original} -> ${upgrade.better}: ${upgrade.explanationZh}`).join('\n')}` : ''}`;
+        }).join('\n\n')
       : '- No sentence-level correction returned.';
-    const vocabularyItems = [
-      ...vocabulary.topicVocabulary.map(item => `- Topic vocabulary: ${item}`),
-      ...vocabulary.userWordingUpgrades.map(item => `- User wording upgrade: ${item.original} -> ${item.better}\n  - ${item.explanationZh}`),
-      ...vocabulary.collocationUpgrades.map(item => `- Collocation: ${item}`),
-      ...vocabulary.reusableSentenceFrames.map(item => `- Sentence frame: ${item}`),
-    ].slice(0, 8).join('\n') || '- No vocabulary upgrade returned.';
     const markdown = `# IELTS Writing Task 2 Note
 
 ## Prompt
 ${feedback.question}
 
+## My Essay
+${feedback.essay}
+
 ## Essay-level Warnings
 ${warningItems}
-
-## Logic & Structure Review
-${logicItems}
-
-## Sentence-level Corrections
-${sentenceItems}
 
 ## Vocabulary & Expression Upgrade
 ${vocabularyItems}
 
-## ${feedback.modelAnswerPersonalized ? 'Personalized Model Answer Excerpt' : 'Model Answer Excerpt'}
-${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPersonalized ? '\n\nThis excerpt keeps your original position and fixes the main issues above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}
+## Logic & Structure Review
+${logicItems}
 
-## Essay
-${feedback.essay}`;
+## Sentence Corrections
+${sentenceItems}
+
+## Target Model Excerpt / Revision Mission
+- Training estimate: ${formatBandEstimate(averageWritingScore(feedback))}
+- Target level: ${targetLevel}
+
+${hasSubstantialModelAnswer ? `${feedback.modelAnswer}${feedback.modelAnswerPersonalized ? '\n\nThis excerpt keeps your original position and fixes the main issues above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}`;
     const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -947,10 +1022,48 @@ ${feedback.essay}`;
               </section>
             )}
 
+            {vocabularyUpgrade && (
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Vocabulary & Expression Upgrade</h3>
+                <PaperCard className="bg-paper-ink/[0.02]">
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Topic Vocabulary</p>
+                      {vocabularyUpgrade.topicVocabulary.map((item, index) => (
+                        <p key={`topic-${index}`} className="text-base leading-7 text-paper-ink/75">{item}</p>
+                      ))}
+                    </div>
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">From Your Essay</p>
+                      {vocabularyUpgrade.userWordingUpgrades.map((item, index) => (
+                        <div key={`wording-${index}`}>
+                          <p className="text-sm leading-7 text-paper-ink/55 line-through">{item.original}</p>
+                          <p className="text-base leading-7 font-bold">{item.better}</p>
+                          <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Collocations</p>
+                      {vocabularyUpgrade.collocationUpgrades.map((item, index) => (
+                        <p key={`collocation-${index}`} className="text-base leading-7 text-paper-ink/75">{item}</p>
+                      ))}
+                    </div>
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Argument Frames</p>
+                      {vocabularyUpgrade.reusableSentenceFrames.map((item, index) => (
+                        <p key={`frame-${index}`} className="text-base leading-7 text-paper-ink/75">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                </PaperCard>
+              </section>
+            )}
+
             <div className="grid gap-8 xl:grid-cols-[minmax(0,1.12fr)_minmax(420px,0.88fr)] xl:items-start">
               <section className="order-2">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-green-700" /> Sentence-level Corrections
+                  <ShieldCheck className="w-4 h-4 text-green-700" /> Sentence Corrections
                 </h3>
                 <div className="space-y-4">
                   {feedback.sentenceFeedback.map((item, i) => (
@@ -959,8 +1072,7 @@ ${feedback.essay}`;
                         Correction #{item.correctionNumber || i + 1}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mb-3 text-[10px] uppercase font-sans font-bold">
-                        <span className="text-accent-terracotta">{item.primaryIssue || displayDimension(item.dimension)}</span>
-                        {item.secondaryIssues?.map(issue => (
+                        {getCorrectionIssues(item).map(issue => (
                           <span key={issue} className="border border-paper-ink/10 bg-paper-ink/5 text-paper-ink/55 px-2 py-1 rounded-sm">
                             {issue}
                           </span>
@@ -968,13 +1080,10 @@ ${feedback.essay}`;
                       </div>
                       <div className="text-base text-paper-ink/60 line-through mb-2 leading-7">{item.original}</div>
                       <div className="text-[17px] font-bold mb-3 leading-8">{item.correction}</div>
-                      <div className="flex flex-wrap items-center gap-2 mb-2 text-[10px] uppercase font-sans font-bold text-accent-terracotta">
-                        <span>{displayDimension(item.dimension)}</span>
-                        <span className="opacity-30">-</span>
-                        <span>{displayCategory(item.tag)}</span>
-                      </div>
-                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Why it matters</p>
-                      <p className="text-sm leading-7 text-paper-ink-muted bg-paper-ink/5 p-3 rounded">{item.explanationZh}</p>
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">为什么要改</p>
+                      <p className="text-sm leading-7 text-paper-ink-muted bg-paper-ink/5 p-3 rounded mb-3">{item.explanationZh}</p>
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
+                      <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">{item.transferGuidanceZh || defaultSentenceTransfer(item)}</p>
                       {item.microUpgrades?.length ? (
                         <div className="mt-3 space-y-2">
                           <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Micro upgrades</p>
@@ -1010,14 +1119,18 @@ ${feedback.essay}`;
                               <h5 className="text-[17px] font-bold leading-7">{f.issue}</h5>
                             </div>
                             <div>
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Why it matters</p>
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">为什么影响分数</p>
                               <p className="text-base leading-8 text-paper-ink/70">{f.suggestionZh}</p>
                             </div>
                             <div>
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Big-picture fix</p>
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">这次怎么改</p>
                               <p className="text-base leading-8 text-paper-ink/70">
-                                {f.paragraphFixZh || `Paragraph-level issue: no single sentence correction fully solves this. Rewrite the ${getDisplayLocation(f).toLowerCase()} around one clear idea with support.`}
+                                {f.paragraphFixZh || f.suggestionZh}
                               </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次迁移</p>
+                              <p className="text-base leading-8 text-paper-ink/70">{f.transferGuidanceZh || defaultLogicTransfer(f)}</p>
                             </div>
                             {f.relatedCorrectionIds?.length ? (
                               <div className="flex flex-wrap gap-2">
@@ -1051,49 +1164,21 @@ ${feedback.essay}`;
               </section>
             </div>
 
-            {vocabularyUpgrade && (
-              <section>
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Vocabulary & Expression Upgrade</h3>
-                <PaperCard className="bg-paper-ink/[0.02]">
-                  <div className="grid gap-5 md:grid-cols-2">
-                    {vocabularyUpgrade.topicVocabulary.map((item, index) => (
-                      <div key={`topic-${index}`}>
-                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Topic-essential vocabulary</p>
-                        <p className="text-base leading-7 text-paper-ink/75">{item}</p>
-                      </div>
-                    ))}
-                    {vocabularyUpgrade.userWordingUpgrades.map((item, index) => (
-                      <div key={`wording-${index}`}>
-                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">User wording upgrade</p>
-                        <p className="text-sm leading-7 text-paper-ink/55 line-through">{item.original}</p>
-                        <p className="text-base leading-7 font-bold">{item.better}</p>
-                        <p className="text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
-                      </div>
-                    ))}
-                    {vocabularyUpgrade.collocationUpgrades.map((item, index) => (
-                      <div key={`collocation-${index}`}>
-                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Collocation upgrade</p>
-                        <p className="text-base leading-7 text-paper-ink/75">{item}</p>
-                      </div>
-                    ))}
-                    {vocabularyUpgrade.reusableSentenceFrames.map((item, index) => (
-                      <div key={`frame-${index}`}>
-                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Argument sentence frame</p>
-                        <p className="text-base leading-7 text-paper-ink/75">{item}</p>
-                      </div>
-                    ))}
-                  </div>
-                </PaperCard>
-              </section>
-            )}
-
             <PaperCard className="min-h-[220px]">
               <h3 className="text-sm font-bold uppercase tracking-widest mb-2">
-                {isPersonalizedModelAnswer ? 'Personalized Model Answer Excerpt' : 'Model Answer Excerpt'}
+                Target Model Excerpt / Revision Mission
               </h3>
+              <div className="flex flex-wrap gap-2 mb-4 text-[10px] font-sans font-bold uppercase tracking-widest">
+                <span className="border border-paper-ink/10 bg-paper-ink/5 px-2 py-1 rounded-sm text-paper-ink/55">
+                  Training estimate {formatBandEstimate(averageWritingScore(feedback))}
+                </span>
+                <span className="border border-accent-terracotta/20 bg-accent-terracotta/5 px-2 py-1 rounded-sm text-accent-terracotta">
+                  {getTargetModelLevel(feedback)}
+                </span>
+              </div>
               {hasSubstantialModelAnswer && isPersonalizedModelAnswer && (
                 <p className="text-sm leading-7 text-paper-ink/60 mb-4">
-                  This excerpt keeps your original position and fixes the main issues above.
+                  这段保留你的原始立场和主要思路，只把上面的逻辑、句子和表达问题集中修好。
                 </p>
               )}
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">

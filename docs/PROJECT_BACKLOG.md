@@ -167,9 +167,11 @@ _Last updated: 2026-05-13 (final handoff)_
 
 ## P1 Future — Writing Task 2 Phase 3 (Codex Priority)
 
+**Done 2026-05-13 (Codex implementation pass)**: learner-facing Phase 3 repair completed across UI rendering, feedback schema/normalization, provider prompts, Mock Provider output, and markdown export.
+
 ### Vocabulary & Expression Upgrade Redesign
 
-Redesign according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
+Implemented according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 
 - Use four confirmed groups:
   - `Topic Vocabulary`
@@ -184,14 +186,14 @@ Redesign according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 
 ### Logic Review — Revision Roadmap
 
-- Logic Review should become a revision roadmap with specific paragraph-level fixes.
+- Logic Review is now a revision roadmap with specific paragraph-level fixes.
 - Each major logic issue should explain what, why, and what to do.
 - Avoid generic fixes; prefer task-specific guidance.
 
 ### Personalized Model Answer Excerpt
 
-- Should remain a learner-specific upgraded direction, not a generic Band 9 essay.
-- Preserve learner's position and main ideas; fix the specific Phase 3 issues.
+- Now uses target training level wording and remains a learner-specific upgraded direction, not a generic Band 9 essay.
+- Preserves learner's position and main ideas where available; fixes the specific Phase 3 issues.
 
 ---
 

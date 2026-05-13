@@ -41,12 +41,15 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 - A Claude Code patch attempted to redesign Writing Task 2 Phase 3 Vocabulary & Expression Upgrade.
 - **That patch has been reverted and must NOT be treated as accepted design direction.**
 - Do not continue from the rejected Claude patch.
+- **2026-05-13**: Codex completed the accepted Writing Task 2 Phase 3 learner-facing feedback repair.
+  - Phase 3 order now follows: My Essay -> Essay-level Warnings -> Vocabulary & Expression Upgrade -> Logic & Structure Review -> Sentence Corrections -> Target Model Excerpt / Revision Mission.
+  - UI, provider prompt constraints, normalization, Mock Provider output, and markdown export are aligned to Chinese-first transferable feedback.
 
 ## Current Priority
 
-Writing Task 2 Phase 3 product information architecture / content logic repair.
+Writing Task 2 Phase 3 product information architecture / content logic repair is complete.
 
-This is **not** new feature expansion. The goal is to make the actual implementation match documented Phase 3 feedback logic and product design principles.
+Next product slice should be chosen from `docs/PROJECT_BACKLOG.md`. The documented next small slice after Task 2 Phase 3 is Speaking 2026 May-August seasonal question bank data integration.
 
 ## Agent Role Boundaries
 

@@ -103,6 +103,7 @@ export interface WritingFeedback {
     relatedCorrectionIds?: string[];
     paragraphFixZh?: string;
     exampleFrame?: string;
+    transferGuidanceZh?: string;
   }[];
   essayLevelWarnings: {
     title: string;
@@ -120,6 +121,7 @@ export interface WritingFeedback {
       better: string;
       explanationZh: string;
     }[];
+    transferGuidanceZh?: string;
     original: string;
     correction: string;
     dimension: 'TR' | 'CC' | 'LR' | 'GRA';
@@ -138,6 +140,7 @@ export interface WritingFeedback {
   };
   modelAnswer: string;
   modelAnswerPersonalized?: boolean;
+  modelAnswerTargetLevel?: string;
   reusableArguments: {
     argument: string;
     canBeReusedFor: string[];

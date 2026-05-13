@@ -53,6 +53,7 @@ _Last updated: 2026-05-13 (final handoff)_
 - Framework Summary must summarize the learner's notes and coach discussion, not generate a full model plan from the prompt alone.
 - Task 2 provider banner has been removed; provider notices appear only when routing/fallback events actually occur.
 - Phase tab layout is restored to stable three-column alignment.
+- Done 2026-05-13: Phase 3 learner-facing repair now orders feedback as My Essay -> Essay-level Warnings -> Vocabulary & Expression Upgrade -> Logic & Structure Review -> Sentence Corrections -> Target Model Excerpt / Revision Mission, with Chinese-first transferable guidance and aligned markdown export.
 
 ## V1.3 - Speaking Note Standard & Seasonal Bank
 
