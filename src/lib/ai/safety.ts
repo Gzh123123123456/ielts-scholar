@@ -532,14 +532,33 @@ const normalizeSpeakingFeedback = (
   };
 };
 
-const normalizeSeverity = (
+const normalizeFrameworkSeverity = (
   value: unknown,
   path: string,
   errors: string[],
 ): WritingFeedback['frameworkFeedback'][number]['severity'] => {
   if (value === 'fatal' || value === 'naturalness' || value === 'preserved') return value;
+  if (value === 'major') return 'fatal';
+  if (value === 'medium' || value === 'minor' || value === 'polish') return 'naturalness';
   errors.push(`${path} missing or invalid severity`);
   return 'naturalness';
+};
+
+const normalizeSentenceSeverity = (
+  value: unknown,
+  dimension: WritingFeedback['sentenceFeedback'][number]['dimension'],
+  tag: string,
+): WritingFeedback['sentenceFeedback'][number]['severity'] | undefined => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value === 'major' || value === 'medium' || value === 'minor' || value === 'polish') return value;
+  if (value === 'fatal') return 'major';
+  if (value === 'preserved') return 'polish';
+  if (value === 'naturalness') {
+    return dimension === 'TR' || dimension === 'CC' || /task|coherence|structure|paragraph/i.test(tag)
+      ? 'medium'
+      : 'polish';
+  }
+  return undefined;
 };
 
 const normalizeDimension = (
@@ -1048,7 +1067,7 @@ const normalizeWritingFeedback = (
           ? record.original.trim()
           : undefined,
       issueType: typeof record.issueType === 'string' && record.issueType.trim() ? record.issueType.trim() : undefined,
-      severity: normalizeSeverity(record.severity, `sentenceFeedback[${index}].severity`, validationErrors),
+      severity: normalizeSentenceSeverity(record.severity, dimension, tag),
       primaryIssue,
       secondaryIssues: normalizeSecondaryIssues(record.secondaryIssues, primaryIssue),
       microUpgrades: normalizeMicroUpgrades(record.microUpgrades),
@@ -1112,7 +1131,7 @@ const normalizeWritingFeedback = (
       return {
         issue,
         suggestionZh,
-        severity: normalizeSeverity(record.severity, `frameworkFeedback[${index}].severity`, validationErrors),
+        severity: normalizeFrameworkSeverity(record.severity, `frameworkFeedback[${index}].severity`, validationErrors),
         location,
         issueType,
         relatedCorrectionIds,
@@ -1152,8 +1171,8 @@ const normalizeWritingFeedback = (
     scores: scoresNormalized,
     frameworkFeedback,
     essayLevelWarnings: [
-      ...(lengthWarning ? [lengthWarning] : []),
       ...sourceWarnings,
+      ...(lengthWarning ? [lengthWarning] : []),
     ],
     sentenceFeedback,
     vocabularyUpgrade,

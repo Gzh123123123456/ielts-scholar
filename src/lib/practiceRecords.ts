@@ -235,7 +235,13 @@ const sanitizeWritingTask2Feedback = (value: unknown): WritingFeedback | undefin
         paragraph: asOptionalString(item.paragraph),
         sourceQuote: asString(item.sourceQuote, asString(item.original)) || undefined,
         issueType: asOptionalString(item.issueType),
-        severity: item.severity === 'fatal' || item.severity === 'preserved' || item.severity === 'naturalness' ? item.severity : undefined,
+        severity: item.severity === 'major' || item.severity === 'medium' || item.severity === 'minor' || item.severity === 'polish'
+          ? item.severity
+          : item.severity === 'fatal'
+            ? 'major'
+            : item.severity === 'naturalness' || item.severity === 'preserved'
+              ? 'polish'
+              : undefined,
         original: asString(item.original),
         correction: asString(item.correction),
         dimension: item.dimension === 'TR' || item.dimension === 'CC' || item.dimension === 'LR' || item.dimension === 'GRA' ? item.dimension : 'GRA',

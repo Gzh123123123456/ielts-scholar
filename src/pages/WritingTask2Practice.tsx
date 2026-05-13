@@ -27,7 +27,21 @@ type LanguageBankView = {
   expressionUpgrades: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'];
 };
 
+const WRITING_ANALYSIS_TIMEOUT_MS = 90000;
+
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+const withTimeout = async <T,>(promise: Promise<T>, ms: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 const hasLowSignalText = (text: string) => {
   const normalized = text.toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -234,6 +248,10 @@ const usefulLogicDiagnosis = (item: WritingFeedback['frameworkFeedback'][number]
 const isWarningIssue = (issue: string) =>
   /under-length|insufficient sample|extremely insufficient|unreliable training estimate/i.test(issue);
 
+const isWordCountWarning = (item: { title?: string; messageZh?: string }) =>
+  /under-length|under 250|insufficient sample|extremely insufficient|unreliable training estimate|essay development warning|word-count|word count|低于\s*250|样本太短|样本不足|字数|训练估计/i
+    .test(`${item.title || ''} ${item.messageZh || ''}`);
+
 const isPureLocalLanguageIssue = (item: WritingFeedback['frameworkFeedback'][number]) => {
   const text = `${item.issue} ${item.suggestionZh} ${item.issueType || ''}`.toLowerCase();
   return /lexical|vocab|word choice|collocation|grammar|tense|article|punctuation|spelling/.test(text)
@@ -266,12 +284,14 @@ const getEssayWarnings = (feedback: WritingFeedback, isInsufficientSample: boole
       }]
     : [];
   const seen = new Set<string>();
-  return [...insufficient, ...explicit, ...legacy].filter(item => {
+  const merged = [...explicit, ...legacy, ...insufficient].filter(item => {
     const key = `${item.title}|${item.messageZh}`;
     if (!item.messageZh || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  const firstWordCountWarning = merged.find(isWordCountWarning);
+  return merged.filter(item => !isWordCountWarning(item) || item === firstWordCountWarning);
 };
 
 const getLogicFeedback = (feedback: WritingFeedback) =>
@@ -470,6 +490,7 @@ export default function WritingTask2Practice() {
   const [frameworkExtractMessage, setFrameworkExtractMessage] = useState('');
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
   const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
+  const [analyzedEssaySnapshot, setAnalyzedEssaySnapshot] = useState('');
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
   const [apiStatusMessage, setApiStatusMessage] = useState('');
@@ -477,6 +498,8 @@ export default function WritingTask2Practice() {
   const isFrameworkInputComposingRef = useRef(false);
   const coachRunIdRef = useRef(0);
   const cancelledCoachRunRef = useRef<number | null>(null);
+  const analysisRunIdRef = useRef(0);
+  const cancelledAnalysisRunRef = useRef<number | null>(null);
   const activeAttemptIdRef = useRef(createRecordId('wt2'));
   const restoredRecordRef = useRef<WritingTask2PracticeRecord | null>(null);
   const isRestoringRecordRef = useRef(false);
@@ -509,47 +532,65 @@ export default function WritingTask2Practice() {
     essay,
     feedback,
     feedbackFallbackUsed,
+    analyzedEssaySnapshot,
     providerErrorMessage,
   ]);
 
-  const buildWritingRecord = (status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft'): WritingTask2PracticeRecord | null => {
-    if (!question) return null;
+  const buildWritingRecord = (
+    status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft',
+    overrides: {
+      question?: WritingQuestion;
+      phase?: 'framework' | 'writing' | 'results';
+      essay?: string;
+      feedback?: WritingFeedback | null;
+      feedbackFallbackUsed?: boolean;
+    } = {},
+  ): WritingTask2PracticeRecord | null => {
+    const recordQuestion = overrides.question || question;
+    if (!recordQuestion) return null;
     const timestamp = new Date().toISOString();
     const existing = restoredRecordRef.current?.id === activeAttemptIdRef.current ? restoredRecordRef.current : null;
+    const recordFeedback = overrides.feedback !== undefined ? overrides.feedback : feedback;
+    const recordEssay = overrides.essay ?? recordFeedback?.essay ?? (analyzedEssaySnapshot || essay);
     return {
       id: activeAttemptIdRef.current,
       module: 'writing',
       mode: 'practice',
       status,
       task: 'task2',
-      question: question.question,
-      questionId: question.id,
-      topic: question.topicCategory,
-      tags: question.tags,
-      taskType: question.type,
-      questionData: question,
+      question: recordQuestion.question,
+      questionId: recordQuestion.id,
+      topic: recordQuestion.topicCategory,
+      tags: recordQuestion.tags,
+      taskType: recordQuestion.type,
+      questionData: recordQuestion,
       createdAt: existing?.createdAt || timestamp,
       updatedAt: timestamp,
       analyzedAt: status === 'analyzed' ? existing?.analyzedAt || timestamp : existing?.analyzedAt,
-      phase,
+      phase: overrides.phase || phase,
       frameworkChat,
       frameworkInput,
       frameworkReadiness,
       latestFrameworkCoach: latestFrameworkCoach || undefined,
       finalFrameworkSummary,
       frameworkSummaryGenerated,
-      essay,
-      feedback: status === 'provider_failed' ? undefined : feedback || undefined,
-      feedbackFallbackUsed,
-      obsidianMarkdown: status === 'provider_failed' ? undefined : feedback?.obsidianMarkdown,
+      essay: recordEssay,
+      feedback: status === 'provider_failed' ? undefined : recordFeedback || undefined,
+      feedbackFallbackUsed: overrides.feedbackFallbackUsed ?? feedbackFallbackUsed,
+      obsidianMarkdown: status === 'provider_failed' ? undefined : recordFeedback?.obsidianMarkdown,
     };
   };
 
-  const persistWritingAttempt = (status?: 'draft' | 'analyzed' | 'provider_failed') => {
-    const record = buildWritingRecord(status);
+  const persistWritingAttempt = (
+    status?: 'draft' | 'analyzed' | 'provider_failed',
+    overrides?: Parameters<typeof buildWritingRecord>[1],
+  ) => {
+    const record = buildWritingRecord(status, overrides);
     if (!record) return;
     saveActiveWritingTask2(record);
-    upsertPracticeRecord(record);
+    if (record.status !== 'draft') {
+      upsertPracticeRecord(record);
+    }
   };
 
   const restoreWritingAttempt = (record: WritingTask2PracticeRecord, message = '') => {
@@ -570,6 +611,7 @@ export default function WritingTask2Practice() {
     setFrameworkSummaryGenerated(Boolean(record.frameworkSummaryGenerated));
     setEssay(record.essay);
     setFeedback(record.feedback || null);
+    setAnalyzedEssaySnapshot(record.feedback?.essay || record.essay || '');
     setFeedbackFallbackUsed(Boolean(record.feedbackFallbackUsed || record.providerDiagnostic?.fallbackUsed));
     setProviderErrorMessage(record.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your draft is preserved.' : '');
     setApiStatusMessage('');
@@ -577,14 +619,27 @@ export default function WritingTask2Practice() {
     setRestoreMessage(message);
   };
 
+  const cancelActiveAnalysis = (message?: string) => {
+    const runId = analysisRunIdRef.current;
+    cancelledAnalysisRunRef.current = runId;
+    analysisRunIdRef.current = runId + 1;
+    setIsAnalyzing(false);
+    if (message) setApiStatusMessage(message);
+  };
+
   const loadRandomQuestion = () => {
-    const random = writingTask2[Math.floor(Math.random() * writingTask2.length)];
+    cancelActiveAnalysis();
+    const candidates = question && writingTask2.length > 1
+      ? writingTask2.filter(item => item.id !== question.id)
+      : writingTask2;
+    const random = candidates[Math.floor(Math.random() * candidates.length)];
     activeAttemptIdRef.current = createRecordId('wt2');
     restoredRecordRef.current = null;
     setQuestion(random);
     setPhase('framework');
     setEssay('');
     setFeedback(null);
+    setAnalyzedEssaySnapshot('');
     setFeedbackFallbackUsed(false);
     setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
     setFrameworkReadiness('not_ready');
@@ -596,6 +651,48 @@ export default function WritingTask2Practice() {
     setApiStatusMessage('');
     setRestoreMessage('');
     addDebugLog(`Loaded writing question: ${random.id}`);
+  };
+
+  const practiceSameQuestionAgain = () => {
+    if (!question) return;
+    cancelActiveAnalysis();
+    activeAttemptIdRef.current = createRecordId('wt2');
+    restoredRecordRef.current = null;
+    setPhase('writing');
+    setEssay('');
+    setFeedback(null);
+    setAnalyzedEssaySnapshot('');
+    setFeedbackFallbackUsed(false);
+    setProviderErrorMessage('');
+    setApiStatusMessage('');
+    setFrameworkExtractMessage('');
+    setRestoreMessage('');
+    addDebugLog(`Started fresh rewrite for writing question: ${question.id}`);
+    const timestamp = new Date().toISOString();
+    saveActiveWritingTask2({
+      id: activeAttemptIdRef.current,
+      module: 'writing',
+      mode: 'practice',
+      status: 'draft',
+      task: 'task2',
+      question: question.question,
+      questionId: question.id,
+      topic: question.topicCategory,
+      tags: question.tags,
+      taskType: question.type,
+      questionData: question,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      phase: 'writing',
+      frameworkChat,
+      frameworkInput: '',
+      frameworkReadiness,
+      latestFrameworkCoach: latestFrameworkCoach || undefined,
+      finalFrameworkSummary,
+      frameworkSummaryGenerated,
+      essay: '',
+      feedbackFallbackUsed: false,
+    });
   };
 
   const submitFrameworkNote = async () => {
@@ -767,26 +864,63 @@ export default function WritingTask2Practice() {
   };
 
   const analyzeEssay = async () => {
+    if (isAnalyzing) return;
+    const submittedEssay = essay.trimEnd();
+    if (!submittedEssay.trim()) {
+      setProviderErrorMessage('Please write an essay before submitting for analysis.');
+      addDebugLog('Writing analysis skipped: empty essay.');
+      return;
+    }
+    if (!question) return;
+    const submittedQuestion = question;
+    const submittedFrameworkNotes = buildFrameworkNotes();
+    const submittedFinalFrameworkSummary = finalFrameworkSummary;
+    const runId = analysisRunIdRef.current + 1;
+    analysisRunIdRef.current = runId;
+    cancelledAnalysisRunRef.current = null;
     setIsAnalyzing(true);
     setProviderErrorMessage('');
     setApiStatusMessage('');
+    setAnalyzedEssaySnapshot(submittedEssay);
+    persistWritingAttempt('draft', {
+      question: submittedQuestion,
+      essay: submittedEssay,
+      feedback: null,
+      phase: 'writing',
+    });
     addDebugLog("Analyzing essay...");
     try {
-      const { feedback: result, diagnostic, route } = await routedAnalyzeWriting({
+      const { feedback: result, diagnostic, route } = await withTimeout(routedAnalyzeWriting({
         task: 'task2',
-        question: question?.question || '',
-        essay,
-        frameworkNotes: buildFrameworkNotes(),
-        finalFrameworkSummary,
-      }, isInsufficientTask2Sample(essay));
+        question: submittedQuestion.question,
+        essay: submittedEssay,
+        frameworkNotes: submittedFrameworkNotes,
+        finalFrameworkSummary: submittedFinalFrameworkSummary,
+      }, isInsufficientTask2Sample(submittedEssay)), WRITING_ANALYSIS_TIMEOUT_MS, 'Writing analysis timed out.');
+
+      if (cancelledAnalysisRunRef.current === runId || analysisRunIdRef.current !== runId) {
+        addDebugLog('Writing analysis response ignored after cancellation or newer run.');
+        return;
+      }
+
       setProviderDiagnostic(diagnostic);
       setApiStatusMessage(routeNotice(route, diagnostic.failureKind));
 
       if (diagnostic.failureKind === 'provider_unavailable') {
         setFeedbackFallbackUsed(false);
         setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your essay draft is preserved.');
-        persistWritingAttempt('provider_failed');
-        const failedBase = buildWritingRecord('provider_failed');
+        persistWritingAttempt('provider_failed', {
+          question: submittedQuestion,
+          essay: submittedEssay,
+          feedback: null,
+          phase: 'writing',
+        });
+        const failedBase = buildWritingRecord('provider_failed', {
+          question: submittedQuestion,
+          essay: submittedEssay,
+          feedback: null,
+          phase: 'writing',
+        });
         if (failedBase) {
           upsertPracticeRecord({
             ...failedBase,
@@ -797,17 +931,37 @@ export default function WritingTask2Practice() {
         return;
       }
 
+      const resultEssay = result.essay?.trim() ? result.essay : submittedEssay;
+      const resultFeedback: WritingFeedback = {
+        ...result,
+        question: result.question?.trim() ? result.question : submittedQuestion.question,
+        essay: resultEssay,
+      };
       setFeedbackFallbackUsed(diagnostic.fallbackUsed);
-      setFeedback(result);
+      setFeedback(resultFeedback);
+      setAnalyzedEssaySnapshot(resultEssay);
       setPhase('results');
-      persistWritingAttempt('analyzed');
-      const analyzedBase = buildWritingRecord('analyzed');
+      persistWritingAttempt('analyzed', {
+        question: submittedQuestion,
+        essay: resultEssay,
+        feedback: resultFeedback,
+        feedbackFallbackUsed: diagnostic.fallbackUsed,
+        phase: 'results',
+      });
+      const analyzedBase = buildWritingRecord('analyzed', {
+        question: submittedQuestion,
+        essay: resultEssay,
+        feedback: resultFeedback,
+        feedbackFallbackUsed: diagnostic.fallbackUsed,
+        phase: 'results',
+      });
       if (analyzedBase) {
         upsertPracticeRecord({
           ...analyzedBase,
-          feedback: result,
+          essay: resultEssay,
+          feedback: resultFeedback,
           feedbackFallbackUsed: diagnostic.fallbackUsed,
-          obsidianMarkdown: result.obsidianMarkdown,
+          obsidianMarkdown: resultFeedback.obsidianMarkdown,
           providerDiagnostic: summarizeDiagnostic(diagnostic),
         });
       }
@@ -817,10 +971,10 @@ export default function WritingTask2Practice() {
         date: new Date().toISOString(),
         module: 'writing',
         mode: 'practice',
-        question: question?.question,
-        essay,
-        framework: finalFrameworkSummary,
-        feedback: result,
+        question: submittedQuestion.question,
+        essay: resultEssay,
+        framework: submittedFinalFrameworkSummary,
+        feedback: resultFeedback,
         providerDiagnostic: summarizeDiagnostic(diagnostic),
       });
       addDebugLog("Writing analysis complete");
@@ -829,16 +983,43 @@ export default function WritingTask2Practice() {
       }
     } catch (error) {
       console.error(error);
+      if (cancelledAnalysisRunRef.current === runId || analysisRunIdRef.current !== runId) {
+        addDebugLog('Writing analysis error ignored after cancellation or newer run.');
+        return;
+      }
       setFeedbackFallbackUsed(false);
-      alert("Analysis failed.");
+      if (error instanceof Error && /timed out/i.test(error.message)) {
+        cancelledAnalysisRunRef.current = runId;
+        setEssay(submittedEssay);
+        persistWritingAttempt('draft', {
+          question: submittedQuestion,
+          essay: submittedEssay,
+          feedback: null,
+          phase: 'writing',
+        });
+        setApiStatusMessage('Analysis timed out. Your essay is preserved. Please retry.');
+        setProviderErrorMessage('');
+        addDebugLog('Writing analysis timed out.');
+        return;
+      }
+      setProviderErrorMessage('Analysis failed. Your essay is preserved. Please retry.');
+      addDebugLog(`Writing analysis failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      setIsAnalyzing(false);
+      if (analysisRunIdRef.current === runId) {
+        setIsAnalyzing(false);
+      }
     }
+  };
+
+  const stopAnalysis = () => {
+    cancelActiveAnalysis('Analysis stopped. Your essay is preserved.');
+    addDebugLog('Writing analysis cancelled by user.');
   };
 
   const exportMarkdown = () => {
     if (!feedback) return;
-    const warnings = getEssayWarnings(feedback, isInsufficientTask2Sample(essay));
+    const resultEssay = feedback.essay || analyzedEssaySnapshot || essay;
+    const warnings = getEssayWarnings(feedback, isInsufficientTask2Sample(resultEssay));
     const logicFeedback = getLogicFeedback(feedback);
     const vocabulary = getVocabularyUpgrade(feedback);
     const missionItems = getLanguageBankMission(feedback, vocabulary);
@@ -892,13 +1073,16 @@ ${item.microUpgrades?.length ? `- Micro upgrades:
 ${item.microUpgrades.map(upgrade => `  - ${upgrade.original} -> ${upgrade.better}: ${upgrade.explanationZh}`).join('\n')}` : ''}`;
         }).join('\n\n')
       : '- No sentence-level correction returned.';
+    const exportHasSubstantialModelAnswer = feedback.modelAnswer.trim().length > 24
+      && !isPlaceholderModelAnswer(feedback.modelAnswer)
+      && !isInsufficientTask2Sample(resultEssay);
     const markdown = `# IELTS Writing Task 2 Note
 
 ## Prompt
 ${feedback.question}
 
 ## My Essay
-${feedback.essay}
+${resultEssay}
 
 ## Essay-level Warnings
 ${warningItems}
@@ -919,7 +1103,7 @@ ${sentenceItems}
 ### Revision Mission
 ${missionItems.length ? missionItems.map(item => `- ${item}`).join('\n') : '- 下次修改时至少主动使用两个 Language Bank 表达。'}
 
-${hasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPersonalized ? '\n\nHighlighted phrases come from the Language Bank above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}`;
+${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPersonalized ? '\n\nHighlighted phrases come from the Language Bank above.' : ''}` : '- No reliable personalized excerpt for this attempt.'}`;
     const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -931,7 +1115,8 @@ ${hasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPe
 
   const writingWorkspaceClass = 'practice-workspace';
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
-  const isInsufficientSample = isInsufficientTask2Sample(essay);
+  const resultEssay = feedback?.essay || analyzedEssaySnapshot || essay;
+  const isInsufficientSample = isInsufficientTask2Sample(resultEssay);
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
   const isPersonalizedModelAnswer = Boolean(feedback?.modelAnswerPersonalized);
   const hasCoachFeedback = frameworkChat.some((msg, index) => msg.role === 'ai' && index > 0);
@@ -1132,6 +1317,16 @@ ${hasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPe
               <div className="flex justify-between items-center bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest">
                 <span>WORD COUNT: {countWords(essay)}</span>
                 <div className="flex items-center gap-4">
+                  {question && (
+                    <SerifButton type="button" onClick={practiceSameQuestionAgain} variant="outline" className="text-xs">
+                      Rewrite same question
+                    </SerifButton>
+                  )}
+                  {isAnalyzing && (
+                    <SerifButton type="button" onClick={stopAnalysis} variant="outline" className="text-xs">
+                      Stop analysis
+                    </SerifButton>
+                  )}
                   <SerifButton onClick={analyzeEssay} disabled={isAnalyzing || !essay.trim()} className="flex items-center gap-2">
                     {isAnalyzing ? "Analyzing..." : "Submit for Analysis"} <Send className="w-4 h-4" />
                   </SerifButton>
@@ -1163,7 +1358,7 @@ ${hasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPe
               <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
               <PaperCard>
                 <div className="text-[17px] leading-8 whitespace-pre-wrap text-paper-ink max-h-[420px] overflow-auto pr-1">
-                  {essay}
+                  {resultEssay}
                 </div>
               </PaperCard>
             </section>
@@ -1403,6 +1598,7 @@ ${hasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPe
               <SerifButton onClick={exportMarkdown} variant="outline" className="flex-1 text-xs flex items-center justify-center gap-2">
                 <FileDown className="w-4 h-4" /> Export Markdown
               </SerifButton>
+              <SerifButton onClick={practiceSameQuestionAgain} variant="outline" className="flex-1 text-xs">Practice this question again</SerifButton>
               <SerifButton onClick={loadRandomQuestion} className="flex-1 text-xs">New Question</SerifButton>
             </div>
           </div>

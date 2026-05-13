@@ -97,7 +97,7 @@ export interface WritingFeedback {
   frameworkFeedback: {
     issue: string;
     suggestionZh: string;
-    severity: 'fatal' | 'naturalness' | 'preserved';
+    severity: 'fatal' | 'naturalness' | 'preserved' | 'major' | 'medium' | 'minor' | 'polish';
     location?: 'Whole Essay' | 'Introduction' | 'Body Paragraph 1' | 'Body Paragraph 2' | 'Conclusion' | 'Unknown / General';
     issueType?: string;
     relatedCorrectionIds?: string[];
@@ -115,7 +115,7 @@ export interface WritingFeedback {
     paragraph?: string;
     sourceQuote?: string;
     issueType?: string;
-    severity?: 'fatal' | 'naturalness' | 'preserved';
+    severity?: 'major' | 'medium' | 'minor' | 'polish';
     primaryIssue?: string;
     secondaryIssues?: string[];
     microUpgrades?: {

@@ -90,6 +90,8 @@ Set "task" to the exact input task value.
 Separate big-picture task response / paragraph logic problems from sentence-level corrections.
 Return essayLevelWarnings separately for global warnings only: under-length response, insufficient sample, unreliable training estimate. Do not put these in frameworkFeedback.
 Use sentenceFeedback for direct local sentence corrections only. Give every sentence correction a stable id like C1, C2, C3.
+For sentenceFeedback severity, use optional values major, medium, minor, or polish. Omit it when unsure.
+For frameworkFeedback severity, use fatal, naturalness, or preserved.
 For sentenceFeedback, include primaryIssue, secondaryIssues, microUpgrades, and transferGuidanceZh when they help the learner revise.
 Use frameworkFeedback for Logic & Structure Review only: task response, off-topic or irrelevant opening, missing advantage/disadvantage coverage, weak position, missing paragraph development, paragraph order/structure, lack of examples/support.
 Do not put pure lexical, grammar, or local wording issues into frameworkFeedback unless they directly affect task response or structure.
