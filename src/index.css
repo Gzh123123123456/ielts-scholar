@@ -209,11 +209,37 @@
   font: inherit;
   line-height: inherit;
   padding: 0.01em 0.12em;
+  position: relative;
   text-align: inherit;
-  text-decoration: underline;
+  text-decoration: line-through;
   text-decoration-color: rgba(60, 47, 47, 0.26);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.22em;
+}
+
+.annotated-essay-mark::after {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border: 1px solid rgba(253, 250, 246, 0.95);
+  border-radius: 999px;
+  background: rgba(105, 105, 105, 0.78);
+  box-shadow: 0 1px 4px rgba(60, 47, 47, 0.18);
+  position: absolute;
+  right: -0.18rem;
+  top: -0.18rem;
+}
+
+.annotated-essay-mark[data-severity="major"]::after {
+  background: #b42318;
+}
+
+.annotated-essay-mark[data-severity="medium"]::after {
+  background: #c76a2b;
+}
+
+.annotated-essay-mark[data-severity="minor"]::after {
+  background: #c59a2d;
 }
 
 .annotated-essay-mark--sentence {
@@ -236,6 +262,217 @@
   box-shadow: 0 14px 32px rgba(60, 47, 47, 0.08);
   margin-top: 0.85rem;
   padding: 1rem;
+}
+
+.annotation-tether {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 70;
+}
+
+.annotation-tether line {
+  stroke: rgba(60, 47, 47, 0.26);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.annotation-overlay {
+  background: rgba(253, 250, 246, 0.99);
+  border: 1px solid rgba(60, 47, 47, 0.14);
+  border-left: 2px solid rgba(166, 77, 50, 0.42);
+  border-radius: 0.25rem;
+  box-shadow: 0 20px 48px rgba(60, 47, 47, 0.16);
+  color: rgb(60, 47, 47);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: fixed;
+  z-index: 80;
+}
+
+.annotation-overlay__header {
+  align-items: flex-start;
+  background: rgba(60, 47, 47, 0.035);
+  border-bottom: 1px solid rgba(60, 47, 47, 0.10);
+  cursor: grab;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.9rem 1rem 0.75rem;
+  touch-action: none;
+  user-select: none;
+}
+
+.annotation-overlay__header:active {
+  cursor: grabbing;
+}
+
+.annotation-overlay__eyebrow,
+.annotation-overlay__label {
+  color: rgba(60, 47, 47, 0.42);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+}
+
+.annotation-overlay__header h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.annotation-overlay__close {
+  align-items: center;
+  border: 1px solid rgba(60, 47, 47, 0.12);
+  border-radius: 999px;
+  color: rgba(60, 47, 47, 0.64);
+  display: inline-flex;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  height: 1.7rem;
+  justify-content: center;
+  line-height: 1;
+  width: 1.7rem;
+}
+
+.annotation-overlay__close:hover {
+  background: rgba(60, 47, 47, 0.06);
+  color: rgba(60, 47, 47, 0.86);
+}
+
+.annotation-overlay__body {
+  flex: 1;
+  font-size: 0.92rem;
+  line-height: 1.75;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.annotation-overlay__body section + section {
+  margin-top: 0.9rem;
+}
+
+.annotation-overlay__original {
+  color: rgba(60, 47, 47, 0.64);
+}
+
+.annotation-overlay__corrected {
+  color: rgba(60, 47, 47, 0.9);
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.annotation-overlay__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.annotation-overlay__chips span {
+  background: rgba(60, 47, 47, 0.045);
+  border: 1px solid rgba(60, 47, 47, 0.10);
+  border-radius: 0.16rem;
+  color: rgba(60, 47, 47, 0.62);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.16rem 0.42rem;
+  text-transform: uppercase;
+}
+
+.annotation-overlay__stack {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.annotation-overlay__upgrade {
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(60, 47, 47, 0.10);
+  border-radius: 0.16rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.annotation-overlay__upgrade span {
+  color: rgba(60, 47, 47, 0.46);
+  text-decoration: line-through;
+}
+
+.annotation-overlay__upgrade b {
+  color: rgba(60, 47, 47, 0.86);
+  margin-left: 0.35rem;
+}
+
+.annotation-overlay__resize {
+  border-bottom: 2px solid rgba(60, 47, 47, 0.34);
+  border-right: 2px solid rgba(60, 47, 47, 0.34);
+  bottom: 0.5rem;
+  cursor: nwse-resize;
+  height: 1rem;
+  position: absolute;
+  right: 0.5rem;
+  touch-action: none;
+  width: 1rem;
+}
+
+.annotation-lab {
+  background:
+    linear-gradient(rgba(60, 47, 47, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(60, 47, 47, 0.05) 1px, transparent 1px);
+  background-size: 42px 42px;
+  border: 1px dashed rgba(60, 47, 47, 0.18);
+  min-height: 320px;
+  position: relative;
+}
+
+.annotation-lab__marker {
+  position: absolute;
+}
+
+.annotation-lab__marker--1 {
+  left: 1rem;
+  top: 1rem;
+}
+
+.annotation-lab__marker--2 {
+  right: 1rem;
+  top: 1rem;
+}
+
+.annotation-lab__marker--3 {
+  bottom: 1rem;
+  left: 1rem;
+}
+
+.annotation-lab__marker--4 {
+  bottom: 1rem;
+  right: 1rem;
+  max-width: 16rem;
+}
+
+@media (max-width: 767px) {
+  .annotation-overlay--sheet {
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0.55rem 0.55rem 0 0;
+    bottom: 0;
+    height: auto;
+    left: 0;
+    max-height: min(78vh, 640px);
+    right: 0;
+    top: auto;
+    width: auto;
+  }
+
+  .annotation-overlay--sheet .annotation-overlay__header {
+    cursor: default;
+  }
 }
 
 .ink-link {

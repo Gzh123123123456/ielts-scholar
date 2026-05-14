@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -627,6 +628,352 @@ const groupedLogicFeedback = (items: WritingFeedback['frameworkFeedback']) =>
     }))
     .filter(group => group.items.length);
 
+const getLogicGroupForCorrection = (
+  correction: WritingFeedback['sentenceFeedback'][number] | null,
+  correctionIndex: number,
+  logicItems: WritingFeedback['frameworkFeedback'],
+): LogicLocation | null => {
+  const related = getRelatedLogicItems(correction, correctionIndex, logicItems);
+  return related[0] ? getDisplayLocation(related[0]) : null;
+};
+
+const getSeverityTone = (item: WritingFeedback['sentenceFeedback'][number]) => {
+  const text = `${item.severity || ''} ${item.issueType || ''} ${item.dimension || ''} ${item.tag || ''} ${item.primaryIssue || ''}`.toLowerCase();
+  if (/fatal|major|task.response|task_response|off.topic|off_topic/.test(text) || item.dimension === 'TR') return 'major';
+  if (/medium|coherence|cohesion|sentence.boundary|sentence_boundary/.test(text) || item.dimension === 'CC') return 'medium';
+  if (/minor|polish|micro|article|plural|punctuation|spelling/.test(text)) return 'minor';
+  return 'unknown';
+};
+
+type OverlayRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+const clampNumber = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+const getOverlayPosition = (anchor: DOMRect, size: { width: number; height: number }): OverlayRect => {
+  const margin = 16;
+  const gap = 18;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const maxLeft = Math.max(margin, viewportWidth - size.width - margin);
+  const maxTop = Math.max(margin, viewportHeight - size.height - margin);
+  const anchorCenterX = anchor.left + anchor.width / 2;
+  const anchorCenterY = anchor.top + anchor.height / 2;
+  const preferRight = anchorCenterX >= viewportWidth / 2;
+  let left = preferRight ? anchor.right + gap : anchor.left - size.width - gap;
+
+  if (preferRight && left + size.width > viewportWidth - margin) left = anchor.left - size.width - gap;
+  if (!preferRight && left < margin) left = anchor.right + gap;
+  left = clampNumber(left, margin, maxLeft);
+
+  let top = anchorCenterY - size.height / 2;
+  if (anchor.top < size.height + margin && anchor.bottom + gap + size.height <= viewportHeight - margin) {
+    top = anchor.bottom + gap;
+  }
+  if (anchor.bottom > viewportHeight - size.height - margin && anchor.top - gap - size.height >= margin) {
+    top = anchor.top - size.height - gap;
+  }
+  top = clampNumber(top, margin, maxTop);
+
+  return { left, top, width: size.width, height: size.height };
+};
+
+type AnnotationOverlayProps = {
+  span: AnnotatedCorrectionSpan;
+  anchorEl: HTMLElement | null;
+  onClose: () => void;
+};
+
+const AnnotationOverlay = ({ span, anchorEl, onClose }: AnnotationOverlayProps) => {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [rect, setRect] = useState<OverlayRect>(() => ({
+    left: 24,
+    top: 96,
+    width: 380,
+    height: 300,
+  }));
+  const [anchorPoint, setAnchorPoint] = useState({ x: 0, y: 0 });
+  const [cardPoint, setCardPoint] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; left: number; top: number } | null>(null);
+  const resizeRef = useRef<{ pointerId: number; x: number; width: number; ratio: number } | null>(null);
+
+  const updateTether = () => {
+    if (!anchorEl || isMobile) return;
+    const anchorRect = anchorEl.getBoundingClientRect();
+    setAnchorPoint({
+      x: anchorRect.right - 2,
+      y: anchorRect.top + Math.max(2, anchorRect.height * 0.18),
+    });
+    setCardPoint({
+      x: rect.left + (anchorRect.left > rect.left ? rect.width : 0),
+      y: clampNumber(anchorRect.top + anchorRect.height / 2, rect.top + 18, rect.top + rect.height - 18),
+    });
+  };
+
+  useEffect(() => {
+    const syncMobile = () => setIsMobile(window.innerWidth < 768);
+    syncMobile();
+    window.addEventListener('resize', syncMobile);
+    return () => window.removeEventListener('resize', syncMobile);
+  }, []);
+
+  useEffect(() => {
+    if (!anchorEl || isMobile) return;
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const nextWidth = clampNumber(Math.min(window.innerWidth - 32, 390), 300, 640);
+    const nextHeight = clampNumber(300, 220, Math.max(220, window.innerHeight - 32));
+    setRect(getOverlayPosition(anchorRect, { width: nextWidth, height: nextHeight }));
+  }, [anchorEl, isMobile, span.correctionId]);
+
+  useEffect(() => {
+    updateTether();
+    const onScrollOrResize = () => {
+      if (!anchorEl || isMobile) return;
+      const anchorRect = anchorEl.getBoundingClientRect();
+      setRect(current => getOverlayPosition(anchorRect, current));
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [anchorEl, isMobile, onClose, rect.height, rect.left, rect.top, rect.width]);
+
+  useEffect(() => {
+    updateTether();
+  }, [rect, anchorEl, isMobile]);
+
+  const correction = span.correction;
+  const visibleTransferGuidance = getVisibleTransferGuidance(correction);
+  const maxHeight = typeof window === 'undefined' ? 520 : Math.max(220, window.innerHeight - 32);
+
+  const beginDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (isMobile) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+  };
+
+  const onDragMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const margin = 12;
+    setRect(current => ({
+      ...current,
+      left: clampNumber(drag.left + event.clientX - drag.x, margin, window.innerWidth - current.width - margin),
+      top: clampNumber(drag.top + event.clientY - drag.y, margin, window.innerHeight - 48),
+    }));
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+  };
+
+  const beginResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (isMobile) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      width: rect.width,
+      ratio: rect.width / rect.height,
+    };
+  };
+
+  const onResizeMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const resize = resizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    const maxWidth = Math.min(640, window.innerWidth - rect.left - 12);
+    const width = clampNumber(resize.width + event.clientX - resize.x, 300, maxWidth);
+    const height = clampNumber(width / resize.ratio, 220, maxHeight);
+    setRect(current => ({ ...current, width, height }));
+  };
+
+  const endResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (resizeRef.current?.pointerId === event.pointerId) resizeRef.current = null;
+  };
+
+  const content = (
+    <>
+      {!isMobile && anchorEl && (
+        <svg className="annotation-tether" aria-hidden="true">
+          <line x1={anchorPoint.x} y1={anchorPoint.y} x2={cardPoint.x} y2={cardPoint.y} />
+        </svg>
+      )}
+      <div
+        ref={cardRef}
+        className={isMobile ? 'annotation-overlay annotation-overlay--sheet' : 'annotation-overlay'}
+        style={isMobile ? undefined : { left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+      >
+        <div
+          className="annotation-overlay__header"
+          onPointerDown={beginDrag}
+          onPointerMove={onDragMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        >
+          <div>
+            <p className="annotation-overlay__eyebrow">Correction {correction.correctionNumber ? `#${correction.correctionNumber}` : span.correctionId}</p>
+            <h4>{getConciseCorrectionIssue(correction)}</h4>
+          </div>
+          <button type="button" className="annotation-overlay__close" onClick={onClose} aria-label="Close annotation">
+            ×
+          </button>
+        </div>
+        <div className="annotation-overlay__body">
+          <section>
+            <p className="annotation-overlay__label">Original</p>
+            <p className="annotation-overlay__original">{renderOriginalSentence(correction)}</p>
+          </section>
+          <section>
+            <p className="annotation-overlay__label">Corrected</p>
+            <p className="annotation-overlay__corrected">{correction.correction}</p>
+          </section>
+          <section className="annotation-overlay__chips">
+            <span>{correction.primaryIssue || getConciseCorrectionIssue(correction)}</span>
+            {(correction.secondaryIssues || []).map(issue => <span key={issue}>{issue}</span>)}
+          </section>
+          {correction.microUpgrades?.length ? (
+            <section className="annotation-overlay__stack">
+              <p className="annotation-overlay__label">Micro upgrades</p>
+              {correction.microUpgrades.map((upgrade, upgradeIndex) => (
+                <div key={`${upgrade.original}-${upgradeIndex}`} className="annotation-overlay__upgrade">
+                  <p><span>{upgrade.original}</span> <b>{upgrade.better}</b></p>
+                  <p>{normalizeLearnerChineseText(upgrade.explanationZh)}</p>
+                </div>
+              ))}
+            </section>
+          ) : null}
+          <section>
+            <p className="annotation-overlay__label">Why this matters</p>
+            <p>{normalizeLearnerChineseText(correction.explanationZh)}</p>
+          </section>
+          {visibleTransferGuidance && (
+            <section>
+              <p className="annotation-overlay__label">Transfer check</p>
+              <p>{normalizeLearnerChineseText(visibleTransferGuidance)}</p>
+            </section>
+          )}
+        </div>
+        {!isMobile && (
+          <button
+            type="button"
+            className="annotation-overlay__resize"
+            aria-label="Resize annotation"
+            onPointerDown={beginResize}
+            onPointerMove={onResizeMove}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+          />
+        )}
+      </div>
+    </>
+  );
+
+  return createPortal(content, document.body);
+};
+
+const createDevCorrection = (
+  id: string,
+  original: string,
+  correction: string,
+  severity: WritingFeedback['sentenceFeedback'][number]['severity'],
+  explanationZh: string,
+): AnnotatedCorrectionSpan => ({
+  correction: {
+    id,
+    correctionNumber: Number(id.replace(/^C/i, '')) || 1,
+    sourceQuote: original,
+    issueType: severity === 'major' ? 'task_response' : 'word_choice',
+    severity,
+    primaryIssue: severity === 'major' ? 'Task-response level issue' : 'Local wording issue',
+    secondaryIssues: severity === 'medium' ? ['cohesion', 'precision'] : [],
+    microUpgrades: [{
+      original,
+      better: correction,
+      explanationZh,
+    }],
+    transferGuidanceZh: 'Before reusing this pattern, check whether the phrase advances the paragraph job clearly.',
+    original,
+    correction,
+    dimension: severity === 'major' ? 'TR' : severity === 'medium' ? 'CC' : 'LR',
+    tag: severity === 'major' ? 'task_response' : 'word_choice',
+    explanationZh,
+  },
+  correctionIndex: Number(id.replace(/^C/i, '')) - 1,
+  correctionId: id,
+  start: 0,
+  end: original.length,
+  quote: original,
+  paragraphIndex: 0,
+  matchLevel: original.split(/\s+/).length > 8 ? 'sentence' : 'phrase',
+});
+
+const DevAnnotationOverlayLab = () => {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const spans = useMemo(() => [
+    createDevCorrection('C1', 'top-left marker', 'top-left correction with clearer task focus', 'major', 'This preview checks whether a card near the upper-left stays reachable.'),
+    createDevCorrection('C2', 'top-right marker', 'top-right correction with cleaner cohesion', 'medium', 'This preview checks outward placement and viewport flipping near the upper-right edge.'),
+    createDevCorrection('C3', 'bottom-left marker', 'bottom-left correction with more precise phrasing', 'minor', 'This preview checks vertical placement when the anchor is low in the lab surface.'),
+    createDevCorrection(
+      'C4',
+      'bottom-right marker with long correction content',
+      'bottom-right correction with long content that should scroll internally while the card keeps readable typography and a recoverable resize handle',
+      'polish',
+      'This deliberately long preview checks internal scrolling, proportional resizing, and tether updates after drag or resize. The content belongs only to the development interaction lab and never affects saved records or exports.',
+    ),
+  ], []);
+  const selected = spans.find(span => span.correctionId === selectedId) || null;
+
+  return (
+    <details className="border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
+      <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between gap-4">
+        <span>Temporary interaction lab / dev-only preview</span>
+        <span className="text-paper-ink/35">Open</span>
+      </summary>
+      <div className="mt-4 border-t border-paper-ink/10 pt-4">
+        <div className="annotation-lab">
+          {spans.map((span, index) => (
+            <button
+              key={span.correctionId}
+              type="button"
+              ref={(element) => {
+                refs.current[span.correctionId] = element;
+              }}
+              data-severity={getSeverityTone(span.correction)}
+              className={`annotated-essay-mark annotation-lab__marker annotation-lab__marker--${index + 1} ${selectedId === span.correctionId ? 'annotated-essay-mark--active' : ''}`}
+              onClick={() => setSelectedId(span.correctionId)}
+            >
+              {span.quote}
+            </button>
+          ))}
+        </div>
+      </div>
+      {selected && (
+        <AnnotationOverlay
+          span={selected}
+          anchorEl={refs.current[selected.correctionId] || null}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+    </details>
+  );
+};
+
 const isGenericExpressionNote = (text?: string) =>
   !text?.trim()
   || /把原文里比较口语或笼统的说法，换成更适合 Task 2 论证的短语|下次表达同一意思时，先替换关键词组，再检查句子是否推进论点|下次写到相同意思时，直接复用升级后的短语，再补上本题具体内容|这是 Task 2 论证中可以复用的句架|下次需要让步、转折、平衡观点或推进理由时使用|这是比单个词更适合记忆的搭配块|下次表达同一话题关系时，可以整块放进句子里/.test(text);
@@ -813,11 +1160,13 @@ export default function WritingTask2Practice() {
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
   const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
   const [selectedCorrectionId, setSelectedCorrectionId] = useState<string | null>(null);
+  const [openLogicLocation, setOpenLogicLocation] = useState<LogicLocation | null>(null);
   const [analyzedEssaySnapshot, setAnalyzedEssaySnapshot] = useState('');
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
   const [apiStatusMessage, setApiStatusMessage] = useState('');
   const discussionRef = useRef<HTMLDivElement | null>(null);
+  const markerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const isFrameworkInputComposingRef = useRef(false);
   const coachRunIdRef = useRef(0);
   const cancelledCoachRunRef = useRef<number | null>(null);
@@ -1473,6 +1822,20 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
     ? getRelatedLogicItems(selectedCorrection, selectedCorrectionIndex, logicFeedback)
     : [];
   const selectedRelatedLogicSet = new Set(selectedRelatedLogic);
+  const selectedAnchorEl = selectedCorrectionId ? markerRefs.current[selectedCorrectionId] || null : null;
+
+  useEffect(() => {
+    if (!logicGroups.length) {
+      setOpenLogicLocation(null);
+      return;
+    }
+    setOpenLogicLocation(current => current || logicGroups[0].location);
+  }, [logicGroups]);
+
+  useEffect(() => {
+    const relatedLocation = getLogicGroupForCorrection(selectedCorrection, selectedCorrectionIndex, logicFeedback);
+    if (relatedLocation) setOpenLogicLocation(relatedLocation);
+  }, [logicFeedback, selectedCorrection, selectedCorrectionIndex]);
 
   return (
     <PageShell size="wide">
@@ -1685,24 +2048,35 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
         )}
 
         {phase === 'results' && feedback && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
                 { label: 'Task Response', score: feedback.scores.taskResponse },
                 { label: 'Cohesion', score: feedback.scores.coherenceCohesion },
                 { label: 'Lexical', score: feedback.scores.lexicalResource },
                 { label: 'Grammar', score: feedback.scores.grammaticalRangeAccuracy },
               ].map((s) => (
-                <PaperCard key={s.label} className="text-center p-4">
+                <PaperCard key={s.label} className="text-center p-3">
                   <div className="text-[10px] font-sans font-bold text-paper-ink/40 uppercase mb-1">{s.label}</div>
-                  <div className={isInsufficientSample ? 'text-sm font-bold text-paper-ink/50 uppercase tracking-widest font-sans pt-2' : 'text-2xl font-bold text-accent-terracotta'}>
+                  <div className={isInsufficientSample ? 'text-xs font-bold text-paper-ink/50 uppercase tracking-widest font-sans pt-1' : 'text-xl font-bold text-accent-terracotta'}>
                     {isInsufficientSample ? 'Insufficient' : formatBandEstimate(s.score)}
                   </div>
                 </PaperCard>
               ))}
             </div>
 
-            <div className="grid gap-8 xl:grid-cols-[minmax(0,1.12fr)_minmax(420px,0.88fr)] xl:items-start">
+            {essayWarnings.length > 0 && (
+              <section className="space-y-3">
+                {essayWarnings.map((warning, index) => (
+                  <PaperCard key={`${warning.title}-${index}`} className="border-l-2 border-l-red-800 bg-red-50/40 py-3">
+                    <h4 className="text-sm font-bold leading-6 text-red-900 mb-1">{warning.title}</h4>
+                    <p className="text-sm leading-7 text-paper-ink/85">{warning.messageZh}</p>
+                  </PaperCard>
+                ))}
+              </section>
+            )}
+
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(380px,0.88fr)] xl:items-start">
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
                 <PaperCard>
@@ -1725,7 +2099,11 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                             key={`essay-mark-${span.correctionId}-${span.start}`}
                             type="button"
                             className={`annotated-essay-mark ${span.matchLevel === 'sentence' ? 'annotated-essay-mark--sentence' : ''} ${isSelected ? 'annotated-essay-mark--active' : ''}`}
-                            onClick={() => setSelectedCorrectionId(isSelected ? null : span.correctionId)}
+                            data-severity={getSeverityTone(span.correction)}
+                            ref={(element) => {
+                              markerRefs.current[span.correctionId] = element;
+                            }}
+                            onClick={() => setSelectedCorrectionId(span.correctionId)}
                             aria-pressed={isSelected}
                           >
                             {resultEssay.slice(span.start, span.end)}
@@ -1741,8 +2119,8 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                         );
                       }
 
-                      const overlaySpan = selectedCorrectionSpan?.paragraphIndex === paragraphIndex ? selectedCorrectionSpan : null;
-                      const overlayCorrection = overlaySpan?.correction;
+                      const overlaySpan = selectedCorrectionSpan || paragraphSpans[0];
+                      const overlayCorrection: WritingFeedback['sentenceFeedback'][number] | null = null;
                       return (
                         <div key={`essay-paragraph-${paragraphIndex}`} className="annotated-essay-paragraph">
                           <p className="whitespace-pre-wrap">{nodes}</p>
@@ -1807,20 +2185,39 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                     })}
                   </div>
                 </PaperCard>
+                {selectedCorrectionSpan && (
+                  <AnnotationOverlay
+                    span={selectedCorrectionSpan}
+                    anchorEl={selectedAnchorEl}
+                    onClose={() => setSelectedCorrectionId(null)}
+                  />
+                )}
               </section>
 
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-accent-terracotta" /> Logic & Structure Review
                 </h3>
-                <div className="space-y-5">
+                <div className="max-h-[520px] overflow-auto pr-1 space-y-2">
                   {logicGroups.length ? logicGroups.map(group => (
-                    <div key={group.location} className="space-y-3">
-                      <h4 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45">{logicLocationLabels[group.location]}</h4>
+                    <div key={group.location} className="border border-paper-ink/10 bg-paper-ink/[0.02] rounded-sm overflow-hidden">
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+                        onClick={() => setOpenLogicLocation(openLogicLocation === group.location ? null : group.location)}
+                        aria-expanded={openLogicLocation === group.location}
+                      >
+                        <span className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/55">{logicLocationLabels[group.location]}</span>
+                        <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35">
+                          {group.items.length} issue{group.items.length > 1 ? 's' : ''}
+                        </span>
+                      </button>
+                      {openLogicLocation === group.location && (
+                        <div className="px-4 pb-4 space-y-3 border-t border-paper-ink/10">
                       {group.items.map((f, i) => {
                         const isRelated = selectedRelatedLogicSet.has(f) || isLogicItemRelatedToCorrection(f, selectedCorrection, selectedCorrectionIndex);
                         return (
-                          <div key={`${group.location}-${i}`} className={`p-5 border rounded-sm flex items-start gap-3 transition-colors ${isRelated ? 'bg-accent-terracotta/5 border-accent-terracotta/25' : f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-ink/5 border-paper-ink/10'}`}>
+                          <div key={`${group.location}-${i}`} className={`mt-3 p-4 border rounded-sm flex items-start gap-3 transition-colors ${isRelated ? 'bg-accent-terracotta/5 border-accent-terracotta/30 ring-1 ring-accent-terracotta/15' : f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-50/70 border-paper-ink/10'}`}>
                             <div className={`w-2 h-2 rounded-full mt-1.5 ${isRelated ? 'bg-accent-terracotta' : f.severity === 'fatal' ? 'bg-red-800' : 'bg-accent-terracotta/70'}`} />
                             <div className="min-w-0 space-y-3">
                               <div>
@@ -1844,6 +2241,8 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                           </div>
                         );
                       })}
+                        </div>
+                      )}
                     </div>
                   )) : (
                     <PaperCard className="bg-paper-ink/5">
@@ -1854,19 +2253,46 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               </section>
             </div>
 
-            {essayWarnings.length > 0 && (
-              <section>
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Essay-level Warnings</h3>
-                <div className="space-y-3">
-                  {essayWarnings.map((warning, index) => (
-                    <PaperCard key={`${warning.title}-${index}`} className="border-l-2 border-l-red-800 bg-red-50/40">
-                      <h4 className="text-[17px] font-bold leading-7 text-red-900 mb-2">{warning.title}</h4>
-                      <p className="text-base leading-8 text-paper-ink/85">{warning.messageZh}</p>
-                    </PaperCard>
-                  ))}
+            {import.meta.env.DEV && <DevAnnotationOverlayLab />}
+
+            <PaperCard className="min-h-[220px]">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                <h3 className="text-sm font-bold uppercase tracking-widest">
+                  Target Model Answer
+                </h3>
+                <div className="flex flex-wrap gap-2 text-[10px] font-sans font-bold uppercase tracking-widest">
+                  <span className="border border-paper-ink/10 bg-paper-ink/5 px-2 py-1 rounded-sm text-paper-ink/55">
+                    Training estimate {formatBandEstimate(averageWritingScore(feedback))}
+                  </span>
+                  <span className="border border-accent-terracotta/20 bg-accent-terracotta/5 px-2 py-1 rounded-sm text-accent-terracotta">
+                    Target level: {getTargetModelLevel(feedback)}
+                  </span>
                 </div>
-              </section>
-            )}
+              </div>
+              {hasSubstantialModelAnswer && isPersonalizedModelAnswer && (
+                <p className="text-sm leading-7 text-paper-ink/60 mb-3">
+                  This answer preserves your position and demonstrates selected repairs from the workspace above.
+                </p>
+              )}
+              <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
+                {hasSubstantialModelAnswer ? (
+                  <>
+                    <p className="text-[11px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+                      高亮说明
+                    </p>
+                    <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap">
+                      {renderAnnotatedModelAnswer(modelAnswerText, modelAnswerAnnotations, modelHighlightTerms)}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-base leading-8 text-paper-ink/65">
+                    {isInsufficientSample
+                      ? 'Model-answer text is hidden for this insufficient sample so the saved record does not look more reliable than it is.'
+                      : 'No substantial model answer was returned for this attempt.'}
+                  </p>
+                )}
+              </div>
+            </PaperCard>
 
             {vocabularyUpgrade && (
               <section>
@@ -2014,7 +2440,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               </section>
             </details>
 
-            <PaperCard className="min-h-[220px]">
+            <PaperCard className="hidden">
               <h3 className="text-sm font-bold uppercase tracking-widest mb-2">
                 Target Model Answer
               </h3>
