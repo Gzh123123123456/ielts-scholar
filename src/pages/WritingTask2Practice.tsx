@@ -21,7 +21,7 @@ import {
   upsertPracticeRecord,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
-import { Send, ArrowRight, FileDown, ShieldCheck, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
+import { Send, ArrowRight, FileDown, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
 
 type LanguageBankView = {
   topicVocabulary: WritingFeedback['vocabularyUpgrade']['topicVocabulary'];
@@ -646,6 +646,14 @@ const getLogicLocationForEssayParagraph = (paragraphIndex: number, paragraphCoun
   return null;
 };
 
+const canUseParagraphLogicMapping = (correction: WritingFeedback['sentenceFeedback'][number] | null) => {
+  if (!correction) return false;
+  const text = `${correction.dimension} ${correction.issueType || ''} ${correction.tag} ${correction.primaryIssue || ''}`.toLowerCase();
+  return correction.dimension === 'TR'
+    || correction.dimension === 'CC'
+    || /task.response|task_response|coherence|cohesion|logic|paragraph|structure|development|support|position/.test(text);
+};
+
 const getSeverityTone = (item: WritingFeedback['sentenceFeedback'][number]) => {
   const text = `${item.severity || ''} ${item.issueType || ''} ${item.dimension || ''} ${item.tag || ''} ${item.primaryIssue || ''}`.toLowerCase();
   if (/fatal|major|task.response|task_response|off.topic|off_topic/.test(text) || item.dimension === 'TR') return 'major';
@@ -866,7 +874,9 @@ const AnnotationOverlay = ({ span, anchorEl, onClose }: AnnotationOverlayProps) 
           onPointerCancel={endDrag}
         >
           <div>
-            <p className="annotation-overlay__eyebrow">Correction {correction.correctionNumber ? `#${correction.correctionNumber}` : span.correctionId}</p>
+            <p className="annotation-overlay__eyebrow">
+              Correction {correction.correctionNumber ? `#${correction.correctionNumber}` : span.correctionId} · {span.correctionId}
+            </p>
             <h4>{getConciseCorrectionIssue(correction)}</h4>
           </div>
           <button
@@ -933,94 +943,6 @@ const AnnotationOverlay = ({ span, anchorEl, onClose }: AnnotationOverlayProps) 
   );
 
   return createPortal(content, document.body);
-};
-
-const createDevCorrection = (
-  id: string,
-  original: string,
-  correction: string,
-  severity: WritingFeedback['sentenceFeedback'][number]['severity'],
-  explanationZh: string,
-): AnnotatedCorrectionSpan => ({
-  correction: {
-    id,
-    correctionNumber: Number(id.replace(/^C/i, '')) || 1,
-    sourceQuote: original,
-    issueType: severity === 'major' ? 'task_response' : 'word_choice',
-    severity,
-    primaryIssue: severity === 'major' ? 'Task-response level issue' : 'Local wording issue',
-    secondaryIssues: severity === 'medium' ? ['cohesion', 'precision'] : [],
-    microUpgrades: [{
-      original,
-      better: correction,
-      explanationZh,
-    }],
-    transferGuidanceZh: 'Before reusing this pattern, check whether the phrase advances the paragraph job clearly.',
-    original,
-    correction,
-    dimension: severity === 'major' ? 'TR' : severity === 'medium' ? 'CC' : 'LR',
-    tag: severity === 'major' ? 'task_response' : 'word_choice',
-    explanationZh,
-  },
-  correctionIndex: Number(id.replace(/^C/i, '')) - 1,
-  correctionId: id,
-  start: 0,
-  end: original.length,
-  quote: original,
-  paragraphIndex: 0,
-  matchLevel: original.split(/\s+/).length > 8 ? 'sentence' : 'phrase',
-});
-
-const DevAnnotationOverlayLab = () => {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const spans = useMemo(() => [
-    createDevCorrection('C1', 'top-left marker', 'top-left correction with clearer task focus', 'major', 'This preview checks whether a card near the upper-left stays reachable.'),
-    createDevCorrection('C2', 'top-right marker', 'top-right correction with cleaner cohesion', 'medium', 'This preview checks outward placement and viewport flipping near the upper-right edge.'),
-    createDevCorrection('C3', 'bottom-left marker', 'bottom-left correction with more precise phrasing', 'minor', 'This preview checks vertical placement when the anchor is low in the lab surface.'),
-    createDevCorrection(
-      'C4',
-      'bottom-right marker with long correction content',
-      'bottom-right correction with long content that should scroll internally while the card keeps readable typography and a recoverable resize handle',
-      'polish',
-      'This deliberately long preview checks internal scrolling, proportional resizing, and tether updates after drag or resize. The content belongs only to the development interaction lab and never affects saved records or exports.',
-    ),
-  ], []);
-  const selected = spans.find(span => span.correctionId === selectedId) || null;
-
-  return (
-    <details className="border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
-      <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between gap-4">
-        <span>Temporary interaction lab / dev-only preview</span>
-        <span className="text-paper-ink/35">Open</span>
-      </summary>
-      <div className="mt-4 border-t border-paper-ink/10 pt-4">
-        <div className="annotation-lab">
-          {spans.map((span, index) => (
-            <button
-              key={span.correctionId}
-              type="button"
-              ref={(element) => {
-                refs.current[span.correctionId] = element;
-              }}
-              data-severity={getSeverityTone(span.correction)}
-              className={`annotated-essay-mark annotation-lab__marker annotation-lab__marker--${index + 1} ${selectedId === span.correctionId ? 'annotated-essay-mark--active' : ''}`}
-              onClick={() => setSelectedId(span.correctionId)}
-            >
-              {span.quote}
-            </button>
-          ))}
-        </div>
-      </div>
-      {selected && (
-        <AnnotationOverlay
-          span={selected}
-          anchorEl={refs.current[selected.correctionId] || null}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
-    </details>
-  );
 };
 
 const isGenericExpressionNote = (text?: string) =>
@@ -1175,7 +1097,7 @@ const Task2PhaseTabs = ({
   ];
 
   return (
-    <div className="practice-workspace phase-tabs gap-2 p-1 bg-paper-ink/5 rounded-sm mb-8 font-sans uppercase tracking-widest font-bold">
+    <div className="practice-workspace phase-tabs gap-2 p-0.5 bg-paper-ink/5 rounded-sm mb-8 font-sans uppercase tracking-widest font-bold">
       {tabs.map(tab => (
         <button
           key={tab.id}
@@ -1871,6 +1793,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
     ? getRelatedLogicItems(selectedCorrection, selectedCorrectionIndex, logicFeedback)
     : [];
   const selectedParagraphLogicLocation = selectedCorrectionSpan
+    && canUseParagraphLogicMapping(selectedCorrection)
     ? getLogicLocationForEssayParagraph(selectedCorrectionSpan.paragraphIndex, essayParagraphs.length)
     : null;
   const selectedRelatedLogicSet = new Set([
@@ -2318,8 +2241,6 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               </section>
             </div>
 
-            {import.meta.env.DEV && <DevAnnotationOverlayLab />}
-
             <PaperCard className="min-h-[220px]">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                 <h3 className="text-sm font-bold uppercase tracking-widest">
@@ -2410,138 +2331,6 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                 </PaperCard>
               </section>
             )}
-
-            <details className="group border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
-              <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between gap-4">
-                <span className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-green-700/70" /> Sentence Corrections
-                </span>
-                <span className="text-paper-ink/35 group-open:hidden">Open fallback cards</span>
-                <span className="hidden text-paper-ink/35 group-open:inline">Close</span>
-              </summary>
-              <section className="mt-4 border-t border-paper-ink/10 pt-4">
-                <div className="space-y-4">
-                  {feedback.sentenceFeedback.map((item, i) => {
-                    const visibleMicroUpgrades = getVisibleMicroUpgrades(item);
-                    const visibleTransferGuidance = getVisibleTransferGuidance(item);
-                    return (
-                    <PaperCard key={i} className="border-l-2 border-l-paper-ink/20">
-                      <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">
-                        Correction #{item.correctionNumber || i + 1}
-                      </div>
-                      <div className="mb-3">
-                        <span className="border border-paper-ink/10 bg-paper-ink/5 text-paper-ink/55 px-2 py-1 rounded-sm text-[10px] uppercase font-sans font-bold tracking-widest">
-                          {getConciseCorrectionIssue(item)}
-                        </span>
-                      </div>
-                      <div className="text-base text-paper-ink/60 mb-2 leading-7">{renderOriginalSentence(item)}</div>
-                      <div className="text-[17px] font-bold mb-3 leading-8">{item.correction}</div>
-                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">为什么要改</p>
-                      <p className="text-sm leading-7 text-paper-ink-muted bg-paper-ink/5 p-3 rounded mb-3">{item.explanationZh}</p>
-                      {visibleTransferGuidance && (
-                        <>
-                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
-                          <p className="text-sm leading-7 text-paper-ink/70 bg-paper-50/70 border border-paper-ink/10 rounded-sm p-3">{visibleTransferGuidance}</p>
-                        </>
-                      )}
-                      {visibleMicroUpgrades.length ? (
-                        <div className="mt-3 space-y-2">
-                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Micro upgrades</p>
-                          {visibleMicroUpgrades.map((upgrade, upgradeIndex) => (
-                            <div key={`${upgrade.original}-${upgradeIndex}`} className="text-sm leading-7 text-paper-ink/70 border border-paper-ink/10 bg-paper-50/70 rounded-sm px-3 py-2">
-                              <span className="line-through text-paper-ink/45">{upgrade.original}</span>
-                              <span className="mx-2 text-paper-ink/30">-&gt;</span>
-                              <span className="font-bold">{upgrade.better}</span>
-                              <p className="text-paper-ink/60">{upgrade.explanationZh}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </PaperCard>
-                  );
-                  })}
-                </div>
-              </section>
-
-              <section className="hidden">
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-accent-terracotta" /> Logic & Structure Review
-                </h3>
-                <div className="space-y-5">
-                  {logicGroups.length ? logicGroups.map(group => (
-                    <div key={group.location} className="space-y-3">
-                      <h4 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45">{logicLocationLabels[group.location]}</h4>
-                      {group.items.map((f, i) => (
-                        <div key={`${group.location}-${i}`} className={`p-5 border border-paper-ink/10 rounded-sm flex items-start gap-3 transition-colors ${f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-ink/5'}`}>
-                          <div className={`w-2 h-2 rounded-full mt-1.5 ${f.severity === 'fatal' ? 'bg-red-800' : 'bg-accent-terracotta'}`} />
-                          <div className="min-w-0 space-y-3">
-                            <div>
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">{displayLogicLocationZh(f)}</p>
-                              <h5 className="text-[17px] font-bold leading-7">{f.issue}</h5>
-                              {usefulLogicDiagnosis(f) && (
-                                <p className="mt-2 text-sm leading-7 text-paper-ink/60">{usefulLogicDiagnosis(f)}</p>
-                              )}
-                            </div>
-                            <div>
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">这篇怎么改</p>
-                              <p className="text-base leading-8 text-paper-ink/70">
-                                {normalizeLearnerChineseText(f.paragraphFixZh || f.suggestionZh)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
-                              <p className="text-base leading-8 text-paper-ink/70">{normalizeLearnerChineseText(f.transferGuidanceZh) || defaultLogicTransfer()}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )) : (
-                    <PaperCard className="bg-paper-ink/5">
-                      <p className="text-base leading-8 text-paper-ink/65">No big-picture logic issue returned for this attempt.</p>
-                    </PaperCard>
-                  )}
-                </div>
-              </section>
-            </details>
-
-            <PaperCard className="hidden">
-              <h3 className="text-sm font-bold uppercase tracking-widest mb-2">
-                Target Model Answer
-              </h3>
-              <p className="text-sm leading-7 text-paper-ink/55 mb-3">
-                高亮处表示范文吸收了上方 Language Bank 表达或关键修改建议。
-              </p>
-              <div className="flex flex-wrap gap-2 mb-4 text-[10px] font-sans font-bold uppercase tracking-widest">
-                <span className="border border-paper-ink/10 bg-paper-ink/5 px-2 py-1 rounded-sm text-paper-ink/55">
-                  Training estimate {formatBandEstimate(averageWritingScore(feedback))}
-                </span>
-                <span className="border border-accent-terracotta/20 bg-accent-terracotta/5 px-2 py-1 rounded-sm text-accent-terracotta">
-                  Target level: {getTargetModelLevel(feedback)}
-                </span>
-              </div>
-              {hasSubstantialModelAnswer && isPersonalizedModelAnswer && (
-                <p className="text-sm leading-7 text-paper-ink/60 mb-4">
-                  这段保留你的原始立场和主要思路，并示范复用上面的 Language Bank 表达。
-                </p>
-              )}
-              <p className="text-[11px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
-                高亮说明
-              </p>
-              <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
-                {hasSubstantialModelAnswer ? (
-                  <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap">
-                    {renderAnnotatedModelAnswer(modelAnswerText, modelAnswerAnnotations, modelHighlightTerms)}
-                  </div>
-                ) : (
-                  <p className="text-base leading-8 text-paper-ink/65">
-                    {isInsufficientSample
-                      ? 'Model-answer text is hidden for this insufficient sample so the saved record does not look more reliable than it is.'
-                      : 'No substantial model answer was returned for this attempt.'}
-                  </p>
-                )}
-              </div>
-            </PaperCard>
 
             <details className="group border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
               <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between">
