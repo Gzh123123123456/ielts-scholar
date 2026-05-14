@@ -637,11 +637,15 @@ const getScoreTransparencyParts = (
   isUnderTask2Minimum: boolean,
 ) => {
   const parts = ['Training estimate'];
-  if (diagnostic?.providerName) parts.push(displayProviderName(diagnostic.providerName));
-  if (diagnostic?.fallbackUsed || fallbackUsed) parts.push('fallback/normalization used');
-  if (diagnostic?.normalizedFields?.length) parts.push(`${diagnostic.normalizedFields.length} normalized field${diagnostic.normalizedFields.length > 1 ? 's' : ''}`);
-  if (diagnostic?.validationErrors?.length) parts.push(`${diagnostic.validationErrors.length} validation issue${diagnostic.validationErrors.length > 1 ? 's' : ''}`);
   if (isUnderTask2Minimum) parts.push(`capped under 250 words (${wordCount}/250)`);
+  if (diagnostic?.providerName) parts.push(displayProviderName(diagnostic.providerName));
+  if (diagnostic?.fallbackUsed || fallbackUsed) parts.push('fallback used');
+  if (diagnostic?.normalizedFields?.length) parts.push(`${diagnostic.normalizedFields.length} normalized field${diagnostic.normalizedFields.length > 1 ? 's' : ''}`);
+  if (diagnostic?.validationErrors?.length) {
+    parts.push(`${diagnostic.validationErrors.length} validation issue${diagnostic.validationErrors.length > 1 ? 's' : ''}`);
+  } else if (diagnostic) {
+    parts.push('validation clear');
+  }
   return parts;
 };
 
@@ -2125,21 +2129,14 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               ))}
             </div>
 
-            <PaperCard className="bg-paper-ink/[0.025] py-3">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-1">Score transparency</p>
-                  <p className="text-sm leading-7 text-paper-ink/65">
-                    {scoreTransparencyParts.join(' · ')}
-                  </p>
-                </div>
-                {isUnderTask2WordMinimum && (
-                  <p className="text-sm leading-7 text-red-900/80 lg:max-w-md">
-                    Word count {resultWordCount}/250. Task 2 expects at least 250 words, so these estimates may be conservatively capped.
-                  </p>
-                )}
-              </div>
-            </PaperCard>
+            <div
+              className="rounded-sm border border-paper-ink/10 bg-paper-ink/[0.025] px-3 py-2"
+              aria-label="Score transparency"
+            >
+              <p className="text-xs leading-6 text-paper-ink/55">
+                {scoreTransparencyParts.join(' · ')}
+              </p>
+            </div>
 
             {essayWarnings.length > 0 && (
               <section className="space-y-3">
