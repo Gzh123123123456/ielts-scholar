@@ -637,6 +637,15 @@ const getLogicGroupForCorrection = (
   return related[0] ? getDisplayLocation(related[0]) : null;
 };
 
+const getLogicLocationForEssayParagraph = (paragraphIndex: number, paragraphCount: number): LogicLocation | null => {
+  if (paragraphIndex < 0 || paragraphCount <= 0) return null;
+  if (paragraphIndex === 0) return 'Introduction';
+  if (paragraphIndex === 1) return 'Body Paragraph 1';
+  if (paragraphIndex === 2) return 'Body Paragraph 2';
+  if (paragraphIndex === paragraphCount - 1 && paragraphCount >= 4) return 'Conclusion';
+  return null;
+};
+
 const getSeverityTone = (item: WritingFeedback['sentenceFeedback'][number]) => {
   const text = `${item.severity || ''} ${item.issueType || ''} ${item.dimension || ''} ${item.tag || ''} ${item.primaryIssue || ''}`.toLowerCase();
   if (/fatal|major|task.response|task_response|off.topic|off_topic/.test(text) || item.dimension === 'TR') return 'major';
@@ -655,7 +664,7 @@ type OverlayRect = {
 const clampNumber = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
-const getOverlayPosition = (anchor: DOMRect, size: { width: number; height: number }): OverlayRect => {
+const getOverlayPosition = (anchor: DOMRect, size: { width: number; height: number }, placementOnly = false): OverlayRect => {
   const margin = 16;
   const gap = 18;
   const viewportWidth = window.innerWidth;
@@ -667,20 +676,36 @@ const getOverlayPosition = (anchor: DOMRect, size: { width: number; height: numb
   const preferRight = anchorCenterX >= viewportWidth / 2;
   let left = preferRight ? anchor.right + gap : anchor.left - size.width - gap;
 
-  if (preferRight && left + size.width > viewportWidth - margin) left = anchor.left - size.width - gap;
-  if (!preferRight && left < margin) left = anchor.right + gap;
+  if (!placementOnly) {
+    if (preferRight && left + size.width > viewportWidth - margin) left = anchor.left - size.width - gap;
+    if (!preferRight && left < margin) left = anchor.right + gap;
+  }
   left = clampNumber(left, margin, maxLeft);
 
   let top = anchorCenterY - size.height / 2;
-  if (anchor.top < size.height + margin && anchor.bottom + gap + size.height <= viewportHeight - margin) {
-    top = anchor.bottom + gap;
-  }
-  if (anchor.bottom > viewportHeight - size.height - margin && anchor.top - gap - size.height >= margin) {
-    top = anchor.top - size.height - gap;
+  if (!placementOnly) {
+    if (anchor.top < size.height + margin && anchor.bottom + gap + size.height <= viewportHeight - margin) {
+      top = anchor.bottom + gap;
+    }
+    if (anchor.bottom > viewportHeight - size.height - margin && anchor.top - gap - size.height >= margin) {
+      top = anchor.top - size.height - gap;
+    }
   }
   top = clampNumber(top, margin, maxTop);
 
   return { left, top, width: size.width, height: size.height };
+};
+
+const getOverlayTether = (anchorEl: HTMLElement, rect: OverlayRect) => {
+  const anchorRect = anchorEl.getBoundingClientRect();
+  const anchorX = anchorRect.right - 2;
+  const anchorY = anchorRect.top + Math.max(2, anchorRect.height * 0.18);
+  const cardX = anchorX < rect.left ? rect.left : rect.left + rect.width;
+  const cardY = clampNumber(anchorY, rect.top + 18, rect.top + rect.height - 18);
+  return {
+    anchorPoint: { x: anchorX, y: anchorY },
+    cardPoint: { x: cardX, y: cardY },
+  };
 };
 
 type AnnotationOverlayProps = {
@@ -703,17 +728,11 @@ const AnnotationOverlay = ({ span, anchorEl, onClose }: AnnotationOverlayProps) 
   const dragRef = useRef<{ pointerId: number; x: number; y: number; left: number; top: number } | null>(null);
   const resizeRef = useRef<{ pointerId: number; x: number; width: number; ratio: number } | null>(null);
 
-  const updateTether = () => {
+  const updateTether = (nextRect = rect) => {
     if (!anchorEl || isMobile) return;
-    const anchorRect = anchorEl.getBoundingClientRect();
-    setAnchorPoint({
-      x: anchorRect.right - 2,
-      y: anchorRect.top + Math.max(2, anchorRect.height * 0.18),
-    });
-    setCardPoint({
-      x: rect.left + (anchorRect.left > rect.left ? rect.width : 0),
-      y: clampNumber(anchorRect.top + anchorRect.height / 2, rect.top + 18, rect.top + rect.height - 18),
-    });
+    const next = getOverlayTether(anchorEl, nextRect);
+    setAnchorPoint(next.anchorPoint);
+    setCardPoint(next.cardPoint);
   };
 
   useEffect(() => {
@@ -728,26 +747,47 @@ const AnnotationOverlay = ({ span, anchorEl, onClose }: AnnotationOverlayProps) 
     const anchorRect = anchorEl.getBoundingClientRect();
     const nextWidth = clampNumber(Math.min(window.innerWidth - 32, 390), 300, 640);
     const nextHeight = clampNumber(300, 220, Math.max(220, window.innerHeight - 32));
-    setRect(getOverlayPosition(anchorRect, { width: nextWidth, height: nextHeight }));
+    const nextRect = getOverlayPosition(anchorRect, { width: nextWidth, height: nextHeight });
+    setRect(nextRect);
+    updateTether(nextRect);
   }, [anchorEl, isMobile, span.correctionId]);
 
   useEffect(() => {
     updateTether();
-    const onScrollOrResize = () => {
+    const onScroll = () => {
+      if (!anchorEl || isMobile) return;
+      updateTether();
+    };
+    const onResize = () => {
       if (!anchorEl || isMobile) return;
       const anchorRect = anchorEl.getBoundingClientRect();
-      setRect(current => getOverlayPosition(anchorRect, current));
+      setRect(current => {
+        const nextRect = getOverlayPosition(anchorRect, current, true);
+        const nextTether = getOverlayTether(anchorEl, nextRect);
+        setAnchorPoint(nextTether.anchorPoint);
+        setCardPoint(nextTether.cardPoint);
+        return nextRect;
+      });
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!target) return;
+      if (cardRef.current?.contains(target)) return;
+      if (target.closest('.annotated-essay-mark')) return;
+      onClose();
+    };
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
     window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown, true);
     return () => {
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
       window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown, true);
     };
   }, [anchorEl, isMobile, onClose, rect.height, rect.left, rect.top, rect.width]);
 
@@ -829,7 +869,16 @@ const AnnotationOverlay = ({ span, anchorEl, onClose }: AnnotationOverlayProps) 
             <p className="annotation-overlay__eyebrow">Correction {correction.correctionNumber ? `#${correction.correctionNumber}` : span.correctionId}</p>
             <h4>{getConciseCorrectionIssue(correction)}</h4>
           </div>
-          <button type="button" className="annotation-overlay__close" onClick={onClose} aria-label="Close annotation">
+          <button
+            type="button"
+            className="annotation-overlay__close"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onClose();
+            }}
+            aria-label="Close annotation"
+          >
             ×
           </button>
         </div>
@@ -1821,21 +1870,37 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
   const selectedRelatedLogic = selectedCorrection
     ? getRelatedLogicItems(selectedCorrection, selectedCorrectionIndex, logicFeedback)
     : [];
-  const selectedRelatedLogicSet = new Set(selectedRelatedLogic);
+  const selectedParagraphLogicLocation = selectedCorrectionSpan
+    ? getLogicLocationForEssayParagraph(selectedCorrectionSpan.paragraphIndex, essayParagraphs.length)
+    : null;
+  const selectedRelatedLogicSet = new Set([
+    ...selectedRelatedLogic,
+    ...(selectedParagraphLogicLocation
+      ? logicFeedback.filter(item => getDisplayLocation(item) === selectedParagraphLogicLocation)
+      : []),
+  ]);
   const selectedAnchorEl = selectedCorrectionId ? markerRefs.current[selectedCorrectionId] || null : null;
+  const logicGroupKeys = logicGroups.map(group => group.location).join('|');
 
   useEffect(() => {
     if (!logicGroups.length) {
       setOpenLogicLocation(null);
       return;
     }
-    setOpenLogicLocation(current => current || logicGroups[0].location);
-  }, [logicGroups]);
+    setOpenLogicLocation(current => (
+      current && logicGroups.some(group => group.location === current)
+        ? current
+        : logicGroups[0].location
+    ));
+  }, [logicGroupKeys]);
 
   useEffect(() => {
-    const relatedLocation = getLogicGroupForCorrection(selectedCorrection, selectedCorrectionIndex, logicFeedback);
+    const relatedLocation = getLogicGroupForCorrection(selectedCorrection, selectedCorrectionIndex, logicFeedback)
+      || (selectedParagraphLogicLocation && logicGroups.some(group => group.location === selectedParagraphLogicLocation)
+        ? selectedParagraphLogicLocation
+        : null);
     if (relatedLocation) setOpenLogicLocation(relatedLocation);
-  }, [logicFeedback, selectedCorrection, selectedCorrectionIndex]);
+  }, [logicFeedback, logicGroupKeys, selectedCorrection, selectedCorrectionIndex, selectedParagraphLogicLocation]);
 
   return (
     <PageShell size="wide">
@@ -2080,7 +2145,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
                 <PaperCard>
-                  <div className="text-[17px] leading-8 text-paper-ink max-h-[520px] overflow-auto pr-1">
+                  <div className="annotated-essay-scroll text-[17px] leading-8 text-paper-ink max-h-[520px] overflow-auto">
                     {essayParagraphs.map((paragraph, paragraphIndex) => {
                       const paragraphSpans = annotatedCorrectionSpans.filter(span => span.paragraphIndex === paragraphIndex);
                       const nodes: React.ReactNode[] = [];
@@ -2119,7 +2184,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                         );
                       }
 
-                      const overlaySpan = selectedCorrectionSpan || paragraphSpans[0];
+                      const overlaySpan = paragraphSpans[0];
                       const overlayCorrection: WritingFeedback['sentenceFeedback'][number] | null = null;
                       return (
                         <div key={`essay-paragraph-${paragraphIndex}`} className="annotated-essay-paragraph">
@@ -2204,7 +2269,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                       <button
                         type="button"
                         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
-                        onClick={() => setOpenLogicLocation(openLogicLocation === group.location ? null : group.location)}
+                        onClick={() => setOpenLogicLocation(group.location)}
                         aria-expanded={openLogicLocation === group.location}
                       >
                         <span className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/55">{logicLocationLabels[group.location]}</span>

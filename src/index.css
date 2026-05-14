@@ -192,22 +192,29 @@
 
 .annotated-essay-paragraph {
   margin-bottom: 1.45rem;
+  overflow: visible;
 }
 
 .annotated-essay-paragraph:last-child {
   margin-bottom: 0;
 }
 
+.annotated-essay-scroll {
+  overflow-x: visible;
+  padding: 0.35rem 0.6rem 0.35rem 0.1rem;
+}
+
 .annotated-essay-mark {
   appearance: none;
   border: 0;
-  border-bottom: 1px solid rgba(60, 47, 47, 0.32);
-  background: rgba(60, 47, 47, 0.045);
+  border-bottom: 1px solid rgba(60, 47, 47, 0.22);
+  background: transparent;
   border-radius: 0.12rem;
-  color: inherit;
+  color: rgba(60, 47, 47, 0.64);
   display: inline;
   font: inherit;
   line-height: inherit;
+  overflow: visible;
   padding: 0.01em 0.12em;
   position: relative;
   text-align: inherit;
@@ -219,15 +226,16 @@
 
 .annotated-essay-mark::after {
   content: "";
-  width: 0.42rem;
-  height: 0.42rem;
+  width: 0.38rem;
+  height: 0.38rem;
   border: 1px solid rgba(253, 250, 246, 0.95);
   border-radius: 999px;
   background: rgba(105, 105, 105, 0.78);
   box-shadow: 0 1px 4px rgba(60, 47, 47, 0.18);
   position: absolute;
-  right: -0.18rem;
-  top: -0.18rem;
+  right: -0.2rem;
+  top: -0.2rem;
+  z-index: 1;
 }
 
 .annotated-essay-mark[data-severity="major"]::after {
@@ -243,13 +251,14 @@
 }
 
 .annotated-essay-mark--sentence {
-  background: rgba(60, 47, 47, 0.035);
+  background: transparent;
   border-bottom-style: dotted;
 }
 
 .annotated-essay-mark:hover,
 .annotated-essay-mark--active {
-  background: rgba(166, 77, 50, 0.08);
+  background: rgba(60, 47, 47, 0.035);
+  color: rgba(60, 47, 47, 0.76);
   border-bottom-color: rgba(166, 77, 50, 0.34);
   text-decoration-color: rgba(166, 77, 50, 0.34);
 }
@@ -333,12 +342,17 @@
   color: rgba(60, 47, 47, 0.64);
   display: inline-flex;
   font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 1rem;
+  font-size: 0;
   font-weight: 700;
   height: 1.7rem;
   justify-content: center;
   line-height: 1;
   width: 1.7rem;
+}
+
+.annotation-overlay__close::before {
+  content: "×";
+  font-size: 1rem;
 }
 
 .annotation-overlay__close:hover {
