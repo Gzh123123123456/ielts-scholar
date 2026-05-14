@@ -190,6 +190,54 @@
   color: rgba(60, 47, 47, 0.58);
 }
 
+.annotated-essay-paragraph {
+  margin-bottom: 1.45rem;
+}
+
+.annotated-essay-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.annotated-essay-mark {
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid rgba(60, 47, 47, 0.32);
+  background: rgba(60, 47, 47, 0.045);
+  border-radius: 0.12rem;
+  color: inherit;
+  display: inline;
+  font: inherit;
+  line-height: inherit;
+  padding: 0.01em 0.12em;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(60, 47, 47, 0.26);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+
+.annotated-essay-mark--sentence {
+  background: rgba(60, 47, 47, 0.035);
+  border-bottom-style: dotted;
+}
+
+.annotated-essay-mark:hover,
+.annotated-essay-mark--active {
+  background: rgba(166, 77, 50, 0.08);
+  border-bottom-color: rgba(166, 77, 50, 0.34);
+  text-decoration-color: rgba(166, 77, 50, 0.34);
+}
+
+.annotated-correction-overlay {
+  background: rgba(253, 250, 246, 0.98);
+  border: 1px solid rgba(60, 47, 47, 0.12);
+  border-left: 2px solid rgba(166, 77, 50, 0.36);
+  border-radius: 0.16rem;
+  box-shadow: 0 14px 32px rgba(60, 47, 47, 0.08);
+  margin-top: 0.85rem;
+  padding: 1rem;
+}
+
 .ink-link {
   @apply text-accent-terracotta hover:underline font-medium;
 }

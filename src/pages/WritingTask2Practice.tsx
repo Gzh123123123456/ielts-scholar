@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -298,6 +298,169 @@ const renderOriginalSentence = (item: WritingFeedback['sentenceFeedback'][number
       {item.original.slice(index + quote.length)}
     </>
   );
+};
+
+type EssayParagraph = {
+  text: string;
+  start: number;
+  end: number;
+};
+
+type AnnotatedCorrectionSpan = {
+  correction: WritingFeedback['sentenceFeedback'][number];
+  correctionIndex: number;
+  correctionId: string;
+  start: number;
+  end: number;
+  quote: string;
+  paragraphIndex: number;
+  matchLevel: 'phrase' | 'sentence';
+};
+
+const getCorrectionId = (item: WritingFeedback['sentenceFeedback'][number], index: number) =>
+  item.id || `C${item.correctionNumber || index + 1}`;
+
+const getCorrectionIdAliases = (item: WritingFeedback['sentenceFeedback'][number], index: number) => {
+  const number = item.correctionNumber || index + 1;
+  return new Set([getCorrectionId(item, index), `C${number}`, String(number)].map(value => value.toLowerCase()));
+};
+
+const getEssayParagraphs = (text: string): EssayParagraph[] => {
+  if (!text) return [];
+  const paragraphs: EssayParagraph[] = [];
+  const separatorPattern = /\n\s*\n/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = separatorPattern.exec(text)) !== null) {
+    const paragraphText = text.slice(cursor, match.index);
+    if (paragraphText.trim()) {
+      paragraphs.push({ text: paragraphText, start: cursor, end: match.index });
+    }
+    cursor = match.index + match[0].length;
+  }
+  const finalText = text.slice(cursor);
+  if (finalText.trim()) {
+    paragraphs.push({ text: finalText, start: cursor, end: text.length });
+  }
+  return paragraphs.length ? paragraphs : [{ text, start: 0, end: text.length }];
+};
+
+const getParagraphIndexForSpan = (paragraphs: EssayParagraph[], start: number) => {
+  const index = paragraphs.findIndex(paragraph => start >= paragraph.start && start < paragraph.end);
+  return index >= 0 ? index : 0;
+};
+
+const findTextSpans = (text: string, needle: string) => {
+  const trimmed = needle.replace(/\s+/g, ' ').trim();
+  if (!trimmed) return [];
+  const pattern = new RegExp(trimmed.split(/\s+/).map(escapeRegExp).join('\\s+'), 'gi');
+  const spans: { start: number; end: number }[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    spans.push({ start: match.index, end: match.index + match[0].length });
+    if (match.index === pattern.lastIndex) pattern.lastIndex += 1;
+  }
+  return spans;
+};
+
+const findUniqueTextSpan = (text: string, needle: string) => {
+  const spans = findTextSpans(text, needle);
+  return spans.length === 1 ? spans[0] : null;
+};
+
+const getPhraseCandidates = (item: WritingFeedback['sentenceFeedback'][number]) =>
+  uniqueStrings([
+    item.sourceQuote,
+    getProblemQuote(item),
+    ...(item.microUpgrades || []).map(upgrade => upgrade.original),
+  ])
+    .filter(candidate => candidate.length >= 3)
+    .filter(candidate => {
+      const original = item.original.trim();
+      if (!original) return true;
+      return candidate.length < original.length * 0.9 && countWords(candidate) < Math.max(countWords(original) - 1, 2);
+    })
+    .sort((a, b) => b.length - a.length);
+
+const findCorrectionSpan = (
+  essayText: string,
+  item: WritingFeedback['sentenceFeedback'][number],
+) => {
+  const originalSpan = findUniqueTextSpan(essayText, item.original);
+  const phraseCandidates = getPhraseCandidates(item);
+
+  if (originalSpan) {
+    const originalText = essayText.slice(originalSpan.start, originalSpan.end);
+    for (const candidate of phraseCandidates) {
+      const localSpan = findUniqueTextSpan(originalText, candidate);
+      if (localSpan) {
+        return {
+          start: originalSpan.start + localSpan.start,
+          end: originalSpan.start + localSpan.end,
+          matchLevel: 'phrase' as const,
+        };
+      }
+    }
+    return { ...originalSpan, matchLevel: 'sentence' as const };
+  }
+
+  for (const candidate of phraseCandidates) {
+    const span = findUniqueTextSpan(essayText, candidate);
+    if (span) return { ...span, matchLevel: 'phrase' as const };
+  }
+
+  return null;
+};
+
+const getAnnotatedCorrectionSpans = (
+  essayText: string,
+  sentenceFeedback: WritingFeedback['sentenceFeedback'],
+  paragraphs: EssayParagraph[],
+): AnnotatedCorrectionSpan[] =>
+  sentenceFeedback
+    .map((item, index) => {
+      const span = findCorrectionSpan(essayText, item);
+      if (!span) return null;
+      return {
+        correction: item,
+        correctionIndex: index,
+        correctionId: getCorrectionId(item, index),
+        start: span.start,
+        end: span.end,
+        quote: essayText.slice(span.start, span.end),
+        paragraphIndex: getParagraphIndexForSpan(paragraphs, span.start),
+        matchLevel: span.matchLevel,
+      };
+    })
+    .filter((item): item is AnnotatedCorrectionSpan => Boolean(item))
+    .sort((a, b) => a.start - b.start || b.end - a.end)
+    .reduce<AnnotatedCorrectionSpan[]>((acc, span) => {
+      const previous = acc[acc.length - 1];
+      if (previous && span.start < previous.end) return acc;
+      acc.push(span);
+      return acc;
+    }, []);
+
+const getRelatedLogicItems = (
+  correction: WritingFeedback['sentenceFeedback'][number] | null,
+  correctionIndex: number,
+  logicItems: WritingFeedback['frameworkFeedback'],
+) => {
+  if (!correction) return [];
+  const aliases = getCorrectionIdAliases(correction, correctionIndex);
+  return logicItems.filter(item => (
+    item.relatedCorrectionIds || []
+  ).some(id => aliases.has(id.toLowerCase()) || aliases.has(id.replace(/^C/i, '').toLowerCase())));
+};
+
+const isLogicItemRelatedToCorrection = (
+  item: WritingFeedback['frameworkFeedback'][number],
+  correction: WritingFeedback['sentenceFeedback'][number] | null,
+  correctionIndex: number,
+) => {
+  if (!correction) return false;
+  const aliases = getCorrectionIdAliases(correction, correctionIndex);
+  return (item.relatedCorrectionIds || []).some(id => aliases.has(id.toLowerCase()) || aliases.has(id.replace(/^C/i, '').toLowerCase()));
 };
 
 const getVisibleMicroUpgrades = (item: WritingFeedback['sentenceFeedback'][number]) => {
@@ -649,6 +812,7 @@ export default function WritingTask2Practice() {
   const [frameworkExtractMessage, setFrameworkExtractMessage] = useState('');
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
   const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
+  const [selectedCorrectionId, setSelectedCorrectionId] = useState<string | null>(null);
   const [analyzedEssaySnapshot, setAnalyzedEssaySnapshot] = useState('');
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
@@ -694,6 +858,10 @@ export default function WritingTask2Practice() {
     analyzedEssaySnapshot,
     providerErrorMessage,
   ]);
+
+  useEffect(() => {
+    setSelectedCorrectionId(null);
+  }, [feedback, analyzedEssaySnapshot]);
 
   const buildWritingRecord = (
     status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft',
@@ -1293,6 +1461,18 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
     : [];
   const modelHighlightTerms = vocabularyUpgrade && feedback ? getLanguageBankHighlightTerms(vocabularyUpgrade, feedback.sentenceFeedback) : [];
   const modelAnswerAnnotations = feedback ? getValidModelAnswerAnnotations(modelAnswerText, feedback.modelAnswerAnnotations) : [];
+  const essayParagraphs = useMemo(() => getEssayParagraphs(resultEssay), [resultEssay]);
+  const annotatedCorrectionSpans = useMemo(
+    () => feedback ? getAnnotatedCorrectionSpans(resultEssay, feedback.sentenceFeedback, essayParagraphs) : [],
+    [essayParagraphs, feedback, resultEssay],
+  );
+  const selectedCorrectionSpan = annotatedCorrectionSpans.find(span => span.correctionId === selectedCorrectionId) || null;
+  const selectedCorrection = selectedCorrectionSpan?.correction || null;
+  const selectedCorrectionIndex = selectedCorrectionSpan?.correctionIndex ?? -1;
+  const selectedRelatedLogic = selectedCorrection
+    ? getRelatedLogicItems(selectedCorrection, selectedCorrectionIndex, logicFeedback)
+    : [];
+  const selectedRelatedLogicSet = new Set(selectedRelatedLogic);
 
   return (
     <PageShell size="wide">
@@ -1522,14 +1702,157 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               ))}
             </div>
 
-            <section>
-              <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
-              <PaperCard>
-                <div className="text-[17px] leading-8 whitespace-pre-wrap text-paper-ink max-h-[420px] overflow-auto pr-1">
-                  {resultEssay}
+            <div className="grid gap-8 xl:grid-cols-[minmax(0,1.12fr)_minmax(420px,0.88fr)] xl:items-start">
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
+                <PaperCard>
+                  <div className="text-[17px] leading-8 text-paper-ink max-h-[520px] overflow-auto pr-1">
+                    {essayParagraphs.map((paragraph, paragraphIndex) => {
+                      const paragraphSpans = annotatedCorrectionSpans.filter(span => span.paragraphIndex === paragraphIndex);
+                      const nodes: React.ReactNode[] = [];
+                      let cursor = paragraph.start;
+                      paragraphSpans.forEach(span => {
+                        if (span.start > cursor) {
+                          nodes.push(
+                            <React.Fragment key={`essay-text-${paragraphIndex}-${cursor}`}>
+                              {resultEssay.slice(cursor, span.start)}
+                            </React.Fragment>,
+                          );
+                        }
+                        const isSelected = selectedCorrectionId === span.correctionId;
+                        nodes.push(
+                          <button
+                            key={`essay-mark-${span.correctionId}-${span.start}`}
+                            type="button"
+                            className={`annotated-essay-mark ${span.matchLevel === 'sentence' ? 'annotated-essay-mark--sentence' : ''} ${isSelected ? 'annotated-essay-mark--active' : ''}`}
+                            onClick={() => setSelectedCorrectionId(isSelected ? null : span.correctionId)}
+                            aria-pressed={isSelected}
+                          >
+                            {resultEssay.slice(span.start, span.end)}
+                          </button>,
+                        );
+                        cursor = span.end;
+                      });
+                      if (cursor < paragraph.end) {
+                        nodes.push(
+                          <React.Fragment key={`essay-text-${paragraphIndex}-end`}>
+                            {resultEssay.slice(cursor, paragraph.end)}
+                          </React.Fragment>,
+                        );
+                      }
+
+                      const overlaySpan = selectedCorrectionSpan?.paragraphIndex === paragraphIndex ? selectedCorrectionSpan : null;
+                      const overlayCorrection = overlaySpan?.correction;
+                      return (
+                        <div key={`essay-paragraph-${paragraphIndex}`} className="annotated-essay-paragraph">
+                          <p className="whitespace-pre-wrap">{nodes}</p>
+                          {overlayCorrection && (
+                            <div className="annotated-correction-overlay">
+                              <div className="flex items-start justify-between gap-3 mb-3">
+                                <div>
+                                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">
+                                    Correction #{overlayCorrection.correctionNumber || overlaySpan.correctionIndex + 1}
+                                  </p>
+                                  <h4 className="text-base font-bold leading-7">{getConciseCorrectionIssue(overlayCorrection)}</h4>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35 hover:text-paper-ink/65"
+                                  onClick={() => setSelectedCorrectionId(null)}
+                                >
+                                  Close
+                                </button>
+                              </div>
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35 mb-1">Original</p>
+                                  <p className="text-sm leading-7 text-paper-ink/60">{renderOriginalSentence(overlayCorrection)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35 mb-1">Corrected</p>
+                                  <p className="text-[15px] leading-7 font-bold text-paper-ink/85">{overlayCorrection.correction}</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="border border-paper-ink/10 bg-paper-ink/5 text-paper-ink/60 px-2 py-1 rounded-sm text-[10px] uppercase font-sans font-bold tracking-widest">
+                                    {overlayCorrection.primaryIssue || getConciseCorrectionIssue(overlayCorrection)}
+                                  </span>
+                                  {(overlayCorrection.secondaryIssues || []).map(issue => (
+                                    <span key={issue} className="border border-paper-ink/10 bg-paper-50 text-paper-ink/50 px-2 py-1 rounded-sm text-[10px] uppercase font-sans font-bold tracking-widest">
+                                      {issue}
+                                    </span>
+                                  ))}
+                                </div>
+                                {overlayCorrection.microUpgrades?.length ? (
+                                  <div className="space-y-2">
+                                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35">Micro upgrades</p>
+                                    {overlayCorrection.microUpgrades.map((upgrade, upgradeIndex) => (
+                                      <div key={`${upgrade.original}-${upgradeIndex}`} className="text-sm leading-7 text-paper-ink/70 border border-paper-ink/10 bg-paper-50/70 rounded-sm px-3 py-2">
+                                        <span className="line-through text-paper-ink/45">{upgrade.original}</span>
+                                        <span className="mx-2 text-paper-ink/30">-&gt;</span>
+                                        <span className="font-bold">{upgrade.better}</span>
+                                        <p className="text-paper-ink/60">{upgrade.explanationZh}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                <div>
+                                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35 mb-1">为什么要改</p>
+                                  <p className="text-sm leading-7 text-paper-ink/70">{normalizeLearnerChineseText(overlayCorrection.explanationZh)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </PaperCard>
+              </section>
+
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-accent-terracotta" /> Logic & Structure Review
+                </h3>
+                <div className="space-y-5">
+                  {logicGroups.length ? logicGroups.map(group => (
+                    <div key={group.location} className="space-y-3">
+                      <h4 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45">{logicLocationLabels[group.location]}</h4>
+                      {group.items.map((f, i) => {
+                        const isRelated = selectedRelatedLogicSet.has(f) || isLogicItemRelatedToCorrection(f, selectedCorrection, selectedCorrectionIndex);
+                        return (
+                          <div key={`${group.location}-${i}`} className={`p-5 border rounded-sm flex items-start gap-3 transition-colors ${isRelated ? 'bg-accent-terracotta/5 border-accent-terracotta/25' : f.severity === 'fatal' ? 'bg-red-50/50 border-red-100' : 'bg-paper-ink/5 border-paper-ink/10'}`}>
+                            <div className={`w-2 h-2 rounded-full mt-1.5 ${isRelated ? 'bg-accent-terracotta' : f.severity === 'fatal' ? 'bg-red-800' : 'bg-accent-terracotta/70'}`} />
+                            <div className="min-w-0 space-y-3">
+                              <div>
+                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">{displayLogicLocationZh(f)}</p>
+                                <h5 className="text-[17px] font-bold leading-7">{f.issue}</h5>
+                                {usefulLogicDiagnosis(f) && (
+                                  <p className="mt-2 text-sm leading-7 text-paper-ink/60">{usefulLogicDiagnosis(f)}</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">这篇怎么改</p>
+                                <p className="text-base leading-8 text-paper-ink/70">
+                                  {normalizeLearnerChineseText(f.paragraphFixZh || f.suggestionZh)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">下次自查</p>
+                                <p className="text-base leading-8 text-paper-ink/70">{normalizeLearnerChineseText(f.transferGuidanceZh) || defaultLogicTransfer()}</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )) : (
+                    <PaperCard className="bg-paper-ink/5">
+                      <p className="text-base leading-8 text-paper-ink/65">No big-picture logic issue returned for this attempt.</p>
+                    </PaperCard>
+                  )}
                 </div>
-              </PaperCard>
-            </section>
+              </section>
+            </div>
 
             {essayWarnings.length > 0 && (
               <section>
@@ -1597,11 +1920,15 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               </section>
             )}
 
-            <div className="grid gap-8 xl:grid-cols-[minmax(0,1.12fr)_minmax(420px,0.88fr)] xl:items-start">
-              <section className="order-2">
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-green-700" /> Sentence Corrections
-                </h3>
+            <details className="group border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
+              <summary className="cursor-pointer list-none text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center justify-between gap-4">
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-green-700/70" /> Sentence Corrections
+                </span>
+                <span className="text-paper-ink/35 group-open:hidden">Open fallback cards</span>
+                <span className="hidden text-paper-ink/35 group-open:inline">Close</span>
+              </summary>
+              <section className="mt-4 border-t border-paper-ink/10 pt-4">
                 <div className="space-y-4">
                   {feedback.sentenceFeedback.map((item, i) => {
                     const visibleMicroUpgrades = getVisibleMicroUpgrades(item);
@@ -1645,7 +1972,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                 </div>
               </section>
 
-              <section className="order-1">
+              <section className="hidden">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-accent-terracotta" /> Logic & Structure Review
                 </h3>
@@ -1685,7 +2012,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   )}
                 </div>
               </section>
-            </div>
+            </details>
 
             <PaperCard className="min-h-[220px]">
               <h3 className="text-sm font-bold uppercase tracking-widest mb-2">
@@ -1707,6 +2034,9 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   这段保留你的原始立场和主要思路，并示范复用上面的 Language Bank 表达。
                 </p>
               )}
+              <p className="text-[11px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+                高亮说明
+              </p>
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                 {hasSubstantialModelAnswer ? (
                   <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap">
