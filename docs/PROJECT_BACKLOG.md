@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-13 (daily closeout)_
+_Last updated: 2026-05-14_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -54,6 +54,8 @@ _Last updated: 2026-05-13 (daily closeout)_
 - **Done Task 2 feedback content refinement**: Vocabulary & Expression Upgrade is a compact learning bank; sentence corrections support primary issue, secondary issues, and micro upgrades; personalized model excerpts can use learner essay/framework context.
 - **Done Task 2 Phase 3 visual semantics polish**: Phase 3 is now a lower-noise revision workspace. Language Bank remains compact; Sentence Corrections use grey/problem source marking instead of model-answer learning highlights; Target Model Answer is a full answer in page flow with no inner scroll; Submit for Analysis locks the editor while analysis runs.
 - **Done Task 2 analysis lifecycle repair**: submitted essay snapshots are preserved; Phase 3 uses `feedback.essay` / submitted snapshot instead of mutable live editor text; stale provider responses are ignored through run-id protection; timeout/stop preserves essay text and avoids fake feedback; Practice this question again creates a fresh same-question attempt; New Question avoids the current prompt when alternatives exist.
+- **Done Task 2 annotated essay overlay**: My Essay source markers open a floating correction overlay with close/Escape/outside-click, drag, resize, mobile fallback, connector line, and safe Logic Review accordion linking. The temporary interaction lab and old visible Sentence Correction cards were removed from Phase 3.
+- **Done Task 2 score transparency polish**: score cards use clearer IELTS training dimension labels and show compact provider/fallback/normalization/under-length context. Visible Writing scores are conservative training estimates; under-length essays may show capped scores, and four equal 5.0 scores can come from mock provider output, under-length cap, or safety normalization.
 - Require user edit/confirm before moving to Phase 2.
 
 ### 2b) Future UI Consistency Notes
@@ -126,16 +128,10 @@ _Last updated: 2026-05-13 (daily closeout)_
   - review cards
 
 ### 4) Sentence-level Feedback
-- Step 1: sentence numbering and correction-to-source mapping. *(Basic correction numbers and logic-to-correction references are implemented for Task 2 Phase 3 cards.)*
-- Step 1b: sentence correction depth. *(Primary issue, secondary issues, and micro upgrades are implemented for Task 2 Phase 3 cards.)*
-- **V1.3 Step 2 - Interactive Annotated Essay Overlay** *(documented only; not implemented yet)*:
-  - inject correction markers into the original essay
-  - underline/problem-dot on source text
-  - click marker to open correction overlay card
-  - overlay includes correction, micro vocabulary upgrade, and related logic issue
-  - right-side Logic Review aligns by essay paragraph
-  - old correction card list can become secondary/collapsible
-- Step 3: full inline annotation/editor refinements after Step 2 proves useful.
+- Step 1: sentence numbering and correction-to-source mapping. *(Implemented.)*
+- Step 1b: sentence correction depth with primary issue, secondary issues, and micro upgrades. *(Implemented.)*
+- V1.3 Step 2 - Interactive Annotated Essay Overlay. *(Implemented for Phase 3: source markers, severity dots, floating overlay, tether line, mobile sheet fallback, and safe Logic Review linking.)*
+- Step 3: full inline annotation/editor refinements remain future work after overlay usage proves useful.
 - Do not implement full inline editor yet.
 
 ### 5) Speaking Improvements
@@ -216,13 +212,13 @@ Implemented according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 
 ## P1 Future — V1.3 Annotated Essay Overlay
 
-- Next planned product task: Annotated Essay interaction / My Essay annotation. Do not start without an explicit implementation prompt.
-- Goal: integrate Sentence Corrections into My Essay source text.
-- Likely behavior: underline/problem-mark exact source spans; click/hover opens correction overlay; overlay shows original issue, correction, Chinese explanation, and related Language Bank / Logic Review.
-- Source-text underline / marker / overlay is future work until that slice starts.
-- After overlay works, old large sentence correction cards can default-collapse.
-- Long-term direction: old large cards may eventually be removed.
-- Overlay must be aesthetically clean but must not compress or weaken content.
+- Annotated My Essay markers are implemented in Phase 3.
+- Source spans use grey/problem marking, small severity dots, phrase-level matching when reliable, and sentence-level fallback when needed.
+- Clicking a marker opens the floating correction overlay with original, corrected version, issues, micro upgrades, Chinese explanation, and transfer guidance.
+- The overlay supports close/Escape/outside-click, drag, resize, mobile bottom-sheet fallback, and a subtle connector line.
+- Logic Review accordion linking uses safe related correction IDs or safe paragraph/logic mapping; it does not fake a relation by falling back to Introduction/first group.
+- Old visible Sentence Correction card list and temporary interaction lab were removed from the Phase 3 UI.
+- Underlying sentenceFeedback data remains preserved for records, provider output, normalization, and markdown export.
 
 ---
 

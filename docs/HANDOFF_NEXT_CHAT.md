@@ -1,6 +1,6 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-13 (daily closeout)_
+_Last updated: 2026-05-14_
 
 ## Repo
 
@@ -54,16 +54,20 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
   - Target Model Excerpt / Revision Mission was reworked into Target Model Answer. It should be a full training target answer, about 280-350 words, preserving the learner position, fixing the highest-priority Logic Review issue, and integrating Language Bank / Expression Upgrade / key corrections. It is not an official IELTS guarantee.
   - Sentence Correction cards are lower-noise and use grey/problem or strikethrough-style source marking. They must not use Target Model Answer learning-highlight styling. Phrase-level issues should mark only the exact problematic phrase when possible.
   - Preserve `sourceQuote`, `severity`, `issueType`, and `microUpgrades` for future annotation work.
+- **2026-05-14**: Codex completed Writing Task 2 Phase 3 annotated essay overlay polish and score transparency.
+  - Annotated My Essay markers open the real floating correction overlay with close/Escape/outside-click, drag, resize, mobile fallback, and a subtle tether line.
+  - Logic Review accordion linking avoids unsafe fallback to Introduction/first group.
+  - Temporary interaction lab and old visible Sentence Correction card list were removed from the Phase 3 UI; underlying correction data/export remains preserved.
+  - Score cards now show clearer IELTS training dimensions plus compact provider/fallback/normalization/under-length transparency.
+  - Visible Writing scores are conservative training estimates, not official IELTS scores. Under-length essays may show capped scores. Four equal 5.0 scores can come from mock provider output, under-length cap, or safety normalization, not necessarily four identical real-provider judgments.
 
 ## Current Priority
 
-Writing Task 2 Phase 3 product information architecture / content logic repair and visual semantics polish are complete.
+Writing Task 2 Phase 3 product information architecture, annotated essay overlay, and score transparency polish are complete.
 
-Next planned product task: Annotated Essay interaction / My Essay annotation. Do not start it unless explicitly scoped in a future prompt.
+Remaining future scoring work, if needed, belongs to a larger scoring calibration task, not the current Phase 3 UI repair.
 
-Goal for the next task: integrate Sentence Corrections into My Essay source text. Likely behavior: underline/problem-mark exact source spans; click or hover opens a correction overlay; overlay shows original issue, correction, Chinese explanation, and related Language Bank / Logic Review.
-
-Known small follow-up before or during that work: Target Model Answer highlight explanation exists but is too easy to miss. Move it closer to the model answer body later and use a small low-noise `高亮说明` label. Do not add a large legend/table or many colors.
+Next planned product task should be chosen from the backlog after this completed Phase 3 UI repair. Do not reopen scoring/provider routing unless explicitly scoped.
 
 ## Agent Role Boundaries
 

@@ -1,5 +1,15 @@
 # Decision Log
 
+## [2026-05-14] Writing Task 2 Phase 3 Annotation and Score Transparency
+- **Decision**: Treat visible Writing Task 2 scores as conservative training estimates with compact provenance, not official IELTS scoring.
+- **Implemented**:
+  - Annotated My Essay overlay is implemented: source markers open a floating correction card with close/Escape/outside-click, drag/resize, mobile sheet fallback, and a subtle connector line.
+  - Old visible Sentence Correction fallback cards were removed from Phase 3; correction data remains preserved for overlay, records, and markdown export.
+  - Score cards now show clearer IELTS training dimensions and a compact transparency line with provider source, fallback/normalization indicators, validation issue count when present, and under-250-word cap reason.
+- **Scoring note**: Four equal 5.0 visible scores can come from the mock provider, under-length cap, or safety normalization. This does not necessarily mean a real provider gave four identical fine-grained judgments.
+- **Explicitly unchanged**: no scoring formula changes, no provider prompt/routing changes, no safety-normalization behavior changes, no API key UI, no `.env.local` edits.
+- **Future**: Any deeper score calibration belongs to a separate scoring calibration task, not Phase 3 UI repair.
+
 ## [2026-05-13] Writing Task 2 Phase 3 Daily Closeout
 - **Decision**: Close the Writing Task 2 Phase 3 repair as a low-noise revision workspace, not an AI report page.
 - **Implemented**:

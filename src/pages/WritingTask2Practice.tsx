@@ -19,6 +19,7 @@ import {
   saveActiveWritingTask2,
   summarizeDiagnostic,
   upsertPracticeRecord,
+  ProviderDiagnosticSummary,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
 import { Send, ArrowRight, FileDown, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
@@ -617,6 +618,60 @@ const getEssayWarnings = (feedback: WritingFeedback, isInsufficientSample: boole
   return merged.filter(item => !isWordCountWarning(item) || item === firstWordCountWarning);
 };
 
+const providerDisplayNames: Record<string, string> = {
+  mock: 'Mock provider',
+  gemini: 'Gemini',
+  deepseek: 'DeepSeek',
+};
+
+const displayProviderName = (providerName?: string) => {
+  if (!providerName) return 'Provider not recorded';
+  const normalized = providerName.trim().toLowerCase();
+  return providerDisplayNames[normalized] || humanizeKey(providerName);
+};
+
+const getScoreTransparencyParts = (
+  diagnostic: ProviderDiagnosticSummary | null,
+  fallbackUsed: boolean,
+  wordCount: number,
+  isUnderTask2Minimum: boolean,
+) => {
+  const parts = ['Training estimate'];
+  if (diagnostic?.providerName) parts.push(displayProviderName(diagnostic.providerName));
+  if (diagnostic?.fallbackUsed || fallbackUsed) parts.push('fallback/normalization used');
+  if (diagnostic?.normalizedFields?.length) parts.push(`${diagnostic.normalizedFields.length} normalized field${diagnostic.normalizedFields.length > 1 ? 's' : ''}`);
+  if (diagnostic?.validationErrors?.length) parts.push(`${diagnostic.validationErrors.length} validation issue${diagnostic.validationErrors.length > 1 ? 's' : ''}`);
+  if (isUnderTask2Minimum) parts.push(`capped under 250 words (${wordCount}/250)`);
+  return parts;
+};
+
+const scoreDimensions = [
+  {
+    key: 'taskResponse',
+    label: 'Task Response',
+    helper: 'IELTS training dimension',
+  },
+  {
+    key: 'coherenceCohesion',
+    label: 'Coherence & Cohesion',
+    helper: 'IELTS training dimension',
+  },
+  {
+    key: 'lexicalResource',
+    label: 'Lexical Resource',
+    helper: 'IELTS training dimension',
+  },
+  {
+    key: 'grammaticalRangeAccuracy',
+    label: 'Grammar Range & Accuracy',
+    helper: 'IELTS training dimension',
+  },
+] satisfies {
+  key: keyof WritingFeedback['scores'];
+  label: string;
+  helper: string;
+}[];
+
 const getLogicFeedback = (feedback: WritingFeedback) =>
   feedback.frameworkFeedback.filter(item => !isWarningIssue(item.issue) && !isPureLocalLanguageIssue(item));
 
@@ -1130,6 +1185,7 @@ export default function WritingTask2Practice() {
   const [frameworkExtractMessage, setFrameworkExtractMessage] = useState('');
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
   const [feedbackFallbackUsed, setFeedbackFallbackUsed] = useState(false);
+  const [feedbackDiagnostic, setFeedbackDiagnostic] = useState<ProviderDiagnosticSummary | null>(null);
   const [selectedCorrectionId, setSelectedCorrectionId] = useState<string | null>(null);
   const [openLogicLocation, setOpenLogicLocation] = useState<LogicLocation | null>(null);
   const [analyzedEssaySnapshot, setAnalyzedEssaySnapshot] = useState('');
@@ -1191,6 +1247,7 @@ export default function WritingTask2Practice() {
       essay?: string;
       feedback?: WritingFeedback | null;
       feedbackFallbackUsed?: boolean;
+      providerDiagnostic?: ProviderDiagnosticSummary;
     } = {},
   ): WritingTask2PracticeRecord | null => {
     const recordQuestion = overrides.question || question;
@@ -1224,6 +1281,7 @@ export default function WritingTask2Practice() {
       essay: recordEssay,
       feedback: status === 'provider_failed' ? undefined : recordFeedback || undefined,
       feedbackFallbackUsed: overrides.feedbackFallbackUsed ?? feedbackFallbackUsed,
+      providerDiagnostic: overrides.providerDiagnostic || existing?.providerDiagnostic,
       obsidianMarkdown: status === 'provider_failed' ? undefined : recordFeedback?.obsidianMarkdown,
     };
   };
@@ -1260,6 +1318,7 @@ export default function WritingTask2Practice() {
     setFeedback(record.feedback || null);
     setAnalyzedEssaySnapshot(record.feedback?.essay || record.essay || '');
     setFeedbackFallbackUsed(Boolean(record.feedbackFallbackUsed || record.providerDiagnostic?.fallbackUsed));
+    setFeedbackDiagnostic(record.providerDiagnostic || null);
     setProviderErrorMessage(record.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your draft is preserved.' : '');
     setApiStatusMessage('');
     setFrameworkExtractMessage('');
@@ -1289,6 +1348,7 @@ export default function WritingTask2Practice() {
     setFeedback(null);
     setAnalyzedEssaySnapshot('');
     setFeedbackFallbackUsed(false);
+    setFeedbackDiagnostic(null);
     setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
     setFrameworkReadiness('not_ready');
     setLatestFrameworkCoach(null);
@@ -1311,6 +1371,7 @@ export default function WritingTask2Practice() {
     setFeedback(null);
     setAnalyzedEssaySnapshot('');
     setFeedbackFallbackUsed(false);
+    setFeedbackDiagnostic(null);
     setProviderErrorMessage('');
     setApiStatusMessage('Rewriting same question.');
     setFrameworkExtractMessage('');
@@ -1552,16 +1613,19 @@ export default function WritingTask2Practice() {
       }
 
       setProviderDiagnostic(diagnostic);
+      const diagnosticSummary = summarizeDiagnostic(diagnostic);
       setApiStatusMessage(routeNotice(route, diagnostic.failureKind));
 
       if (diagnostic.failureKind === 'provider_unavailable') {
         setFeedbackFallbackUsed(false);
+        setFeedbackDiagnostic(diagnosticSummary);
         setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your essay draft is preserved.');
         persistWritingAttempt('provider_failed', {
           question: submittedQuestion,
           essay: submittedEssay,
           feedback: null,
           phase: 'writing',
+          providerDiagnostic: diagnosticSummary,
         });
         const failedBase = buildWritingRecord('provider_failed', {
           question: submittedQuestion,
@@ -1572,7 +1636,7 @@ export default function WritingTask2Practice() {
         if (failedBase) {
           upsertPracticeRecord({
             ...failedBase,
-            providerDiagnostic: summarizeDiagnostic(diagnostic),
+            providerDiagnostic: diagnosticSummary,
           });
         }
         addDebugLog('Provider unavailable for writing feedback.');
@@ -1586,6 +1650,7 @@ export default function WritingTask2Practice() {
         essay: resultEssay,
       };
       setFeedbackFallbackUsed(diagnostic.fallbackUsed);
+      setFeedbackDiagnostic(diagnosticSummary);
       setFeedback(resultFeedback);
       setAnalyzedEssaySnapshot(resultEssay);
       setPhase('results');
@@ -1595,6 +1660,7 @@ export default function WritingTask2Practice() {
         feedback: resultFeedback,
         feedbackFallbackUsed: diagnostic.fallbackUsed,
         phase: 'results',
+        providerDiagnostic: diagnosticSummary,
       });
       const analyzedBase = buildWritingRecord('analyzed', {
         question: submittedQuestion,
@@ -1602,6 +1668,7 @@ export default function WritingTask2Practice() {
         feedback: resultFeedback,
         feedbackFallbackUsed: diagnostic.fallbackUsed,
         phase: 'results',
+        providerDiagnostic: diagnosticSummary,
       });
       if (analyzedBase) {
         upsertPracticeRecord({
@@ -1610,7 +1677,7 @@ export default function WritingTask2Practice() {
           feedback: resultFeedback,
           feedbackFallbackUsed: diagnostic.fallbackUsed,
           obsidianMarkdown: resultFeedback.obsidianMarkdown,
-          providerDiagnostic: summarizeDiagnostic(diagnostic),
+          providerDiagnostic: diagnosticSummary,
         });
       }
 
@@ -1623,7 +1690,7 @@ export default function WritingTask2Practice() {
         essay: resultEssay,
         framework: submittedFinalFrameworkSummary,
         feedback: resultFeedback,
-        providerDiagnostic: summarizeDiagnostic(diagnostic),
+        providerDiagnostic: diagnosticSummary,
       });
       addDebugLog("Writing analysis complete");
       if (diagnostic.fallbackUsed) {
@@ -1636,6 +1703,7 @@ export default function WritingTask2Practice() {
         return;
       }
       setFeedbackFallbackUsed(false);
+      setFeedbackDiagnostic(null);
       if (error instanceof Error && /timed out/i.test(error.message)) {
         cancelledAnalysisRunRef.current = runId;
         setEssay(submittedEssay);
@@ -1764,11 +1832,13 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
   const writingWorkspaceClass = 'practice-workspace';
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
   const resultEssay = feedback?.essay || analyzedEssaySnapshot || essay;
+  const resultWordCount = countWords(resultEssay);
+  const isUnderTask2WordMinimum = resultWordCount > 0 && resultWordCount < 250;
   const isInsufficientSample = isInsufficientTask2Sample(resultEssay);
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
   const isPersonalizedModelAnswer = Boolean(feedback?.modelAnswerPersonalized);
   const hasCoachFeedback = frameworkChat.some((msg, index) => msg.role === 'ai' && index > 0);
-  const essayWarnings = feedback ? getEssayWarnings(feedback, isInsufficientSample, countWords(resultEssay)) : [];
+  const essayWarnings = feedback ? getEssayWarnings(feedback, isInsufficientSample, resultWordCount) : [];
   const logicFeedback = feedback ? getLogicFeedback(feedback) : [];
   const logicGroups = feedback ? groupedLogicFeedback(logicFeedback) : [];
   const vocabularyUpgrade = feedback ? getVocabularyUpgrade(feedback) : null;
@@ -1780,6 +1850,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
     ? vocabularyUpgrade.expressionUpgrades.filter(item => item.category === 'argument_frame' || !item.original)
     : [];
   const modelHighlightTerms = vocabularyUpgrade && feedback ? getLanguageBankHighlightTerms(vocabularyUpgrade, feedback.sentenceFeedback) : [];
+  const scoreTransparencyParts = getScoreTransparencyParts(feedbackDiagnostic, feedbackFallbackUsed, resultWordCount, isUnderTask2WordMinimum);
   const modelAnswerAnnotations = feedback ? getValidModelAnswerAnnotations(modelAnswerText, feedback.modelAnswerAnnotations) : [];
   const essayParagraphs = useMemo(() => getEssayParagraphs(resultEssay), [resultEssay]);
   const annotatedCorrectionSpans = useMemo(
@@ -2038,20 +2109,37 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
         {phase === 'results' && feedback && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { label: 'Task Response', score: feedback.scores.taskResponse },
-                { label: 'Cohesion', score: feedback.scores.coherenceCohesion },
-                { label: 'Lexical', score: feedback.scores.lexicalResource },
-                { label: 'Grammar', score: feedback.scores.grammaticalRangeAccuracy },
-              ].map((s) => (
-                <PaperCard key={s.label} className="text-center p-3">
-                  <div className="text-[10px] font-sans font-bold text-paper-ink/40 uppercase mb-1">{s.label}</div>
-                  <div className={isInsufficientSample ? 'text-xs font-bold text-paper-ink/50 uppercase tracking-widest font-sans pt-1' : 'text-xl font-bold text-accent-terracotta'}>
-                    {isInsufficientSample ? 'Insufficient' : formatBandEstimate(s.score)}
+              {scoreDimensions.map((dimension) => (
+                <PaperCard
+                  key={dimension.key}
+                  className="text-center p-3"
+                >
+                  <div title={`${dimension.label}: training estimate`} aria-label={`${dimension.label} training estimate`}>
+                    <div className="text-[10px] font-sans font-bold text-paper-ink/50 uppercase mb-1 leading-snug">{dimension.label}</div>
+                    <div className={isInsufficientSample ? 'text-xs font-bold text-paper-ink/50 uppercase tracking-widest font-sans pt-1' : 'text-xl font-bold text-accent-terracotta'}>
+                      {isInsufficientSample ? 'Insufficient' : formatBandEstimate(feedback.scores[dimension.key])}
+                    </div>
+                    <div className="mt-1 text-[10px] font-sans text-paper-ink/35">{dimension.helper}</div>
                   </div>
                 </PaperCard>
               ))}
             </div>
+
+            <PaperCard className="bg-paper-ink/[0.025] py-3">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-1">Score transparency</p>
+                  <p className="text-sm leading-7 text-paper-ink/65">
+                    {scoreTransparencyParts.join(' · ')}
+                  </p>
+                </div>
+                {isUnderTask2WordMinimum && (
+                  <p className="text-sm leading-7 text-red-900/80 lg:max-w-md">
+                    Word count {resultWordCount}/250. Task 2 expects at least 250 words, so these estimates may be conservatively capped.
+                  </p>
+                )}
+              </div>
+            </PaperCard>
 
             {essayWarnings.length > 0 && (
               <section className="space-y-3">
