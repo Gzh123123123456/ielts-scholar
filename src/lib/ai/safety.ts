@@ -19,6 +19,11 @@ import {
   WritingTask,
 } from './schemas';
 import { capBand, floorToHalfBand, formatBandEstimate, roundToHalfBand } from '../bands';
+import {
+  buildSpeakingTrainingMarkdown,
+  buildWritingTask1TrainingMarkdown,
+  buildWritingTask2TrainingMarkdown,
+} from '../markdownExport';
 
 type SpeakingRequest = SpeakingAnalysisRequest;
 type WritingRequest = WritingAnalysisRequest;
@@ -349,57 +354,8 @@ const buildDiagnostic = (diagnostic: ProviderDiagnostic): ProviderDiagnostic => 
   validationErrors: diagnostic.validationErrors.map(error => redactSecrets(error) as string),
 });
 
-const buildSpeakingObsidianMarkdown = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): string => {
-  const mustFix = feedback.fatalErrors.length
-    ? feedback.fatalErrors
-        .map(item => `- ${item.original} -> ${item.correction}\n  - ${item.explanationZh}`)
-        .join('\n')
-    : '- No critical correction needed.';
-
-  const polish = feedback.naturalnessHints.length
-    ? feedback.naturalnessHints
-        .map(item => `- ${item.original} -> ${item.better}\n  - ${item.explanationZh}`)
-        .join('\n')
-    : '- No optional polish item returned.';
-
-  const refinements = feedback.band9Refinements.length
-    ? feedback.band9Refinements
-        .map(item => `- ${item.observation}\n  - Refinement: ${item.refinement}\n  - ${item.explanationZh}`)
-        .join('\n')
-    : '- No Band 9 refinement returned.';
-
-  const reusable = feedback.reusableExample
-    ? `\n## Reusable Example\n${feedback.reusableExample.example}\n\nCan be reused for: ${feedback.reusableExample.canBeReusedFor.join(', ')}\n\n${feedback.reusableExample.explanationZh}\n`
-    : '';
-
-  return `# IELTS Speaking Note
-
-## Prompt
-${feedback.question}
-
-## Transcript
-${feedback.transcript}
-
-## Score Snapshot
-- Training estimate excluding pronunciation: ${formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}
-- Fluency and Coherence: ${formatBandEstimate(feedback.scores.fluencyCoherence)}
-- Lexical Resource: ${formatBandEstimate(feedback.scores.lexicalResource)}
-- Grammatical Range and Accuracy: ${formatBandEstimate(feedback.scores.grammaticalRangeAccuracy)}
-- Pronunciation: not assessed in V1
-
-## Must Fix
-${mustFix}
-
-## Optional Polish
-${polish}
-
-## Band 9 Refinement
-${refinements}
-
-## High-Band Transformation
-${feedback.upgradedAnswer}
-${reusable}`;
-};
+const buildSpeakingObsidianMarkdown = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): string =>
+  buildSpeakingTrainingMarkdown(feedback);
 
 const normalizeSpeakingFeedback = (
   value: unknown,
@@ -561,12 +517,12 @@ const normalizeSpeakingFeedback = (
 
   return {
     ...feedbackWithoutMarkdown,
-    obsidianMarkdown: typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()
-      ? source.obsidianMarkdown
-      : (() => {
-          normalizedFields.push('obsidianMarkdown');
-          return buildSpeakingObsidianMarkdown(feedbackWithoutMarkdown);
-        })(),
+    obsidianMarkdown: (() => {
+      if (typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()) {
+        normalizedFields.push('obsidianMarkdown');
+      }
+      return buildSpeakingObsidianMarkdown(feedbackWithoutMarkdown);
+    })(),
   };
 };
 
@@ -1282,7 +1238,7 @@ const normalizeWritingFeedback = (
 
   return {
     ...feedbackWithoutMarkdown,
-    obsidianMarkdown: buildWritingTask2Markdown(feedbackWithoutMarkdown),
+    obsidianMarkdown: buildWritingTask2TrainingMarkdown(feedbackWithoutMarkdown),
   };
 };
 
@@ -1431,12 +1387,12 @@ const normalizeWritingTask1Feedback = (
 
   return {
     ...feedbackWithoutMarkdown,
-    obsidianMarkdown: typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()
-      ? source.obsidianMarkdown
-      : (() => {
-          normalizedFields.push('obsidianMarkdown');
-          return buildWritingTask1Markdown(feedbackWithoutMarkdown);
-        })(),
+    obsidianMarkdown: (() => {
+      if (typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()) {
+        normalizedFields.push('obsidianMarkdown');
+      }
+      return buildWritingTask1TrainingMarkdown(feedbackWithoutMarkdown);
+    })(),
   };
 };
 

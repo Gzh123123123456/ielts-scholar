@@ -10,6 +10,10 @@ import { formatBandEstimate } from '@/src/lib/bands';
 import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/questions/bank';
 import { SpeakingFeedback } from '@/src/lib/ai/schemas';
 import {
+  buildMarkdownExportFilename,
+  buildSpeakingTrainingMarkdown,
+} from '@/src/lib/markdownExport';
+import {
   ActiveSpeakingPracticeSession,
   createRecordId,
   getActiveSpeakingSession,
@@ -778,11 +782,17 @@ export default function SpeakingPractice() {
 
   const exportMarkdown = () => {
     if (!feedback) return;
-    const blob = new Blob([feedback.obsidianMarkdown], { type: 'text/markdown' });
+    const markdown = buildSpeakingTrainingMarkdown(feedback);
+    const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ielts-speaking-${new Date().toISOString().split('T')[0]}.md`;
+    a.download = buildMarkdownExportFilename({
+      module: 'speaking',
+      taskOrPart: `p${part}`,
+      topic: question?.topicCategory || question?.topic,
+      prompt: feedback.question || question?.question,
+    });
     a.click();
     URL.revokeObjectURL(url);
   };

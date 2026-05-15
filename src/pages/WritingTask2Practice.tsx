@@ -22,6 +22,10 @@ import {
   ProviderDiagnosticSummary,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
+import {
+  buildMarkdownExportFilename,
+  buildWritingTask2TrainingMarkdown,
+} from '@/src/lib/markdownExport';
 import { Send, ArrowRight, FileDown, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
 
 type LanguageBankView = {
@@ -1824,11 +1828,20 @@ ${sentenceItems}
 ${missionItems.length ? missionItems.map(item => `- ${item}`).join('\n') : '- 下次修改时至少主动使用两个 Language Bank 表达。'}
 
 ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPersonalized ? '\n\nHighlighted phrases come from the Language Bank above.' : ''}` : '- No reliable personalized model answer for this attempt.'}`;
-    const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
+    const localMarkdown = buildWritingTask2TrainingMarkdown({
+      ...feedback,
+      essay: resultEssay,
+    });
+    const blob = new Blob([localMarkdown || markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ielts-writing-${new Date().toISOString().split('T')[0]}.md`;
+    a.download = buildMarkdownExportFilename({
+      module: 'writing',
+      taskOrPart: 'task2',
+      topic: question?.topicCategory,
+      prompt: feedback.question || question?.question,
+    });
     a.click();
     URL.revokeObjectURL(url);
   };

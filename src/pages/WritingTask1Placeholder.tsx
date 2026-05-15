@@ -18,6 +18,10 @@ import {
   WritingTask1PracticeRecord,
   WritingTask1QuickPlan,
 } from '@/src/lib/practiceRecords';
+import {
+  buildMarkdownExportFilename,
+  buildWritingTask1TrainingMarkdown,
+} from '@/src/lib/markdownExport';
 
 const emptyPlan: WritingTask1QuickPlan = {
   overview: '',
@@ -214,7 +218,7 @@ export default function WritingTask1Placeholder() {
 
   const words = countWords(report);
   const status = providerErrorMessage ? 'provider_failed' : feedback ? 'analyzed' : 'draft';
-  const currentMarkdown = feedback ? buildTask1Markdown(prompt, quickPlan, feedback) : '';
+  const currentMarkdown = feedback ? buildWritingTask1TrainingMarkdown(feedback, prompt, quickPlan) : '';
 
   const buildRecord = (
     nextFeedback = feedback,
@@ -248,7 +252,7 @@ export default function WritingTask1Placeholder() {
       obsidianMarkdown: nextStatus === 'provider_failed'
         ? undefined
         : nextFeedback
-          ? buildTask1Markdown(prompt, quickPlan, nextFeedback)
+          ? buildWritingTask1TrainingMarkdown(nextFeedback, prompt, quickPlan)
           : initialActiveRecordRef.current?.obsidianMarkdown,
     };
   };
@@ -322,12 +326,12 @@ export default function WritingTask1Placeholder() {
       upsertPracticeRecord({
         ...analyzedRecord,
         providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        obsidianMarkdown: buildTask1Markdown(prompt, quickPlan, result.feedback),
+        obsidianMarkdown: buildWritingTask1TrainingMarkdown(result.feedback, prompt, quickPlan),
       });
       saveActiveWritingTask1({
         ...analyzedRecord,
         providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        obsidianMarkdown: buildTask1Markdown(prompt, quickPlan, result.feedback),
+        obsidianMarkdown: buildWritingTask1TrainingMarkdown(result.feedback, prompt, quickPlan),
       });
     } finally {
       setIsAnalyzing(false);
@@ -340,7 +344,12 @@ export default function WritingTask1Placeholder() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ielts-writing-task1-${new Date().toISOString().split('T')[0]}.md`;
+    a.download = buildMarkdownExportFilename({
+      module: 'writing',
+      taskOrPart: 'task1',
+      topic: prompt.topic || prompt.taskType,
+      prompt: feedback?.instruction || prompt.instruction,
+    });
     a.click();
     URL.revokeObjectURL(url);
   };

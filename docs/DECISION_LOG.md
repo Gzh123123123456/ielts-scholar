@@ -1,5 +1,13 @@
 # Decision Log
 
+## [2026-05-15] Markdown Export Naming and Chinese-First Notes
+- **Decision**: Attempt-level markdown exports for Speaking, Writing Task 2, and Writing Task 1 use deterministic local builders and Chinese-first training-note structures.
+- **Implemented**:
+  - Filenames now include module, task/part, topic-or-question slug, date, and local HHmm time.
+  - Speaking and Writing exports use Chinese-led headings and guidance while preserving English prompts, learner output, corrections, expressions, and model answers.
+  - Provider-returned `obsidianMarkdown` is kept only as a compatibility/fallback field when structured feedback is unavailable; local structured feedback controls current final export formatting.
+- **Explicitly unchanged**: no scoring formula changes, no provider routing changes, no UI redesign, no session-level export, no record migration, no `.env.local` edits.
+
 ## [2026-05-14] Writing Task 2 Phase 3 Annotation and Score Transparency
 - **Decision**: Treat visible Writing Task 2 scores as conservative training estimates with compact provenance, not official IELTS scoring.
 - **Implemented**:
