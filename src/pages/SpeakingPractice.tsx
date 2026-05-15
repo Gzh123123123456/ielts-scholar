@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -75,6 +76,8 @@ const answerDevelopmentPlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
 
 export default function SpeakingPractice() {
   const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [part, setPart] = useState<1 | 2 | 3>(1);
   const [question, setQuestion] = useState<SpeakingQuestion | null>(null);
   const [step, setStep] = useState<'idle' | 'recording' | 'editing' | 'analyzing' | 'results'>('idle');
@@ -114,7 +117,10 @@ export default function SpeakingPractice() {
 
   const getBank = (p: 1 | 2 | 3) => p === 1 ? speakingPart1 : p === 2 ? speakingPart2 : speakingPart3;
 
-  const buildCurrentSpeakingRecord = (status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft'): SpeakingPracticeRecord | null => {
+  const buildCurrentSpeakingRecord = (
+    status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft',
+    feedbackOverride: SpeakingFeedback | null = feedback,
+  ): SpeakingPracticeRecord | null => {
     if (!question) return null;
     const timestamp = new Date().toISOString();
     const existing = activeSessionRef.current?.attemptsByPart[part]?.id === activeAttemptIdRef.current
@@ -136,15 +142,61 @@ export default function SpeakingPractice() {
       analyzedAt: status === 'analyzed' ? existing?.analyzedAt || timestamp : existing?.analyzedAt,
       transcript,
       transcriptOrigin: transcriptOriginRef.current,
-      feedback: status === 'provider_failed' ? undefined : feedback || undefined,
-      obsidianMarkdown: status === 'provider_failed' ? undefined : feedback?.obsidianMarkdown,
+      feedback: status === 'provider_failed' ? undefined : feedbackOverride || undefined,
+      obsidianMarkdown: status === 'provider_failed' ? undefined : feedbackOverride?.obsidianMarkdown,
     };
+  };
+
+  const isUnfinishedSpeakingAttempt = (record?: SpeakingPracticeRecord | null) => {
+    if (!record) return false;
+    if (record.status === 'analyzed' || record.feedback) return false;
+    if (record.status === 'draft' || record.status === 'provider_failed') return true;
+    return Boolean(record.transcript.trim() && !record.feedback);
+  };
+
+  const pruneCompletedActiveAttempts = (session: ActiveSpeakingPracticeSession) => {
+    let pruned = false;
+    const attemptsByPart: ActiveSpeakingPracticeSession['attemptsByPart'] = {};
+    ([1, 2, 3] as const).forEach(sessionPart => {
+      const record = session.attemptsByPart[sessionPart];
+      if (!record) return;
+      if (isUnfinishedSpeakingAttempt(record)) {
+        attemptsByPart[sessionPart] = record;
+      } else {
+        pruned = true;
+      }
+    });
+    return {
+      pruned,
+      session: {
+        ...session,
+        attemptsByPart,
+      },
+    };
+  };
+
+  const logSkippedCompletedAutoRestore = () => {
+    console.debug('Skipped auto-restore for completed Speaking attempt; loaded a fresh question instead.');
+  };
+
+  const clearActiveSpeakingAttempt = (sessionPart: 1 | 2 | 3) => {
+    if (!activeSessionRef.current) return;
+    activeSessionRef.current = {
+      ...activeSessionRef.current,
+      attemptsByPart: {
+        ...activeSessionRef.current.attemptsByPart,
+        [sessionPart]: undefined,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    saveActiveSpeakingSession(activeSessionRef.current);
   };
 
   const hasMeaningfulAttemptContent = (status?: 'draft' | 'analyzed' | 'provider_failed') =>
     Boolean(transcript.trim() || feedback || status === 'analyzed' || status === 'provider_failed');
 
   const persistCurrentSpeakingAttempt = (status?: 'draft' | 'analyzed' | 'provider_failed') => {
+    if (feedback || status === 'analyzed') return;
     if (!hasMeaningfulAttemptContent(status)) return;
     const record = buildCurrentSpeakingRecord(status);
     if (!record) return;
@@ -192,11 +244,33 @@ export default function SpeakingPractice() {
     const active = getActiveSpeakingSession();
     if (active) {
       activeSessionRef.current = active;
-      const restored = active.attemptsByPart[active.currentPart] || active.attemptsByPart[1];
-      if (restored) {
-        restoreSpeakingRecord(restored);
+      const explicitRestoreId = typeof location.state === 'object' && location.state && 'restoreSpeakingRecordId' in location.state
+        ? String(location.state.restoreSpeakingRecordId || '')
+        : '';
+      if (explicitRestoreId) {
+        const explicitRecord = Object.values(active.attemptsByPart).find(record => record?.id === explicitRestoreId);
+        if (explicitRecord) {
+          restoreSpeakingRecord(explicitRecord);
+          navigate(location.pathname, { replace: true, state: null });
+          return;
+        }
+      }
+
+      const currentPart = active.currentPart;
+      const candidate = active.attemptsByPart[currentPart];
+      if (isUnfinishedSpeakingAttempt(candidate)) {
+        restoreSpeakingRecord(candidate);
         return;
       }
+
+      const { pruned, session } = pruneCompletedActiveAttempts(active);
+      activeSessionRef.current = session;
+      if (candidate && !isUnfinishedSpeakingAttempt(candidate)) {
+        logSkippedCompletedAutoRestore();
+      }
+      if (pruned) saveActiveSpeakingSession(session);
+      loadRandomQuestion(currentPart);
+      return;
     }
     loadRandomQuestion(1);
   }, []);
@@ -240,7 +314,7 @@ export default function SpeakingPractice() {
   const switchPart = (p: 1 | 2 | 3) => {
     persistCurrentSpeakingAttempt();
     const existing = activeSessionRef.current?.attemptsByPart[p];
-    if (existing) {
+    if (isUnfinishedSpeakingAttempt(existing)) {
       restoreSpeakingRecord(existing);
       activeSessionRef.current = {
         ...activeSessionRef.current,
@@ -249,6 +323,10 @@ export default function SpeakingPractice() {
       };
       saveActiveSpeakingSession(activeSessionRef.current);
       return;
+    }
+    if (existing) {
+      logSkippedCompletedAutoRestore();
+      clearActiveSpeakingAttempt(p);
     }
     loadRandomQuestion(p);
   };
@@ -514,8 +592,7 @@ export default function SpeakingPractice() {
       setFeedbackFallbackUsed(diagnostic.fallbackUsed);
       setFeedback(result);
       setStep('results');
-      persistCurrentSpeakingAttempt('analyzed');
-      const analyzedBase = buildCurrentSpeakingRecord('analyzed');
+      const analyzedBase = buildCurrentSpeakingRecord('analyzed', result);
       if (analyzedBase) {
         upsertPracticeRecord({
           ...analyzedBase,
@@ -525,6 +602,7 @@ export default function SpeakingPractice() {
           providerDiagnostic: summarizeDiagnostic(diagnostic),
         });
       }
+      clearActiveSpeakingAttempt(part);
       
       saveSession({
         id: `sp_${Date.now()}`,
