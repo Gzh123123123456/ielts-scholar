@@ -6,6 +6,10 @@
   - Filenames now include module, task/part, topic-or-question slug, date, and local HHmm time.
   - Speaking and Writing exports use Chinese-led headings and guidance while preserving English prompts, learner output, corrections, expressions, and model answers.
   - Provider-returned `obsidianMarkdown` is kept only as a compatibility/fallback field when structured feedback is unavailable; local structured feedback controls current final export formatting.
+- **Follow-up polish**:
+  - Export builders now compress notes for Obsidian review instead of dumping every feedback item.
+  - Task 2 filenames use shorter topic/task-type slugs such as `remote-work-outweigh`.
+  - Speaking insufficient samples export a Starter Target Answer / Answer Development Plan instead of a fake full upgraded answer.
 - **Explicitly unchanged**: no scoring formula changes, no provider routing changes, no UI redesign, no session-level export, no record migration, no `.env.local` edits.
 
 ## [2026-05-14] Writing Task 2 Phase 3 Annotation and Score Transparency

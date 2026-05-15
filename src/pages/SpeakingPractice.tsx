@@ -83,6 +83,42 @@ type TranscriptCleanupResult = {
   corrections: string[];
 };
 
+const starterPracticePlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
+  const items = speakingPart === 1
+    ? [
+      'Direct answer: Yes / No / It depends.',
+      'Detail: what kind, when, where, or how often.',
+      'Reason: why you like it, dislike it, or do it.',
+      'Stop after 2-4 spoken sentences.',
+    ]
+    : speakingPart === 2
+      ? [
+        'Introduce the person, place, time, or activity.',
+        'Add two concrete details instead of only giving a conclusion.',
+        'Explain your feeling, change, or why it mattered.',
+        'End the story naturally.',
+      ]
+      : [
+        'State a clear position first.',
+        'Compare two situations or two groups of people.',
+        'Add one realistic example.',
+        'Explain the wider consequence.',
+      ];
+  const targetAnswer = speakingPart === 1 && /^do you/i.test(prompt.trim())
+    ? 'Yes, I do. I usually [specific detail] when I want to relax. It helps me [personal reason].'
+    : speakingPart === 1
+      ? 'I usually [direct answer]. For example, [specific detail]. I like it because [personal reason].'
+      : speakingPart === 2
+        ? 'I want to talk about [person/place/activity]. It happened / happens [time or place]. The main reason I remember it is [personal reason].'
+        : 'In my view, [direct position]. This is because [reason]. For example, [specific example]. So I think [balanced close].';
+
+  return {
+    questionReference: prompt ? `当前题目：${prompt}` : '先围绕当前题目补出一个完整答案。',
+    items,
+    targetAnswer,
+  };
+};
+
 const replaceWithCleanup = (
   text: string,
   pattern: RegExp,
@@ -799,7 +835,7 @@ export default function SpeakingPractice() {
 
   const isMock = getAIProviderName() !== 'gemini';
   const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
-  const developmentPlan = answerDevelopmentPlan(part, question?.question);
+  const starterPlan = starterPracticePlan(part, question?.question);
 
   return (
     <PageShell size="wide">
@@ -1032,7 +1068,7 @@ export default function SpeakingPractice() {
                 </div>
               </div>
 
-              {feedback.band9Refinements.length > 0 && (
+              {!shouldShowDevelopmentPlan && feedback.band9Refinements.length > 0 && (
                 <section className="space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-paper-ink/55 ml-1">
                     Band 9 Refinement / Examiner-Friendly Refinement
@@ -1078,16 +1114,24 @@ export default function SpeakingPractice() {
                   {shouldShowDevelopmentPlan ? (
                     <div className="max-w-5xl space-y-5 text-paper-ink">
                       <p className="text-lg leading-9">
-                        样本太短或信息量不足，不能可靠生成完整高分改写。{developmentPlan.questionReference}
+                        样本太短或信息量不足，不能可靠生成完整高分改写。{starterPlan.questionReference}
                       </p>
                       <ul className="space-y-3">
-                        {developmentPlan.items.map(item => (
+                        {starterPlan.items.map(item => (
                           <li key={item} className="text-base leading-8 border-l-2 border-l-accent-terracotta/35 pl-4">
                             {item}
                           </li>
                         ))}
                       </ul>
-                      <p className="text-base leading-8 text-paper-ink/75">{developmentPlan.starter}</p>
+                      <div className="border border-paper-ink/10 bg-paper-ink/[0.03] p-4 rounded-sm">
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-2">
+                          Starter Target Answer
+                        </p>
+                        <p className="text-lg leading-8 text-paper-ink">{starterPlan.targetAnswer}</p>
+                        <p className="text-sm leading-7 text-paper-ink/60 mt-3">
+                          This is a starter frame, not a fully personalized upgraded answer. Replace the brackets with your real details.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <p className="max-w-5xl text-xl md:text-2xl leading-10 text-paper-ink font-serif">
