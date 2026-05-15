@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-05-15_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -87,6 +87,14 @@ _Last updated: 2026-05-14_
   - Speaking: 12 preparation categories.
   - Writing Task 2: 12 preparation categories.
 - Still pending:
+  - **Question bank count + browse/random/select entry points**:
+    - Add low-noise question-bank status near module/practice question cards.
+    - Speaking: show Part/topic question count, browse bank, random question, and later topic-filtered random.
+    - Writing landing: show Task 1 / Task 2 question count, browse bank, random practice.
+    - Writing Task 2 question page: show task type, question count, browse bank, random question.
+    - First slice can add visible entry buttons/counts only.
+    - Full browse/select modal or panel is a separate larger UI task.
+    - Counts must be computed from question data, not hardcoded.
   - larger curated prompt bank
   - richer topic taxonomy and difficulty metadata
   - stronger scoring calibration with real provider data and larger local attempt samples

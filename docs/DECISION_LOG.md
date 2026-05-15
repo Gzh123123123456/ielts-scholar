@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-15] Future Question Bank Entry Points Deferred
+- **Decision**: Record **Question bank count + browse/random/select entry points** as future product work, not part of the current markdown/status polish slice.
+- **Future scope**:
+  - Add low-noise question-bank status near module/practice question cards.
+  - Speaking: show Part/topic question count, browse bank, random question, and later topic-filtered random.
+  - Writing landing: show Task 1 / Task 2 question count, browse bank, random practice.
+  - Writing Task 2 question page: show task type, question count, browse bank, random question.
+  - First slice can add visible entry buttons/counts only.
+  - Full browse/select modal or panel is a separate larger UI task.
+  - Counts must be computed from question data, not hardcoded.
+- **Explicitly unchanged**: no question-bank browse/select UI, no picker modal/panel, no disabled future buttons, no scoring/provider changes.
+
 ## [2026-05-15] Markdown Export Naming and Chinese-First Notes
 - **Decision**: Attempt-level markdown exports for Speaking, Writing Task 2, and Writing Task 1 use deterministic local builders and Chinese-first training-note structures.
 - **Implemented**:

@@ -1,6 +1,6 @@
 # Current State (V1.1 closing)
 
-_Last updated: 2026-05-09_
+_Last updated: 2026-05-15_
 
 ## Product Baseline
 - Mock Provider remains the default provider.
@@ -125,8 +125,20 @@ _Last updated: 2026-05-09_
 
 ## Export Behavior (Implemented)
 - Markdown export is attempt-level in V1.
+- Speaking exports should keep active expressions as 2-4 short reusable chunks and use conceptual Answer Paths, not sliced sentence fragments.
+- Writing Task 2 exports should read as compact Obsidian training notes: max 3 revision-focus actions, compact logic cards, top sentence corrections only, and a phrase-level Language Bank.
 - Task 1 exports a downloaded `.md` file using the same pattern as other modules; if provider markdown is absent, the app generates a complete local note from structured feedback.
 - Session-level consolidated note export is not implemented yet.
+
+## Future Question Bank Entry Points (Deferred)
+- Future task: **Question bank count + browse/random/select entry points**.
+- Add low-noise question-bank status near module/practice question cards.
+- Speaking: show Part/topic question count, browse bank, random question, and later topic-filtered random.
+- Writing landing: show Task 1 / Task 2 question count, browse bank, random practice.
+- Writing Task 2 question page: show task type, question count, browse bank, random question.
+- First slice can add visible entry buttons/counts only; full browse/select modal or panel is separate.
+- Counts must be computed from question data, not hardcoded.
+- This is deferred and not implemented in the markdown/status polish slice.
 
 ## Practice History (Implemented)
 - A lightweight `/practice-history` page lists existing localStorage practice records without starting a new attempt.

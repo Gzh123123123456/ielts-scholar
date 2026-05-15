@@ -1,6 +1,6 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-05-15_
 
 ## Repo
 
@@ -63,11 +63,19 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Current Priority
 
-Writing Task 2 Phase 3 product information architecture, annotated essay overlay, and score transparency polish are complete.
+Current polish slice: markdown note extraction quality for Speaking/Writing exports, plus lower-noise learner-facing Writing Task 2 score/provenance status.
 
-Remaining future scoring work, if needed, belongs to a larger scoring calibration task, not the current Phase 3 UI repair.
+Do not implement question-bank browse/select UI in this slice.
 
-Next planned product task should be chosen from the backlog after this completed Phase 3 UI repair. Do not reopen scoring/provider routing unless explicitly scoped.
+Future backlog item after this slice: **Question bank count + browse/random/select entry points**.
+- Add low-noise question-bank status near module/practice question cards.
+- Speaking: show Part/topic question count, browse bank, random question, and later topic-filtered random.
+- Writing landing: show Task 1 / Task 2 question count, browse bank, random practice.
+- Writing Task 2 question page: show task type, question count, browse bank, random question.
+- First slice can add visible entry buttons/counts only; full browse/select modal or panel is a separate larger UI task.
+- Counts must be computed from question data, not hardcoded.
+
+Remaining future scoring work, if needed, belongs to a larger scoring calibration task. Do not reopen scoring/provider routing unless explicitly scoped.
 
 ## Agent Role Boundaries
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-13 (daily closeout)_
+_Last updated: 2026-05-15_
 
 ## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -107,6 +107,12 @@ _Last updated: 2026-05-13 (daily closeout)_
 - Practice and Mock modes remain separate.
 
 ## V3 - Data & Visualization
+- Question bank count + browse/random/select entry points:
+  - Add low-noise question-bank status near Speaking and Writing question cards.
+  - Speaking should expose Part/topic count, browse bank, random question, and later topic-filtered random.
+  - Writing should expose Task 1 / Task 2 counts, browse bank, random practice, and Task 2 task-type/count context.
+  - First slice may add visible entry buttons/counts only; full browse/select modal or panel is separate.
+  - Counts must come from question data, not hardcoded values.
 - Task 1 Academic data-driven chart rendering with richer data accuracy mapping.
 - Task 1 General Training letter prompts.
 - Stronger scoring calibration using real provider data and larger local attempt samples.

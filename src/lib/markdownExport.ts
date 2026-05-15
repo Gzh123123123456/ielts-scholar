@@ -162,64 +162,103 @@ const phraseChunk = (value?: string, maxWords = 7) => {
     .trim();
   if (!cleaned) return '';
   const words = cleaned.split(/\s+/);
-  if (words.length > maxWords || /[,;:]/.test(cleaned)) return limitWords(cleaned, maxWords);
+  if (words.length > maxWords || /[,;:]/.test(cleaned)) return '';
   return cleaned;
 };
 
-const speakingActiveExpressions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
-  unique(cleanLines([
-    ...feedback.naturalnessHints.map(item => phraseChunk(item.better)),
-    ...feedback.band9Refinements.map(item => phraseChunk(item.refinement)),
-    feedback.reusableExample && phraseChunk(feedback.reusableExample.example),
-  ]))
-    .filter(item => countWords(item) <= 8)
-    .slice(0, 4);
+const INCOMPLETE_PHRASE_ENDINGS = /\b(?:to|with|and|or|because|so|so i|when|where|that|which|of|for|in|on|at|by|from|the|a|an)$/i;
+const META_INSTRUCTION_PATTERN = /^(?:add|include|mention|explain|describe|use|integrate|avoid|try to|make sure|expand|replace|rewrite|give)\b/i;
+
+const cleanReusablePhrase = (value?: string, maxWords = 8) => {
+  const cleaned = (value || '')
+    .replace(/^[\s\-*•\d.]+/, '')
+    .replace(/["`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.!?]+$/g, '');
+  if (!cleaned) return '';
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length > maxWords) return '';
+  if (/[,;:]/.test(cleaned)) return '';
+  if (META_INSTRUCTION_PATTERN.test(cleaned)) return '';
+  if (INCOMPLETE_PHRASE_ENDINGS.test(cleaned)) return '';
+  if (/\b(?:specific genre|specific detail|personal reason|instruction|answer path)\b/i.test(cleaned)) return '';
+  return cleaned;
+};
+
+const speakingShortAnswerExpressionFallback = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (!isSpeakingInsufficient(feedback)) return [];
+  if (/read/i.test(feedback.question)) {
+    return ['[type of books]', 'when I want to relax', 'it helps me [personal reason]'];
+  }
+  return feedback.part === 1
+    ? ['先补一个具体细节', '先补一个真实原因']
+    : ['先补一个具体场景', '先补两个关键细节'];
+};
+
+const speakingActiveExpressions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const candidates = unique(cleanLines([
+    ...feedback.naturalnessHints.map(item => cleanReusablePhrase(item.better)),
+    ...feedback.band9Refinements.map(item => cleanReusablePhrase(item.refinement)),
+    feedback.reusableExample && cleanReusablePhrase(feedback.reusableExample.example),
+  ])).slice(0, 4);
+
+  return candidates.length ? candidates : speakingShortAnswerExpressionFallback(feedback).slice(0, 4);
+};
 
 const splitSentences = (text: string) =>
   text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map(item => item.trim()) || [];
 
 const genericSpeakingPath = (part: SpeakingFeedback['part']) => {
-  if (part === 1) return ['Direct answer', 'one personal detail', 'light reason or feeling', 'stop'];
-  if (part === 2) return ['Topic', 'opening scene', 'two concrete details', 'feeling change', 'why it matters'];
-  return ['direct position', 'contrast or condition', 'example', 'consequence', 'balanced close'];
+  if (part === 1) return ['Direct answer', 'One specific detail', 'Light reason or feeling', 'Stop'];
+  if (part === 2) return ['Topic: what you are describing', 'Scene: where/when it happens', 'Details: two concrete details', 'Feeling: how you feel', 'Meaning: why it matters'];
+  return ['Direct position', 'Contrast or condition', 'Example', 'Consequence', 'Balanced close'];
 };
 
 const speakingAnswerPath = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   const source = feedback.upgradedAnswer && !/insufficient sample|starter outline/i.test(feedback.upgradedAnswer)
     ? feedback.upgradedAnswer
     : feedback.transcript;
-  const chunks = splitSentences(source).map(sentence => phraseChunk(sentence, 7)).filter(Boolean);
+  const combined = `${feedback.question} ${source}`.toLowerCase();
 
-  if (chunks.length >= 3 && feedback.part === 2) {
+  if (feedback.part === 2 && /daily routine|ideal day|routine/.test(combined)) {
     return [
-      `Topic: ${chunks[0]}`,
-      `Start: ${chunks[1] || chunks[0]}`,
-      `Details: ${chunks[2] || chunks[1]}`,
-      `Feeling: ${chunks[3] || 'how it felt'}`,
-      `Meaning: ${chunks[4] || 'why it mattered'}`,
+      'Routine: ideal day / wake up naturally',
+      'Morning: breakfast + jog / gym',
+      'Midday: lunch + short nap',
+      'Afternoon: focused work or study',
+      'Evening: PC games with roommates + family time',
+      'Meaning: balance between activity, productivity, and connection',
     ];
   }
-  if (chunks.length >= 2 && feedback.part === 1) {
+
+  if (feedback.part === 1 && /read/.test(combined)) {
     return [
-      `Answer: ${chunks[0]}`,
-      `Detail: ${chunks[1]}`,
-      'Reason / feeling',
-      'Stop naturally',
+      'Direct answer: yes, I enjoy reading',
+      'Detail: add [type of books]',
+      'Reason: it helps me [personal reason]',
+      'Stop',
     ];
   }
-  if (chunks.length >= 3 && feedback.part === 3) {
+
+  if (feedback.part === 2 && /relax|leisure|game|family|productive|work|study/.test(combined)) {
     return [
-      `Position: ${chunks[0]}`,
-      `Contrast: ${chunks[1]}`,
-      `Example: ${chunks[2]}`,
-      'Consequence / balanced close',
+      'Topic: the activity or routine',
+      'Scene: when and where it usually happens',
+      'Details: two concrete actions',
+      'Feeling: why it feels relaxing or productive',
+      'Meaning: what it adds to your life',
     ];
   }
+
   return genericSpeakingPath(feedback.part);
 };
 
 const starterTargetAnswer = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   const question = feedback.question.trim();
+  if (/^do you/i.test(question) && /read/i.test(question)) {
+    return 'Yes, I do. I usually read [type of books] when I want to relax. It helps me [personal reason].';
+  }
   if (/^do you/i.test(question)) {
     return 'Yes, I do. I usually [specific detail] when I want to relax. It helps me [personal reason].';
   }
@@ -260,6 +299,16 @@ const speakingMission = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =
 };
 
 const diagnosisRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (isSpeakingInsufficient(feedback)) {
+    return [{
+      category: '样本不足',
+      issue: feedback.fatalErrors[0]?.original || '答案太短，暂时不能形成稳定诊断。',
+      fix: feedback.part === 1
+        ? '先用 2-4 句补出直接回答、具体细节和真实原因。'
+        : '先按 Answer Path 说出一个完整答案，再追求高级表达。',
+    }];
+  }
+
   const rows = [
     ...feedback.fatalErrors.map(item => ({ priority: 1, category: '优先修复', issue: `${item.original} -> ${item.correction}`, fix: item.explanationZh })),
     ...feedback.naturalnessHints.map(item => ({ priority: 2, category: '自然表达', issue: `${item.original} -> ${item.better}`, fix: item.explanationZh })),
@@ -275,14 +324,21 @@ const diagnosisRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => 
 
 const transferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   const direct = (feedback.reusableExample?.canBeReusedFor || [])
-    .map(item => item.replace(/^Can this idea also help you answer:\s*/i, '').trim())
+    .map(item => item
+      .replace(/^Can this idea also help you answer:\s*/i, '')
+      .replace(/^This idea can also help you answer:\s*/i, '')
+      .replace(/^Can this material be reused for:\s*/i, '')
+    .trim())
     .filter(item => /^(describe|what|do|how|why|when|where|should|is|are|can|could|would)\b/i.test(item))
-    .map(item => item.endsWith('?') || /^describe\b/i.test(item) ? item : `${item}?`)
+    .filter(item => !/^can this\b/i.test(item))
+    .map(item => /^describe\b/i.test(item) ? `${item.replace(/[?.!]+$/, '')}.` : item.endsWith('?') ? item : `${item}?`)
     .slice(0, 3);
-  if (direct.length >= 3) return direct;
-  if (feedback.part === 1) return ['Do you enjoy reading?', 'What do you usually do to relax?', 'How often do you spend time on this activity?'];
-  if (feedback.part === 2) return ['Describe a leisure activity you enjoy.', 'Describe something you do to relax.', 'Describe a time when you had a productive day.'];
-  return ['How has technology changed people\'s daily routines?', 'Do people today have a better work-life balance than in the past?', 'What can companies do to improve employees\' wellbeing?'];
+  const fallback = feedback.part === 1
+    ? ['Do you enjoy reading?', 'What do you usually do to relax?', 'How often do you spend time on this activity?']
+    : feedback.part === 2
+      ? ['Describe a leisure activity you enjoy.', 'Describe something you do to relax.', 'Describe a time when you had a productive day.']
+      : ['How has technology changed people\'s daily routines?', 'Do people today have a better work-life balance than in the past?', 'What can companies do to improve employees\' wellbeing?'];
+  return unique([...direct, ...fallback]).slice(0, 3);
 };
 
 export const buildSpeakingTrainingMarkdown = (
@@ -375,7 +431,7 @@ const averageWritingScore = (scores: WritingFeedback['scores']) =>
   (scores.taskResponse + scores.coherenceCohesion + scores.lexicalResource + scores.grammaticalRangeAccuracy) / 4;
 
 const conciseAction = (text?: string, maxWords = 28) => {
-  const cleaned = (text || '').replace(/\s+/g, ' ').trim();
+  const cleaned = (splitSentences(text || '')[0] || text || '').replace(/\s+/g, ' ').trim();
   return cleaned ? limitWords(cleaned, maxWords) : '';
 };
 
@@ -408,17 +464,20 @@ const prioritizedSentences = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'
 
 const task2RevisionFocus = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>) =>
   cleanLines([
-    feedback.essayLevelWarnings[0]?.messageZh && `处理篇幅/完整度：${conciseAction(feedback.essayLevelWarnings[0].messageZh, 24)}`,
-    prioritizedLogic(feedback)[0]?.paragraphFixZh && `先改结构：${conciseAction(prioritizedLogic(feedback)[0].paragraphFixZh, 24)}`,
-    prioritizedSentences(feedback)[0]?.transferGuidanceZh && `再改句子：${conciseAction(prioritizedSentences(feedback)[0].transferGuidanceZh, 22)}`,
+    feedback.essayLevelWarnings[0]?.messageZh && `补足篇幅：${conciseAction(feedback.essayLevelWarnings[0].messageZh, 16)}`,
+    prioritizedLogic(feedback)[0]?.paragraphFixZh && `先改结构：${conciseAction(prioritizedLogic(feedback)[0].paragraphFixZh, 16)}`,
+    prioritizedSentences(feedback)[0]?.transferGuidanceZh && `再改句子：${conciseAction(prioritizedSentences(feedback)[0].transferGuidanceZh, 14)}`,
   ]).slice(0, 3);
 
 const task2Checklist = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>) =>
   cleanLines([
-    prioritizedLogic(feedback)[0]?.paragraphFixZh && `结构：${conciseAction(prioritizedLogic(feedback)[0].paragraphFixZh, 18)}`,
-    prioritizedSentences(feedback)[0]?.transferGuidanceZh && `句子：${conciseAction(prioritizedSentences(feedback)[0].transferGuidanceZh, 18)}`,
-    feedback.vocabularyUpgrade.expressionUpgrades[0]?.better && `表达：主动使用 ${phraseChunk(feedback.vocabularyUpgrade.expressionUpgrades[0].better, 8)}`,
-    '写完后检查题目任务、立场、例子、回扣是否齐全。',
+    prioritizedLogic(feedback)[0]?.paragraphFixZh && `结构：${conciseAction(prioritizedLogic(feedback)[0].paragraphFixZh, 14)}`,
+    prioritizedSentences(feedback)[0]?.transferGuidanceZh && `句子：${conciseAction(prioritizedSentences(feedback)[0].transferGuidanceZh, 14)}`,
+    feedback.vocabularyUpgrade.expressionUpgrades[0]?.better
+      && phraseChunk(feedback.vocabularyUpgrade.expressionUpgrades[0].better, 8)
+      && `表达：主动使用 ${phraseChunk(feedback.vocabularyUpgrade.expressionUpgrades[0].better, 8)}`,
+    '检查是否回应题型关键词。',
+    '每个主体段保留一个清楚例子。',
   ]).slice(0, 5);
 
 const phraseLevelUpgrade = (item: WritingFeedback['vocabularyUpgrade']['expressionUpgrades'][number]) => ({
@@ -439,12 +498,14 @@ export const buildWritingTask2TrainingMarkdown = (
     .filter(item => item.original || item.category === 'from_essay')
     .map(phraseLevelUpgrade)
     .filter(item => item.better)
-    .slice(0, 5);
+    .filter(item => countWords(item.better) <= 9)
+    .slice(0, 3);
   const frames = feedback.vocabularyUpgrade.expressionUpgrades
     .filter(item => !item.original || item.category === 'argument_frame')
     .map(phraseLevelUpgrade)
     .filter(item => item.better)
-    .slice(0, 4);
+    .filter(item => countWords(item.better) <= 14)
+    .slice(0, 3);
   const annotations = feedback.modelAnswerAnnotations?.length
     ? `\n\n### 范文标注｜Key Labels\n${feedback.modelAnswerAnnotations.slice(0, 5).map(item => `- ${phraseChunk(item.quote, 8)}: ${item.labelZh}`).join('\n')}`
     : '';
@@ -469,8 +530,9 @@ ${feedback.essay}
 
 ## 4. 任务回应与结构诊断｜TR / Logic Review
 ${logicItems.length ? logicItems.map((item, index) => `### ${index + 1}. ${item.issue}
-- 中文诊断: ${conciseAction(item.suggestionZh, 30)}
-- 这次怎么改: ${conciseAction(item.paragraphFixZh || item.transferGuidanceZh, 28) || '先明确这个段落的功能，再补足支撑。'}${item.exampleFrame ? `\n- 可复用框架: ${phraseChunk(item.exampleFrame, 14)}` : ''}`).join('\n\n') : '- 这次没有稳定的结构诊断；下一篇先检查立场、分段和例子是否完整。'}
+- 问题: ${conciseAction(item.suggestionZh || item.issue, 18)}
+- 为什么影响分数: ${conciseAction(item.transferGuidanceZh || item.suggestionZh, 18)}
+- 这次怎么改: ${conciseAction(item.paragraphFixZh || item.transferGuidanceZh, 18) || '先明确这个段落的功能，再补足支撑。'}${item.exampleFrame ? `\n- 可复用句: ${phraseChunk(item.exampleFrame, 14)}` : ''}`).join('\n\n') : '- 这次没有稳定的结构诊断；下一篇先检查立场、分段和例子是否完整。'}
 
 ## 5. 关键句子修改｜Key Sentence Corrections
 ${sentenceItems.length ? sentenceItems.map((item, index) => `### ${index + 1}. ${item.primaryIssue || item.tag}

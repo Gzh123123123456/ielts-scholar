@@ -622,33 +622,19 @@ const getEssayWarnings = (feedback: WritingFeedback, isInsufficientSample: boole
   return merged.filter(item => !isWordCountWarning(item) || item === firstWordCountWarning);
 };
 
-const providerDisplayNames: Record<string, string> = {
-  mock: 'Mock provider',
-  gemini: 'Gemini',
-  deepseek: 'DeepSeek',
-};
-
-const displayProviderName = (providerName?: string) => {
-  if (!providerName) return 'Provider not recorded';
-  const normalized = providerName.trim().toLowerCase();
-  return providerDisplayNames[normalized] || humanizeKey(providerName);
-};
-
 const getScoreTransparencyParts = (
   diagnostic: ProviderDiagnosticSummary | null,
   fallbackUsed: boolean,
   wordCount: number,
   isUnderTask2Minimum: boolean,
 ) => {
-  const parts = ['Training estimate'];
-  if (isUnderTask2Minimum) parts.push(`capped under 250 words (${wordCount}/250)`);
-  if (diagnostic?.providerName) parts.push(displayProviderName(diagnostic.providerName));
-  if (diagnostic?.fallbackUsed || fallbackUsed) parts.push('fallback used');
-  if (diagnostic?.normalizedFields?.length) parts.push(`${diagnostic.normalizedFields.length} normalized field${diagnostic.normalizedFields.length > 1 ? 's' : ''}`);
+  const parts: string[] = [];
+  if (isUnderTask2Minimum) parts.push(`训练估计已保守处理：${wordCount}/250 词，低于 Task 2 建议字数。`);
+  if (diagnostic?.failureKind === 'provider_unavailable') parts.push('AI 提供方暂时不可用，本次保留草稿，请稍后重试。');
+  if (diagnostic?.fallbackUsed || fallbackUsed) parts.push('本次使用备用反馈，分数和建议请保守参考。');
+  if (diagnostic?.normalizedFields?.length) parts.push('部分反馈字段已自动修正，详细信息可在 Debug Panel 查看。');
   if (diagnostic?.validationErrors?.length) {
-    parts.push(`${diagnostic.validationErrors.length} validation issue${diagnostic.validationErrors.length > 1 ? 's' : ''}`);
-  } else if (diagnostic) {
-    parts.push('validation clear');
+    parts.push('本次反馈不完整，详细诊断可在 Debug Panel 查看。');
   }
   return parts;
 };
@@ -2142,14 +2128,16 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               ))}
             </div>
 
-            <div
-              className="rounded-sm border border-paper-ink/10 bg-paper-ink/[0.025] px-3 py-2"
-              aria-label="Score transparency"
-            >
-              <p className="text-xs leading-6 text-paper-ink/55">
-                {scoreTransparencyParts.join(' · ')}
-              </p>
-            </div>
+            {scoreTransparencyParts.length > 0 && (
+              <div
+                className="rounded-sm border border-paper-ink/10 bg-paper-ink/[0.025] px-3 py-2"
+                aria-label="Score transparency"
+              >
+                <p className="text-xs leading-6 text-paper-ink/55">
+                  {scoreTransparencyParts.join(' ')}
+                </p>
+              </div>
+            )}
 
             {essayWarnings.length > 0 && (
               <section className="space-y-3">
