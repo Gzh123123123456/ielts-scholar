@@ -213,11 +213,14 @@ Assess transcript-based speaking only. Do not provide a pronunciation score; pro
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 Avoid endless sentence-level nitpicking. If the answer is already strong, return an empty fatalErrors array and say no critical correction is needed through naturalnessHints or upgradedAnswer.
-Do not cap upgraded answers at Band 7; make the upgradedAnswer genuinely high-band while preserving the learner's core idea.
+Feedback must be target-uplift training feedback. Keep the current estimate defensible, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim above the current output level.
+If the learner is weak, produce a clean, natural target answer around Band 6.5-7.0 for that part, not merely a minimal correction. If the learner is already strong, provide examiner-friendly Band 8-9 refinements rather than saying there is nothing to improve.
+Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
 If the transcript is extremely short, nonsensical, or too thin for the part, do not write a long upgradedAnswer. Return an insufficient-sample message with a short starter outline instead. Be stricter for Part 2 and Part 3 than Part 1.
 Use fatalErrors only for true mistakes. Use band9Refinements for high-level examiner-friendly refinements, especially when fatalErrors is empty or short.
 Band 9 refinements should cover over-formal or AI-like phrasing, unnatural spoken rhythm, overlong Part 1 answers, missed chances for concise natural development, and ways to sound more spontaneous.
-For Part 1, prefer concise natural spoken answers over long academic answers. For Part 2 and Part 3, allow more development but still check spoken delivery.
+For Part 1, upgradedAnswer must normally be 2-4 spoken sentences and about 35-70 words maximum unless the original answer genuinely requires slightly more. Use one direct answer, one personal detail, and one light reason/example. Prefer natural spoken English over formal academic phrasing. Do not write essay-style paragraphs or overuse advanced vocabulary. High-band Part 1 means concise, natural, and examiner-friendly, not long.
+For Part 2, target a story spine with concrete details. For Part 3, target spoken discussion logic with contrast/example/consequence.
 
 ${speakingSchemaInstruction}
 

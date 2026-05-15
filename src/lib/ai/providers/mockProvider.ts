@@ -76,7 +76,9 @@ export class MockProvider implements AIProvider {
           reasonZh: '保留了个人成长故事，这在 Part 1 中很真实。',
         },
       ],
-      upgradedAnswer: "Actually, I'm quite fond of my hometown since I've spent my entire childhood there. It's a vibrant city with a rich history, and I've witnessed its rapid transformation over the years.",
+      upgradedAnswer: params.part === 1
+        ? "I usually like spending time with my friends in a relaxed way. We often grab a coffee or take a short walk, especially after work. It feels easy and natural because I can talk with them without pretending to be formal."
+        : "Actually, I'm quite fond of my hometown since I've spent my entire childhood there. It's a vibrant city with a rich history, and I've witnessed its rapid transformation over the years.",
       reusableExample: {
         example: 'The rapid transformation of my city',
         canBeReusedFor: ['Hometown', 'Environment', 'Changes'],

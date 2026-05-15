@@ -79,6 +79,42 @@ const buildInsufficientSpeakingTransformation = (part: SpeakingPart): string => 
   return 'Insufficient sample for a full Part 3 model answer. Starter outline: state a clear opinion, compare two sides, add one real-world example, and explain the wider consequence.';
 };
 
+const isProviderIncompleteSpeakingAnswer = (text: string): boolean =>
+  /provider returned incomplete feedback|please retry analysis|malformed or incomplete/i.test(text);
+
+const splitSentences = (text: string): string[] =>
+  text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+    ?.map(sentence => sentence.trim())
+    .filter(Boolean) || [];
+
+const buildPart1TargetStarter = (transcript: string): string => {
+  const cleaned = transcript.replace(/\s+/g, ' ').trim();
+  if (!cleaned || hasLowSignalSpeakingText(cleaned)) {
+    return "Usually, I like spending time with my friends in a relaxed way. We might grab a coffee or just walk around and chat. I enjoy it because it helps me switch off after a busy day.";
+  }
+  const firstSentence = splitSentences(cleaned)[0] || cleaned;
+  return `${firstSentence.replace(/[.!?]+$/, '')}. Usually I would add one specific detail, like where we go or what we talk about. That makes the answer sound more natural and personal.`;
+};
+
+const calibrateSpeakingUpgradedAnswer = (
+  value: string,
+  part: SpeakingPart,
+  transcript: string,
+  limitTransformation: boolean,
+): string => {
+  if (limitTransformation || part !== 1 || isProviderIncompleteSpeakingAnswer(value)) return value;
+  const words = countWords(value);
+  const sentences = splitSentences(value);
+  if (words <= 80 && sentences.length <= 4) return value;
+
+  const trimmed = sentences.slice(0, 4).join(' ');
+  if (countWords(trimmed) >= 25 && countWords(trimmed) <= 85) return trimmed;
+  return buildPart1TargetStarter(transcript);
+};
+
 const applySpeakingLengthCap = (score: number, words: number, part: SpeakingPart): number => {
   if (!Number.isFinite(score) || score <= 0) return score;
   if (words <= 6) return floorToHalfBand(capBand(score, 3.0));
@@ -381,6 +417,15 @@ const normalizeSpeakingFeedback = (
   const lengthMustFix = buildSpeakingLengthMustFix(transcriptWords, part);
   const limitTransformation = shouldLimitSpeakingTransformation(request.transcript || '', transcriptWords, part);
 
+  const rawUpgradedAnswer = limitTransformation
+    ? buildInsufficientSpeakingTransformation(part)
+    : asString(
+        source.upgradedAnswer,
+        'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
+        'upgradedAnswer',
+        validationErrors,
+      );
+
   const feedbackWithoutMarkdown: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
     module: 'speaking',
@@ -495,14 +540,7 @@ const normalizeSpeakingFeedback = (
         ),
       };
     }),
-    upgradedAnswer: limitTransformation
-      ? buildInsufficientSpeakingTransformation(part)
-      : asString(
-          source.upgradedAnswer,
-          'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
-          'upgradedAnswer',
-          validationErrors,
-        ),
+    upgradedAnswer: calibrateSpeakingUpgradedAnswer(rawUpgradedAnswer, part, request.transcript || '', limitTransformation),
     reusableExample: isRecord(source.reusableExample)
       ? {
           example: asString(source.reusableExample.example, FALLBACK_TEXT, 'reusableExample.example', validationErrors),

@@ -74,6 +74,87 @@ const answerDevelopmentPlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
   return { questionReference, starter, items };
 };
 
+type TranscriptCleanupResult = {
+  transcript: string;
+  corrections: string[];
+};
+
+const replaceWithCleanup = (
+  text: string,
+  pattern: RegExp,
+  replacement: string,
+  corrections: string[],
+) => text.replace(pattern, match => {
+  corrections.push(`${match} → ${replacement}`);
+  return replacement;
+});
+
+const normalizeSpeakingTranscript = (
+  rawTranscript: string,
+  questionText: string,
+  speakingPart: 1 | 2 | 3,
+): TranscriptCleanupResult => {
+  let transcript = rawTranscript;
+  const corrections: string[] = [];
+  const context = `${questionText} ${rawTranscript}`.toLowerCase();
+  const placeContext = /\b(hometown|home town|travel|travelling|traveling|trip|city|place|from|live|lived|university|study|studied|japan|island)\b/.test(context)
+    || speakingPart === 2;
+  const xiamenContext = placeContext && /\b(from|in|near|around|live in|lived in|come from|city|university)\s+(salmon|shaman)\b|\b(salmon|shaman)\s+(city|university)\b/i.test(transcript);
+
+  if (xiamenContext) {
+    transcript = replaceWithCleanup(transcript, /\b(salmon|shaman)\b/gi, 'Xiamen', corrections);
+  }
+
+  if (/\b(xiamen|island|hometown|travel|trip)\b/i.test(`${context} ${transcript}`)) {
+    transcript = replaceWithCleanup(transcript, /\bgerman you\b/gi, 'Gulangyu', corrections);
+  }
+
+  if (/\b(work|company|travel|ticket|ota|office|job)\b/.test(context)) {
+    transcript = replaceWithCleanup(transcript, /\bsky tickets?\b/gi, 'skyticket', corrections);
+  }
+
+  if (/\b(university|study|studied|student|japan|japanese)\b/.test(context)) {
+    transcript = replaceWithCleanup(transcript, /\bq shoe\b/gi, 'Kyushu', corrections);
+    transcript = replaceWithCleanup(transcript, /\bcasual(?=\s+university\b)/gi, 'Kyushu', corrections);
+    transcript = transcript.replace(/\b(in|at|from)\s+casual\b/gi, match => {
+      const prefix = match.split(/\s+/)[0];
+      corrections.push('casual → Kyushu');
+      return `${prefix} Kyushu`;
+    });
+  }
+
+  return {
+    transcript,
+    corrections: Array.from(new Set(corrections)),
+  };
+};
+
+const isIncompleteSpeakingFeedback = (
+  feedback: SpeakingFeedback,
+  failureKind?: string,
+) => {
+  const placeholderAnswer = /provider returned incomplete feedback|please retry analysis|malformed or incomplete/i.test(feedback.upgradedAnswer);
+  const scores = [
+    feedback.bandEstimateExcludingPronunciation,
+    feedback.scores.fluencyCoherence,
+    feedback.scores.lexicalResource,
+    feedback.scores.grammaticalRangeAccuracy,
+  ];
+  const allScoresMissing = scores.every(score => !Number.isFinite(score) || score <= 0);
+  const hasIntentionalInsufficientGuidance = feedback.fatalErrors.some(error => error.tag === 'insufficient_sample')
+    || /insufficient sample|starter outline/i.test(feedback.upgradedAnswer);
+  const hasCoreFeedback = feedback.fatalErrors.length > 0
+    || feedback.naturalnessHints.length > 0
+    || feedback.band9Refinements.length > 0
+    || feedback.preservedStyle.length > 0
+    || Boolean(feedback.upgradedAnswer.trim() && !placeholderAnswer);
+
+  if (hasIntentionalInsufficientGuidance) return false;
+  if (placeholderAnswer) return true;
+  if (allScoresMissing && !hasCoreFeedback) return true;
+  return failureKind === 'parse_or_schema' && (allScoresMissing || !hasCoreFeedback);
+};
+
 export default function SpeakingPractice() {
   const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
   const location = useLocation();
@@ -90,6 +171,7 @@ export default function SpeakingPractice() {
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
   const [apiStatusMessage, setApiStatusMessage] = useState('');
+  const [transcriptCleanupNote, setTranscriptCleanupNote] = useState('');
   const [statusMessage, setStatusMessage] = useState<'Ready' | 'Requesting microphone...' | 'Listening...' | 'No speech detected' | 'Transcription unavailable' | 'Mic denied'>('Ready');
 
   const recognitionRef = useRef<any>(null);
@@ -120,6 +202,7 @@ export default function SpeakingPractice() {
   const buildCurrentSpeakingRecord = (
     status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft',
     feedbackOverride: SpeakingFeedback | null = feedback,
+    transcriptOverride = transcript,
   ): SpeakingPracticeRecord | null => {
     if (!question) return null;
     const timestamp = new Date().toISOString();
@@ -140,7 +223,7 @@ export default function SpeakingPractice() {
       createdAt: existing?.createdAt || timestamp,
       updatedAt: timestamp,
       analyzedAt: status === 'analyzed' ? existing?.analyzedAt || timestamp : existing?.analyzedAt,
-      transcript,
+      transcript: transcriptOverride,
       transcriptOrigin: transcriptOriginRef.current,
       feedback: status === 'provider_failed' ? undefined : feedbackOverride || undefined,
       obsidianMarkdown: status === 'provider_failed' ? undefined : feedbackOverride?.obsidianMarkdown,
@@ -237,6 +320,7 @@ export default function SpeakingPractice() {
     setStep(record.feedback ? 'results' : record.transcript.trim() ? 'editing' : 'idle');
     setTimer(0);
     setProviderErrorMessage(record.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later.' : '');
+    setTranscriptCleanupNote('');
     setRestoreMessage(message);
   };
 
@@ -306,6 +390,7 @@ export default function SpeakingPractice() {
     setTimer(0);
     setStatusMessage('Ready');
     setProviderErrorMessage('');
+    setTranscriptCleanupNote('');
     setRestoreMessage('');
     transcriptOriginRef.current = 'manual';
     addDebugLog(`Loaded question: ${random.id}`);
@@ -371,6 +456,7 @@ export default function SpeakingPractice() {
     setStep('idle');
     setStatusMessage('Ready');
     setProviderErrorMessage('');
+    setTranscriptCleanupNote('');
     setRestoreMessage('');
     transcriptOriginRef.current = 'manual';
     addDebugLog('Started a fresh attempt for the same speaking question.');
@@ -538,6 +624,7 @@ export default function SpeakingPractice() {
     setIsRecording(false);
     setStatusMessage('Ready');
     setStep('idle');
+    setTranscriptCleanupNote('');
     addDebugLog('Attempt reset (Retry) — transcript, feedback, timer cleared');
   };
 
@@ -560,6 +647,14 @@ export default function SpeakingPractice() {
 
   const analyze = async () => {
     if (!transcript.trim()) return;
+    const cleanup = normalizeSpeakingTranscript(transcript, question?.question || '', part);
+    const cleanedTranscript = cleanup.transcript;
+    if (cleanup.corrections.length) {
+      setTranscript(cleanedTranscript);
+      setTranscriptCleanupNote(`已自动修正可能的转写误差：${cleanup.corrections.join('；')}`);
+    } else {
+      setTranscriptCleanupNote('');
+    }
     setStep('analyzing');
     setProviderErrorMessage('');
     setApiStatusMessage('');
@@ -568,8 +663,8 @@ export default function SpeakingPractice() {
       const { feedback: result, diagnostic, route } = await routedAnalyzeSpeaking({
         part,
         question: question?.question || '',
-        transcript
-      }, isInsufficientSpeakingSample(transcript, part));
+        transcript: cleanedTranscript
+      }, isInsufficientSpeakingSample(cleanedTranscript, part));
       setProviderDiagnostic(diagnostic);
       setApiStatusMessage(route.fallbackReason || route.learnerReason);
 
@@ -577,9 +672,24 @@ export default function SpeakingPractice() {
         setFeedbackFallbackUsed(false);
         setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your transcript is preserved.');
         setStep('editing');
-        persistCurrentSpeakingAttempt('provider_failed');
-        const failedBase = buildCurrentSpeakingRecord('provider_failed');
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, cleanedTranscript);
         if (failedBase) {
+          const session = activeSessionRef.current || {
+            id: createRecordId('speaking_session'),
+            currentPart: part,
+            attemptsByPart: {},
+            updatedAt: new Date().toISOString(),
+          };
+          activeSessionRef.current = {
+            ...session,
+            currentPart: part,
+            attemptsByPart: {
+              ...session.attemptsByPart,
+              [part]: failedBase,
+            },
+            updatedAt: new Date().toISOString(),
+          };
+          saveActiveSpeakingSession(activeSessionRef.current);
           upsertPracticeRecord({
             ...failedBase,
             providerDiagnostic: summarizeDiagnostic(diagnostic),
@@ -589,10 +699,42 @@ export default function SpeakingPractice() {
         return;
       }
 
+      if (isIncompleteSpeakingFeedback(result, diagnostic.failureKind)) {
+        setFeedbackFallbackUsed(diagnostic.fallbackUsed);
+        setFeedback(null);
+        setProviderErrorMessage('AI feedback was incomplete. Your transcript is preserved; please retry analysis.');
+        setStep('editing');
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, cleanedTranscript);
+        if (failedBase) {
+          const session = activeSessionRef.current || {
+            id: createRecordId('speaking_session'),
+            currentPart: part,
+            attemptsByPart: {},
+            updatedAt: new Date().toISOString(),
+          };
+          activeSessionRef.current = {
+            ...session,
+            currentPart: part,
+            attemptsByPart: {
+              ...session.attemptsByPart,
+              [part]: failedBase,
+            },
+            updatedAt: new Date().toISOString(),
+          };
+          saveActiveSpeakingSession(activeSessionRef.current);
+          upsertPracticeRecord({
+            ...failedBase,
+            providerDiagnostic: summarizeDiagnostic(diagnostic),
+          });
+        }
+        addDebugLog("Incomplete speaking feedback preserved as retryable state.");
+        return;
+      }
+
       setFeedbackFallbackUsed(diagnostic.fallbackUsed);
       setFeedback(result);
       setStep('results');
-      const analyzedBase = buildCurrentSpeakingRecord('analyzed', result);
+      const analyzedBase = buildCurrentSpeakingRecord('analyzed', result, cleanedTranscript);
       if (analyzedBase) {
         upsertPracticeRecord({
           ...analyzedBase,
@@ -610,7 +752,7 @@ export default function SpeakingPractice() {
         module: 'speaking',
         mode: 'practice',
         question: question?.question,
-        transcript,
+        transcript: cleanedTranscript,
         transcriptOrigin: transcriptOriginRef.current,
         feedback: result,
         providerDiagnostic: summarizeDiagnostic(diagnostic),
@@ -745,7 +887,7 @@ export default function SpeakingPractice() {
               {step === 'results' && (
                 <>
                   <SerifButton onClick={practiceThisQuestionAgain} className="flex items-center gap-2">
-                    Practice This Question Again
+                    Practice Again from Answer Path
                   </SerifButton>
                   <SerifButton onClick={() => loadRandomQuestion(part)} variant="outline" className="flex items-center gap-2">
                     Continue Training <ArrowRight className="w-4 h-4" />
@@ -783,12 +925,18 @@ export default function SpeakingPractice() {
                 value={transcript}
                 onChange={(e) => {
                   setTranscript(e.target.value);
+                  setTranscriptCleanupNote('');
                   transcriptOriginRef.current = 'manual';
                 }}
                 disabled={step === 'recording' || step === 'results'}
                 placeholder={statusMessage === 'Mic denied' || statusMessage === 'Transcription unavailable' ? "Type your answer manually here..." : "Recognition will appear here..."}
                 className="w-full min-h-[300px] xl:min-h-[420px] bg-transparent border border-transparent rounded-sm font-serif text-lg leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
               />
+              {transcriptCleanupNote && (
+                <p className="mt-2 text-[11px] leading-5 text-paper-ink/45 font-sans">
+                  {transcriptCleanupNote}
+                </p>
+              )}
             </PaperCard>
           )}
 
