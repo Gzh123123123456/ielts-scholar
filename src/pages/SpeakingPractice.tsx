@@ -189,6 +189,7 @@ const isIncompleteSpeakingFeedback = (
     || feedback.preservedStyle.length > 0
     || Boolean(feedback.upgradedAnswer.trim() && !placeholderAnswer);
 
+  if (failureKind === 'parse_or_schema' && allScoresMissing) return true;
   if (hasIntentionalInsufficientGuidance) return false;
   if (placeholderAnswer) return true;
   if (allScoresMissing && !hasCoreFeedback) return true;
@@ -1033,7 +1034,11 @@ export default function SpeakingPractice() {
                   <h4 className="text-sm font-bold uppercase tracking-widest text-red-800 ml-1">Must Fix</h4>
                   {feedback.fatalErrors.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-green-700/50">
-                      <p className="text-lg leading-8 text-paper-ink/85 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">No critical correction needed for this attempt. Focus on making the answer more fluent and specific.</p>
+                      <p className="text-lg leading-8 text-paper-ink/85 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">
+                        {shouldShowDevelopmentPlan
+                          ? 'Starter development needed: give a complete answer first, then review language accuracy.'
+                          : 'No critical correction needed for this attempt. Focus on making the answer more fluent and specific.'}
+                      </p>
                     </PaperCard>
                   ) : (
                     <div className="space-y-4">
@@ -1109,7 +1114,7 @@ export default function SpeakingPractice() {
               <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
                 <div>
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
-                    {shouldShowDevelopmentPlan ? 'Answer Development Plan' : 'High-Band Transformation'}
+                    {shouldShowDevelopmentPlan ? 'Answer Development Plan' : 'Examiner-friendly refinement'}
                   </h4>
                   {shouldShowDevelopmentPlan ? (
                     <div className="max-w-5xl space-y-5 text-paper-ink">

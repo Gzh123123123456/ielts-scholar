@@ -60,6 +60,11 @@ _Last updated: 2026-05-15_
 
 ## V1.3 - Speaking Note Standard & Seasonal Bank
 
+### Speaking Prompt / Export Calibration
+- **Done 2026-05-16**: Speaking Part 1/2/3 provider prompts and attempt markdown export were recalibrated for spoken IELTS training notes.
+- Speaking export now uses a minimal review card: part requirements, answer route, compact issue list, target answer, reusable expressions, and one transfer/follow-up section.
+- Future Part 1 topic-thread practice remains pending: 3-4 same-topic follow-up questions with one final topic-level analysis. No topic-thread UI or session flow was implemented in this slice.
+
 ### Unified Speaking Note Standard *(standard finalized; product export not yet updated)*
 - **Done 2026-05-13 (final handoff)**: `docs/IELTS_SPEAKING_NOTE_STANDARD.md` finalized.
 - Session density: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).

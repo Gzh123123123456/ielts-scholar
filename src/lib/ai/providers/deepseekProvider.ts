@@ -2,6 +2,7 @@ import { AIProvider } from './base';
 import {
   frameworkCoachSchemaInstruction,
   frameworkSchemaInstruction,
+  speakingPromptCalibration,
   speakingSchemaInstruction,
   strictJsonInstruction,
   writingSchemaInstruction,
@@ -66,12 +67,12 @@ You are an IELTS Speaking feedback engine for a local-first practice app.
 Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null and the note must say pronunciation is not formally assessed in V1.
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
+${speakingPromptCalibration}
 If the transcript is extremely short, nonsensical, or too thin for the part, return conservative insufficient-sample feedback.
 Feedback must be target-uplift training feedback. Keep the current estimate defensible, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim above the current output level.
 If the learner is weak, produce a clean, natural target answer around Band 6.5-7.0 for that part, not merely a minimal correction. If the learner is already strong, provide examiner-friendly Band 8-9 refinements rather than saying there is nothing to improve.
 Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
-For Part 1, upgradedAnswer must normally be 2-4 spoken sentences and about 35-70 words maximum unless the original answer genuinely requires slightly more. Use one direct answer, one personal detail, and one light reason/example. Prefer natural spoken English over formal academic phrasing. Do not write essay-style paragraphs or overuse advanced vocabulary. High-band Part 1 means concise, natural, and examiner-friendly, not long.
-For Part 2, target a story spine with concrete details. For Part 3, target spoken discussion logic with contrast/example/consequence.
+For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
 
 ${speakingSchemaInstruction}
 

@@ -38,9 +38,16 @@ interface SafeAnalyzeResult<T> {
 
 const FALLBACK_SCORE = 0;
 const FALLBACK_TEXT = 'Provider output was malformed or incomplete.';
+const BLOCKED_LEARNING_CONTENT =
+  /provider output was malformed or incomplete|please retry analysis after checking the debug panel|provider_safety|raw parse|validation failure|parse_or_schema|incomplete feedback|debug panel/i;
 
 const countWords = (text: string): number =>
   text.trim().split(/\s+/).filter(Boolean).length;
+
+const safeLearningText = (value: string, fallback = ''): string => {
+  const cleaned = value.replace(/\s+/g, ' ').trim();
+  return cleaned && !BLOCKED_LEARNING_CONTENT.test(cleaned) ? cleaned : fallback;
+};
 
 const insufficientSampleMessageZh = (moduleLabel: string, minimumWords: number) =>
   `样本太短，无法形成可靠的 ${moduleLabel} 训练估计。先扩展到接近 ${minimumWords} 词，并补充完整观点、细节和例子后再看语言问题。`;
@@ -515,13 +522,58 @@ const normalizeSpeakingFeedback = (
       : null,
   };
 
-  return {
+  const sanitizedFeedback: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     ...feedbackWithoutMarkdown,
+    fatalErrors: feedbackWithoutMarkdown.fatalErrors
+      .map(item => ({
+        ...item,
+        original: safeLearningText(item.original),
+        correction: safeLearningText(item.correction),
+        tag: safeLearningText(item.tag, 'speaking_issue'),
+        explanationZh: safeLearningText(item.explanationZh),
+      }))
+      .filter(item => item.original && item.correction && item.explanationZh),
+    naturalnessHints: feedbackWithoutMarkdown.naturalnessHints
+      .map(item => ({
+        ...item,
+        original: safeLearningText(item.original),
+        better: safeLearningText(item.better),
+        tag: safeLearningText(item.tag, 'naturalness'),
+        explanationZh: safeLearningText(item.explanationZh),
+      }))
+      .filter(item => item.original && item.better && item.explanationZh),
+    band9Refinements: feedbackWithoutMarkdown.band9Refinements
+      .map(item => ({
+        observation: safeLearningText(item.observation),
+        refinement: safeLearningText(item.refinement),
+        explanationZh: safeLearningText(item.explanationZh),
+      }))
+      .filter(item => item.observation && item.refinement && item.explanationZh),
+    preservedStyle: feedbackWithoutMarkdown.preservedStyle
+      .map(item => ({
+        text: safeLearningText(item.text),
+        reasonZh: safeLearningText(item.reasonZh),
+      }))
+      .filter(item => item.text && item.reasonZh),
+    upgradedAnswer: safeLearningText(feedbackWithoutMarkdown.upgradedAnswer),
+    reusableExample: feedbackWithoutMarkdown.reusableExample
+      ? {
+          example: safeLearningText(feedbackWithoutMarkdown.reusableExample.example),
+          canBeReusedFor: feedbackWithoutMarkdown.reusableExample.canBeReusedFor
+            .map(item => safeLearningText(item))
+            .filter(Boolean),
+          explanationZh: safeLearningText(feedbackWithoutMarkdown.reusableExample.explanationZh),
+        }
+      : null,
+  };
+
+  return {
+    ...sanitizedFeedback,
     obsidianMarkdown: (() => {
       if (typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()) {
         normalizedFields.push('obsidianMarkdown');
       }
-      return buildSpeakingObsidianMarkdown(feedbackWithoutMarkdown);
+      return buildSpeakingObsidianMarkdown(sanitizedFeedback);
     })(),
   };
 };

@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-16] Speaking Prompt and Minimal Review Card Export
+- **Decision**: Calibrate Speaking Part 1/2/3 provider prompts around spoken-answer targets and rebuild attempt-level Speaking markdown as a minimal review card.
+- **Reason**: Speaking feedback and exports should feel like concise training notes, not a guided self-study manual or Writing Task 2 advice applied to speech.
+- **Implemented**:
+  - Part 1 prompt/export stays compact and conversation-oriented, with possible same-topic follow-ups.
+  - Part 2 prompt/export emphasizes spoken long-turn story spine.
+  - Part 3 prompt/export emphasizes natural spoken discussion logic, examples, and consequences without essay-style connectors.
+  - Export removes Start Here, Mission, Ready checklist, Why This Works, Mini Review, weighting labels, duplicate transfer sections, and default filler advice.
+  - Safety filtering prevents provider/debug fallback text from entering learning fields or markdown.
+- **Future**: Part 1 should later become topic-thread practice: one topic, 3-4 examiner-style follow-up questions, one connected mini-conversation, and final topic-level analysis.
+- **Explicitly unchanged**: no Part 1 topic-thread UI, no session-level export, no scoring formula changes, no provider routing changes, no recording/transcription mechanics, no History architecture changes, no Writing changes.
+
 ## [2026-05-15] Future Question Bank Entry Points Deferred
 - **Decision**: Record **Question bank count + browse/random/select entry points** as future product work, not part of the current markdown/status polish slice.
 - **Future scope**:

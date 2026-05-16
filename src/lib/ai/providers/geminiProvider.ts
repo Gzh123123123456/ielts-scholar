@@ -36,6 +36,35 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "obsidianMarkdown": "string"
 }`;
 
+export const speakingPromptCalibration = `Speaking feedback must be spoken IELTS feedback, not writing-style feedback.
+Target uplift: weak answers should receive reachable Band 6.5-7 spoken language; strong answers should receive Band 8-9 examiner-friendly refinement. Do not make upgraded answers over-formal or essay-like.
+Preserve the learner's idea where possible. Do not fabricate excessive personal details. Do not return "nothing to improve" unless the answer is genuinely excellent; even then, provide a concise refinement.
+Never put debug, fallback, parser, validation, provider_safety, or retry-panel messages into learning fields.
+
+Part 1 rules:
+- Warm-up conversation. Future product direction is topic-thread practice with 3-4 same-topic follow-up questions, so do not treat one Part 1 question as an essay-like final topic response.
+- upgradedAnswer should normally be 2-4 natural spoken sentences, about 15-30 seconds.
+- Structure: direct answer + one specific detail + light reason/feeling.
+- Do not overload advanced vocabulary or write polished paragraphs.
+- If the transcript is very short but meaningful, do not invent a full personal answer. Give starter development guidance or a bracketed starter such as: "Yes, I do. I usually read [type of books] when I want to relax. It helps me [personal reason]."
+- If you add example details not provided by the user, label them as a starter example or use brackets.
+- reusableExample.canBeReusedFor may include 1-3 likely same-topic follow-up IELTS questions.
+
+Part 2 rules:
+- Long turn, but still spoken narrative, not literary writing.
+- Target time: 1.5-2 minutes.
+- upgradedAnswer should follow a story spine: who/what/where -> specific scene -> key details -> feeling change -> why it matters.
+- Do not treat the cue card as a checklist. Concrete details and personal reflection matter more than fancy vocabulary.
+
+Part 3 rules:
+- Abstract discussion, but face-to-face spoken answer, not Writing Task 2 spoken aloud.
+- upgradedAnswer should normally be 4-6 spoken sentences, about 35-60 seconds.
+- Use natural spoken discussion logic: direct position -> reason/contrast/condition -> example -> consequence/wider meaning.
+- Prefer spoken bridges such as "I'd say...", "I think...", "It really depends...", "One major change is...", and "A good example would be..."
+- Avoid writing-style connectors and essay phrases such as "Furthermore", "Moreover", "Consequently", "It is universally acknowledged that", and "In contemporary society".
+- If the original answer already has a position and example, do not give generic advice like "add an example"; identify the real issue, such as grammar, word form, pronunciation-transcript error, weak cause/effect, weak consequence, unclear comparison, or spoken clarity.
+- Band 8-9 Part 3 means fluent, logically developed, natural spoken reasoning, not academic writing style.`;
+
 export const writingSchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
@@ -212,15 +241,15 @@ You are an IELTS Speaking feedback engine for a local-first practice app.
 Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null and the note must say pronunciation is not formally assessed in V1.
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
-Avoid endless sentence-level nitpicking. If the answer is already strong, return an empty fatalErrors array and say no critical correction is needed through naturalnessHints or upgradedAnswer.
+${speakingPromptCalibration}
+Avoid endless sentence-level nitpicking. If the answer is already strong, return an empty fatalErrors array and use naturalnessHints or band9Refinements for concise examiner-friendly refinement.
 Feedback must be target-uplift training feedback. Keep the current estimate defensible, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim above the current output level.
 If the learner is weak, produce a clean, natural target answer around Band 6.5-7.0 for that part, not merely a minimal correction. If the learner is already strong, provide examiner-friendly Band 8-9 refinements rather than saying there is nothing to improve.
 Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
 If the transcript is extremely short, nonsensical, or too thin for the part, do not write a long upgradedAnswer. Return an insufficient-sample message with a short starter outline instead. Be stricter for Part 2 and Part 3 than Part 1.
 Use fatalErrors only for true mistakes. Use band9Refinements for high-level examiner-friendly refinements, especially when fatalErrors is empty or short.
 Band 9 refinements should cover over-formal or AI-like phrasing, unnatural spoken rhythm, overlong Part 1 answers, missed chances for concise natural development, and ways to sound more spontaneous.
-For Part 1, upgradedAnswer must normally be 2-4 spoken sentences and about 35-70 words maximum unless the original answer genuinely requires slightly more. Use one direct answer, one personal detail, and one light reason/example. Prefer natural spoken English over formal academic phrasing. Do not write essay-style paragraphs or overuse advanced vocabulary. High-band Part 1 means concise, natural, and examiner-friendly, not long.
-For Part 2, target a story spine with concrete details. For Part 3, target spoken discussion logic with contrast/example/consequence.
+For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
 
 ${speakingSchemaInstruction}
 

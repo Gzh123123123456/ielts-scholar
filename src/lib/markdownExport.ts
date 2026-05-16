@@ -40,6 +40,20 @@ const unique = <T,>(items: T[]) => Array.from(new Set(items));
 const cleanLines = (items: Array<string | undefined | null>) =>
   items.map(item => (item || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
 
+const BLOCKED_LEARNING_CONTENT =
+  /provider output was malformed or incomplete|please retry analysis after checking the debug panel|provider_safety|raw parse|validation failure|parse_or_schema|incomplete feedback|debug panel/i;
+
+const cleanLearningText = (value?: string | null) => {
+  const cleaned = (value || '').replace(/\s+/g, ' ').trim();
+  return cleaned && !BLOCKED_LEARNING_CONTENT.test(cleaned) ? cleaned : '';
+};
+
+const cleanLearningLines = (items: Array<string | undefined | null>) =>
+  cleanLines(items.map(cleanLearningText)).filter(Boolean);
+
+const escapeTableCell = (value?: string | null) =>
+  cleanLearningText(value).replace(/\|/g, '/');
+
 const limitWords = (text: string, maxWords: number) =>
   text.split(/\s+/).filter(Boolean).slice(0, maxWords).join(' ');
 
@@ -155,7 +169,7 @@ const isMeaningfulShortAnswer = (feedback: Omit<SpeakingFeedback, 'obsidianMarkd
   countWords(feedback.transcript) > 0 && !hasLowSignalText(feedback.transcript);
 
 const phraseChunk = (value?: string, maxWords = 7) => {
-  const cleaned = (value || '')
+  const cleaned = cleanLearningText(value)
     .replace(/["`]/g, '')
     .replace(/[.!?]+$/g, '')
     .replace(/\s+/g, ' ')
@@ -170,7 +184,7 @@ const INCOMPLETE_PHRASE_ENDINGS = /\b(?:to|with|and|or|because|so|so i|when|wher
 const META_INSTRUCTION_PATTERN = /^(?:add|include|mention|explain|describe|use|integrate|avoid|try to|make sure|expand|replace|rewrite|give)\b/i;
 
 const cleanReusablePhrase = (value?: string, maxWords = 8) => {
-  const cleaned = (value || '')
+  const cleaned = cleanLearningText(value)
     .replace(/^[\s\-*•\d.]+/, '')
     .replace(/["`]/g, '')
     .replace(/\s+/g, ' ')
@@ -341,88 +355,234 @@ const transferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>)
   return unique([...direct, ...fallback]).slice(0, 3);
 };
 
+const reviewCardGenericPath = (part: SpeakingFeedback['part']) => {
+  if (part === 1) return ['直接回答', '一个具体细节', '一个简单原因', '收住'];
+  if (part === 2) return ['说明要讲的人/物/地点/事件', '给一个具体场景', '补两个细节', '说明感受变化', '解释为什么重要'];
+  return ['先给观点', '补原因或对比', '给一个例子', '说明影响', '简短收束'];
+};
+
+const reviewCardAnswerPath = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const cleanAnswer = cleanLearningText(feedback.upgradedAnswer);
+  const source = cleanAnswer && !/insufficient sample|starter outline/i.test(cleanAnswer)
+    ? cleanAnswer
+    : feedback.transcript;
+  const combined = `${feedback.question} ${source}`.toLowerCase();
+
+  if (feedback.part === 3 && /cities|city|urban|rural|residential|apartment|transport|parks|green/.test(combined)) {
+    return [
+      '总变化：cities have become larger and more convenient',
+      '变化一：rural areas -> residential districts / apartments',
+      '变化二：more parks and green spaces',
+      '变化三：public transport has improved',
+      '总结影响：bigger and busier, but also more liveable',
+    ];
+  }
+  if (feedback.part === 2 && /daily routine|ideal day|routine/.test(combined)) {
+    return [
+      '主题：ideal daily routine / wake up naturally',
+      '早上：breakfast + jog / gym',
+      '中午：lunch + short nap',
+      '下午：focused work or study',
+      '晚上：PC games with roommates + family time',
+      '意义：balance between activity, productivity, and connection',
+    ];
+  }
+  if (feedback.part === 1 && /read/.test(combined)) {
+    return [
+      '直接回答：Yes, I do.',
+      '具体细节：read [type of books]',
+      '简单原因：it helps me [personal reason]',
+      '收住：不要展开成小作文',
+    ];
+  }
+  if (feedback.part === 2 && /relax|leisure|game|family|productive|work|study/.test(combined)) {
+    return [
+      '主题：the activity or routine',
+      '场景：when and where it usually happens',
+      '细节：two concrete actions',
+      '感受：why it feels relaxing or productive',
+      '意义：what it adds to your life',
+    ];
+  }
+  return reviewCardGenericPath(feedback.part);
+};
+
+const reviewCardRequirements = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const words = countWords(feedback.transcript);
+  if (feedback.part === 1) {
+    const status = words <= 3
+      ? '当前回答：太短，需要补一个个人细节或简单原因。'
+      : words <= 40
+        ? '当前回答：长度接近 Part 1，但要确认有具体个人细节。'
+        : '当前回答：可能偏长，注意保持像对话里的短答。';
+    return ['Part 1：自然短答，后续通常会被追问同话题问题。', '目标长度：2-4 句 / 约 15-30 秒。', status];
+  }
+  if (feedback.part === 2) {
+    const status = words < 60
+      ? '当前回答：长答素材不足，需要补场景、细节、感受和意义。'
+      : '当前回答：检查是否有清楚场景、关键细节、感受变化和 why-it-matters。';
+    return ['Part 2：个人长答，不是逐条翻译 cue card。', '目标长度：1.5-2 分钟。', status];
+  }
+  const status = words < 35
+    ? '当前回答：讨论展开不足，需要观点、例子和影响。'
+    : '当前回答：检查是否有 position、example、consequence 和自然口语清晰度。';
+  return ['Part 3：抽象讨论，但仍然是自然口语，不是写作作文。', '目标长度：4-6 句 / 约 35-60 秒。', status];
+};
+
+const reviewCardRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (isSpeakingInsufficient(feedback)) {
+    return [{
+      original: '回答展开不足',
+      correction: feedback.part === 1 ? '补 direct answer + detail + reason' : '先说完整路线，再补细节和影响',
+      type: '展开',
+    }];
+  }
+
+  const rows = [
+    ...feedback.fatalErrors.map(item => ({
+      priority: 1,
+      original: item.original,
+      correction: item.correction,
+      type: item.tag || '错误',
+    })),
+    ...feedback.naturalnessHints.map(item => ({
+      priority: 2,
+      original: item.original,
+      correction: item.better,
+      type: item.tag || '自然度',
+    })),
+    ...feedback.band9Refinements.map(item => ({
+      priority: 3,
+      original: item.observation,
+      correction: item.refinement,
+      type: '高分打磨',
+    })),
+  ]
+    .map(item => ({
+      ...item,
+      original: escapeTableCell(item.original),
+      correction: escapeTableCell(item.correction),
+      type: escapeTableCell(item.type),
+    }))
+    .filter(item => item.original && item.correction && item.type)
+    .sort((a, b) => a.priority - b.priority);
+
+  return rows.length ? rows : [{
+    original: '回答可以更具体',
+    correction: feedback.part === 1 ? '补一个真实个人细节' : feedback.part === 2 ? '补具体场景和感受变化' : '补 cause / example / so what',
+    type: '展开',
+  }];
+};
+
+const hasSpeakingFillerIssue = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const source = `${feedback.transcript} ${feedback.fatalErrors.map(item => item.original).join(' ')} ${feedback.naturalnessHints.map(item => `${item.original} ${item.explanationZh}`).join(' ')}`;
+  const matches = source.toLowerCase().match(/\b(?:well|honestly|you know|like|um|uh|er)\b/g) || [];
+  return matches.length >= 2 || /filler|填充词|口头禅|重复/.test(source);
+};
+
+const reviewCardTransferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const direct = (feedback.reusableExample?.canBeReusedFor || [])
+    .map(cleanLearningText)
+    .filter(Boolean)
+    .map(item => item
+      .replace(/^Can this idea also help you answer:\s*/i, '')
+      .replace(/^This idea can also help you answer:\s*/i, '')
+      .replace(/^Can this material be reused for:\s*/i, '')
+      .trim())
+    .filter(item => /^(describe|what|do|how|why|when|where|should|is|are|can|could|would)\b/i.test(item))
+    .filter(item => !/^can this\b/i.test(item))
+    .map(item => /^describe\b/i.test(item) ? `${item.replace(/[?.!]+$/, '')}.` : item.endsWith('?') ? item : `${item}?`)
+    .slice(0, 3);
+  const fallback = feedback.part === 1
+    ? (/read/i.test(feedback.question)
+      ? ['What kind of books do you usually read?', 'Did you enjoy reading when you were a child?', 'Do you prefer paper books or e-books?']
+      : ['How often do you do this?', 'Did you enjoy it when you were younger?', 'Would you like to do it more in the future?'])
+    : feedback.part === 2
+      ? ['Describe a leisure activity you enjoy.', 'Describe something you do to relax.', 'Describe a time when you had a productive day.']
+      : /cit(?:y|ies)|urban|transport|park/i.test(`${feedback.question} ${feedback.transcript} ${feedback.upgradedAnswer}`)
+        ? ['How has technology changed people\'s daily lives?', 'How have people\'s lifestyles changed in recent years?', 'What changes make a city more liveable?']
+        : ['How has technology changed people\'s daily lives?', 'Do people today have a better work-life balance than in the past?', 'What changes make a place more liveable?'];
+  return unique([...direct, ...fallback]).slice(0, 3);
+};
+
+const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. 起步目标答案';
+  if (isSpeakingInsufficient(feedback)) return '## 4. 请先重录一个完整答案';
+  return '## 4. 目标答案';
+};
+
+const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) {
+    return `${starterTargetAnswer(feedback)}\n\n请把方括号里的内容替换成你的真实细节。`;
+  }
+  if (isSpeakingInsufficient(feedback)) {
+    return '当前录音/转写不足以生成可靠目标答案。请先重录一个可理解的完整答案。';
+  }
+  return cleanLearningText(feedback.upgradedAnswer) || '请先重录一个完整答案。';
+};
+
+const speakingExpressionMeaning = (expression: string) => {
+  const normalized = expression.toLowerCase();
+  if (normalized === 'residential districts') return '住宅区';
+  if (normalized === 'green spaces') return '城市绿地';
+  if (normalized === 'public transport has improved') return '公共交通改善';
+  if (normalized === 'more efficient and liveable') return '更高效、更宜居';
+  if (normalized === 'my day feels balanced') return '一天的节奏很平衡';
+  if (normalized === 'work-life balance') return '工作与生活平衡';
+  return '';
+};
+
+const reviewCardExpressions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const expressions = unique(cleanLearningLines([
+    ...feedback.naturalnessHints.map(item => cleanReusablePhrase(item.better)),
+    ...feedback.band9Refinements.map(item => cleanReusablePhrase(item.refinement)),
+    feedback.reusableExample && cleanReusablePhrase(feedback.reusableExample.example),
+  ])).slice(0, 5);
+  return expressions.length
+    ? expressions.map(item => {
+        const meaning = speakingExpressionMeaning(item);
+        return `- ${meaning ? `${item}：${meaning}` : item}`;
+      }).join('\n')
+    : '- 暂无稳定可复用表达。';
+};
+
 export const buildSpeakingTrainingMarkdown = (
   feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
   timestamp?: string | Date,
 ) => {
-  const insufficient = isSpeakingInsufficient(feedback);
-  const meaningfulShort = insufficient && isMeaningfulShortAnswer(feedback);
-  const shortQuestion = slugifyMarkdownFilenamePart(feedback.question, 8).replace(/-/g, ' ');
-  const path = speakingAnswerPath(feedback);
-  const mission = speakingMission(feedback);
-  const activeExpressions = speakingActiveExpressions(feedback);
-  const rows = diagnosisRows(feedback).map(item => `| ${item.category} | ${item.issue} | ${item.fix} |`).join('\n');
-  const answerHeading = meaningfulShort ? '### 5. 起步目标答案｜Starter Target Answer' : '### 5. 优化答案｜Revised Answer';
-  const answerBody = meaningfulShort
-    ? `${starterTargetAnswer(feedback)}\n\n这只是起步示范，不是完全个性化高分答案。请把方括号替换成你的真实细节。`
-    : insufficient
-      ? '请先录入一个完整、可理解的答案；当前样本不足以生成目标答案。'
-      : feedback.upgradedAnswer;
+  const shortQuestion = limitWords(feedback.question, 9);
+  const path = reviewCardAnswerPath(feedback).map(cleanLearningText).filter(Boolean);
+  const rows = reviewCardRows(feedback)
+    .map(item => `| ${item.original} | ${item.correction} | ${item.type} |`)
+    .join('\n');
+  const transferTitle = feedback.part === 1
+    ? '## 6. 可能追问｜Possible follow-ups'
+    : '## 6. 可迁移题目';
+  const fillerNote = hasSpeakingFillerIssue(feedback)
+    ? '\n\n> Filler Control：减少重复的 well / honestly / you know / like / um，用短暂停顿代替拖音。'
+    : '';
 
-  return `# IELTS Speaking 训练笔记 - Part ${feedback.part} - ${shortQuestion}
+  return `# IELTS Speaking Part ${feedback.part}｜${shortQuestion}
 
-## 0. 先练什么｜Start Here
-### 今日 3 个训练目标
-- 先按 Answer Path 说完整，再追求高级表达。
-- 只修复诊断表里的前 1-2 个关键问题。
-- 下一次录音前主动使用 2-4 个短语块。
+## 1. 本题要求
+${reviewCardRequirements(feedback).map(item => `- ${item}`).join('\n')}${fillerNote}
 
-### 今天主动使用
-${bulletList(activeExpressions, '先使用一个具体细节，再使用一个自然连接表达。', 4)}
-
-### 停顿与填充词控制｜Filler Control
-可以短暂停顿；不要用 well / honestly / you know 连续拖时间。卡住时先回到 Answer Path 的下一步。
-
-## Attempt 1: ${feedback.question}
-
-### 1. 回答路线｜Answer Path
-不要背 Revised Answer。只记这条回答路线。
-
+## 2. 回答路线
 ${path.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 
-### 2. 重练任务｜Re-answer Mission
-**Must do**
-${bulletList(mission.must, '按回答路线重新说一次。')}
-
-**Try to use**
-${bulletList(activeExpressions, '使用一个更自然的短语块或更具体的细节。', 4)}
-
-**Optional**
-${bulletList(mission.optional, '录第二遍时减少犹豫和重复。')}
-
-### 3. 原始回答｜Original Answer
-${quoteBlock(feedback.transcript)}
-
-### 4. 诊断｜Diagnosis
-| Category | 问题 | 这次怎么改 |
+## 3. 问题清单
+| 原表达 | 修改 | 类型 |
 |---|---|---|
 ${rows}
 
-${answerHeading}
-${answerBody}
+${reviewCardTargetHeading(feedback)}
+${reviewCardTargetBody(feedback)}
 
-### 6. 为什么这样更好｜Why This Works
-这份笔记只保留下一次复练最需要的信息：回答路线、少量关键修正、短语块和一个目标答案。复练时不要背全文，先复用路线，再替换成自己的真实细节。
+## 5. 可复用表达
+${reviewCardExpressions(feedback)}
 
-### 7. 迁移练习｜Transfer
-**Same material｜同一个素材还能回答**
-${numberedList(transferQuestions(feedback), 'Describe another IELTS-style question using the same material.', 3)}
-
-**Same skill｜同一个能力迁移**
-- 直接回答后补一个具体细节。
-- 用原因、感受或影响把答案收住。
-- 录音后检查是否有无意义重复。
-
-### 8. 回到产品重测前｜Ready to Test Again
-- [ ] 我能不看目标答案说出 Answer Path。
-- [ ] 我已经把方括号或泛泛表达换成自己的真实细节。
-- [ ] 我能把答案控制在本 Part 合适长度。
-
-## Mini Review｜小复盘
-本次重点不是保存一份“报告”，而是让下一次开口更快、更具体、更自然。
-
-## Transfer Questions｜迁移问题
-${numberedList(transferQuestions(feedback), 'Try the same answer path with a new IELTS-style question.', 3)}
+${transferTitle}
+${numberedList(reviewCardTransferQuestions(feedback), 'Try another IELTS-style question with the same answer route.', 3)}
 
 _Exported: ${formatExportDate(timestamp)}_`;
 };

@@ -77,14 +77,20 @@ export class MockProvider implements AIProvider {
         },
       ],
       upgradedAnswer: params.part === 1
-        ? "I usually like spending time with my friends in a relaxed way. We often grab a coffee or take a short walk, especially after work. It feels easy and natural because I can talk with them without pretending to be formal."
-        : "Actually, I'm quite fond of my hometown since I've spent my entire childhood there. It's a vibrant city with a rich history, and I've witnessed its rapid transformation over the years.",
+        ? "Yes, I do. I usually read short novels or articles when I want to relax. It helps me slow down after a busy day, and it gives me something interesting to think about."
+        : params.part === 2
+          ? "One daily routine I really enjoy is having a slow but active morning. If I don't have an early class or meeting, I like to wake up naturally, make a simple breakfast, and then go for a short jog or do some light exercise. After that, I usually feel much more awake, so I can sit down and focus on work or study without feeling rushed. In the evening, I might play PC games with my roommates or call my family for a while. I like this routine because it gives me a balance between activity, productivity, and connection with people I care about."
+          : "I'd say cities have become much larger and more convenient in recent years. In many places, areas that used to feel quite rural have turned into residential districts with apartments, shops, and better public services. A good example would be public transport, because buses and metro lines now connect places that were hard to reach before. At the same time, many cities have added more parks and green spaces, so they are not just bigger and busier. I think the main result is that modern cities can feel more liveable, although they also need careful planning to avoid overcrowding.",
       reusableExample: {
         example: 'The rapid transformation of my city',
-        canBeReusedFor: ['Hometown', 'Environment', 'Changes'],
+        canBeReusedFor: params.part === 1
+          ? ['What kind of books do you usually read?', 'Did you enjoy reading when you were a child?', 'Do you prefer paper books or e-books?']
+          : params.part === 2
+            ? ['Describe a daily routine you enjoy.', 'Describe something you do to relax.', 'Describe a productive day you had.']
+            : ['How have cities changed in recent years?', 'What changes make a city more liveable?', 'How has public transport changed people\'s lives?'],
         explanationZh: '这个短语可以用来描述城市变化或发展类话题。',
       },
-      obsidianMarkdown: '# IELTS Speaking Note\n...',
+      obsidianMarkdown: '',
     };
   }
 

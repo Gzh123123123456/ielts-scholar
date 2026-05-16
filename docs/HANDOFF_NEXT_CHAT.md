@@ -24,6 +24,10 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Recent Events
 
+- **2026-05-16**: Speaking prompt/export calibration slice completed.
+  - Speaking provider prompts now separate Part 1 conversational short answers, Part 2 spoken long-turn story spine, and Part 3 natural spoken discussion.
+  - Speaking markdown export changed from a guided self-study manual to a minimal review card: part requirements, answer route, compact issue list, target answer, reusable expressions, and one transfer/follow-up section.
+  - Future Part 1 direction recorded: later move from isolated single-question practice to 3-4 same-topic follow-up questions with one final topic-level analysis. This slice does not implement that UI or session flow.
 - **2026-05-13**: Speaking note standard finalized and handed off.
   - `docs/IELTS_SPEAKING_NOTE_STANDARD.md` is the final unified standard. Do not create new versions.
   - Standard adapts by session size: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).

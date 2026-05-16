@@ -147,7 +147,13 @@ _Last updated: 2026-05-15_
 - **Done minimal V1.1**: Change Question works across Parts 1/2/3 when alternatives exist.
 - **Done minimal V1.1**: Practice This Question Again starts a fresh attempt for the same prompt without re-calling AI.
 - **Done minimal V1.1**: Band 9 Refinement / Examiner-Friendly Refinement layer for already-strong answers.
+- **Done 2026-05-16**: Speaking provider prompts and attempt markdown export calibrated for concise spoken training notes.
+  - Part 1 stays short, natural, and conversation-oriented.
+  - Part 2 uses a spoken story spine for long turns.
+  - Part 3 uses natural spoken discussion logic rather than essay-style paragraphs.
+  - Export is now a minimal review card, not a Start Here / Mission / Ready checklist manual.
 - Still pending:
+  - Part 1 topic-thread practice: one topic, 3-4 same-topic examiner-style questions, one connected mini-conversation, and final topic-level analysis. Current slice only keeps prompts/export compact so this future design is not blocked.
   - richer repeated-attempt comparison views
   - more advanced speaking structure coaching beyond the current prompt/schema layer
   - broader transcript-based naturalness upgrades
