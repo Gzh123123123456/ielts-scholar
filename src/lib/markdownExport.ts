@@ -1,4 +1,4 @@
-import { formatBandEstimate } from './bands';
+import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from './bands';
 import type { SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
 import type { WritingTask1AcademicPrompt } from '../data/questions/bank';
 import type { WritingTask1QuickPlan } from './practiceRecords';
@@ -41,7 +41,7 @@ const cleanLines = (items: Array<string | undefined | null>) =>
   items.map(item => (item || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
 
 const BLOCKED_LEARNING_CONTENT =
-  /provider output was malformed or incomplete|please retry analysis after checking the debug panel|provider_safety|raw parse|validation failure|parse_or_schema|incomplete feedback|debug panel/i;
+  /provider output was malformed or incomplete|please retry analysis after checking the debug panel|provider_safety|raw parse|validation failure|parse_or_schema|incomplete feedback|debug panel|\[remove or rephrase sentence\]/i;
 
 const cleanLearningText = (value?: string | null) => {
   const cleaned = (value || '').replace(/\s+/g, ' ').trim();
@@ -580,13 +580,13 @@ const reviewCardTransferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianM
 const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. 起步目标答案';
   if (isSpeakingInsufficient(feedback)) return '## 4. 请先重录一个完整答案';
-  return '## 4. 目标答案';
+  return `## 4. ${getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}｜${getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}`;
 };
 
 const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   const targetLabel = feedback.bandEstimateExcludingPronunciation >= 7
-    ? '目标训练方向：Band 8–9 examiner-friendly refinement。'
-    : '目标训练方向：Band 7.0+，保持自然口语，不写成作文。';
+    ? '目标训练方向：Band 8+ Examiner-Friendly Answer，表达更自然、逻辑更清楚，但不要写成作文。'
+    : '目标训练方向：Band 7.0+ Target Answer，保持自然口语，不写成作文。';
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) {
     return `${targetLabel}\n\n${starterTargetAnswer(feedback)}\n\n请把方括号里的内容替换成你的真实细节。`;
   }
@@ -643,6 +643,38 @@ const reviewCardExpressions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdow
     : '- 暂无稳定可复用表达。';
 };
 
+const reviewCardIdeaExpansion = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const route = feedback.part === 1
+    ? '怎么发散：补一个真实个人细节，再接一个简短原因。'
+    : feedback.part === 2
+      ? '怎么发散：补场景、动作、情绪变化和为什么重要。'
+      : '怎么发散：把素材继续推到原因、对比、例子或影响，避免只列事实。';
+  const strongerView = feedback.part === 3
+    ? '更建议的观点：不要只说发生了什么，要说明为什么发生以及这会带来什么影响。'
+    : feedback.part === 2
+      ? '更建议的观点：这个素材可以变成一条有起点、细节和个人反思的故事线。'
+      : '更建议的观点：短回答也要听起来像真实经历，而不是背诵句子。';
+  const expressionItems = topicExpressionCandidates(feedback).slice(0, 3);
+  const material = feedback.preservedStyle.length
+    ? feedback.preservedStyle.slice(0, 3)
+    : [{
+        text: feedback.reusableExample?.example || limitWords(feedback.transcript, 14),
+        reasonZh: feedback.part === 3
+          ? '这个素材可以继续发展成原因、例子和影响。'
+          : '这个素材可以保留，但需要补充更具体的细节。',
+      }];
+
+  return material
+    .filter(item => cleanLearningText(item.text))
+    .map((item, index) => `### ${index + 1}. 个人素材
+- 你的素材: ${cleanLearningText(item.text)}
+- 可以保留的原因: ${cleanLearningText(item.reasonZh) || '这个想法和题目相关，可以作为答案的内容基础。'}
+- ${route}
+- ${strongerView}
+- 可用表达: ${expressionItems.length ? expressionItems.join(' / ') : 'because of this / a good example would be / this probably leads to'}`)
+    .join('\n\n') || '- 暂无稳定个人素材；下一次先补一个真实细节，再做语言升级。';
+};
+
 export const buildSpeakingTrainingMarkdown = (
   feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
   timestamp?: string | Date,
@@ -650,9 +682,9 @@ export const buildSpeakingTrainingMarkdown = (
   const shortQuestion = limitWords(feedback.question, 9);
   const path = reviewCardAnswerPath(feedback).map(cleanLearningText).filter(Boolean);
   const rows = reviewCardRows(feedback)
-    .map(item => `| ${item.original} | ${item.correction} | ${item.type} | ${item.note} |`)
+    .map(item => `| ${item.original} | ${item.correction} | ${item.note} |`)
     .join('\n');
-  const estimateLine = `- 当前单题训练估计：${formatBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右，不含发音；样本短或证据有限时按保守值处理。`;
+  const estimateLine = `- 当前单题训练估计：${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右，不含发音；样本短或证据有限时按保守值处理。`;
   const transferTitle = feedback.part === 1
     ? '## 6. 可能追问｜Possible follow-ups'
     : '## 6. 可迁移题目';
@@ -670,8 +702,8 @@ ${reviewCardRequirements(feedback).map(item => `- ${item}`).join('\n')}${fillerN
 ${path.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 
 ## 3. 问题清单
-| 原表达 | 修改 | 类型 | 说明 |
-|---|---|---|---|
+| 原表达 | 修改 | 说明 |
+|---|---|---|
 ${rows}
 
 ${reviewCardTargetHeading(feedback)}
@@ -680,7 +712,10 @@ ${reviewCardTargetBody(feedback)}
 ## 5. 可复用表达
 ${reviewCardExpressions(feedback)}
 
-${transferTitle}
+## 6. 个人素材与观点发散｜Personal Material & Idea Expansion
+${reviewCardIdeaExpansion(feedback)}
+
+${transferTitle.replace('## 6.', '## 7.')}
 ${numberedList(reviewCardTransferQuestions(feedback), 'Try another IELTS-style question with the same answer route.', 3)}
 
 _Exported: ${formatExportDate(timestamp)}_`;
@@ -781,11 +816,12 @@ ${feedback.question}
 ${feedback.essay}
 
 ## 3. 分数快照｜Training Estimate
-- 任务回应｜Task Response: ${formatBandEstimate(feedback.scores.taskResponse)}
-- 连贯与衔接｜Coherence & Cohesion: ${formatBandEstimate(feedback.scores.coherenceCohesion)}
-- 词汇资源｜Lexical Resource: ${formatBandEstimate(feedback.scores.lexicalResource)}
-- 语法多样性与准确性｜Grammatical Range & Accuracy: ${formatBandEstimate(feedback.scores.grammaticalRangeAccuracy)}
-- 综合训练估计｜Overall training estimate: ${formatBandEstimate(estimate)}
+- 任务回应｜Task Response: ${formatConservativeBandEstimate(feedback.scores.taskResponse)}
+- 连贯与衔接｜Coherence & Cohesion: ${formatConservativeBandEstimate(feedback.scores.coherenceCohesion)}
+- 词汇资源｜Lexical Resource: ${formatConservativeBandEstimate(feedback.scores.lexicalResource)}
+- 语法多样性与准确性｜Grammatical Range & Accuracy: ${formatConservativeBandEstimate(feedback.scores.grammaticalRangeAccuracy)}
+- 综合训练估计｜Overall training estimate: ${formatConservativeBandEstimate(estimate)}
+- 目标层级｜Target layer: ${getTargetLabel(estimate, 'modelAnswer')} / ${getTargetLabelZh(estimate, 'modelAnswer')}
 
 ## 4. 任务回应与结构诊断｜TR / Logic Review
 ${logicItems.length ? logicItems.map((item, index) => `### ${index + 1}. ${item.issue}
@@ -809,7 +845,7 @@ ${fromEssay.length ? fromEssay.map(item => `- ${item.original ? `${item.original
 ### Argument Frames
 ${frames.length ? frames.map(item => `- ${item.better}${item.note ? `\n  - ${item.note}` : ''}`).join('\n') : '- While [drawback] is a valid concern, it does not outweigh [main benefit].'}
 
-## 7. 目标范文｜Target Model Answer
+## 7. ${getTargetLabel(estimate, 'modelAnswer')}｜${getTargetLabelZh(estimate, 'modelAnswer')}
 ${feedback.modelAnswer || 'No reliable target model answer for this attempt.'}${annotations}
 
 ## 8. 下次写作前检查｜Next Attempt Checklist
@@ -849,8 +885,9 @@ ${feedback.instruction}
 ${feedback.report}
 
 ## 3. 分数快照｜Training Estimate
-- 任务完成度｜Task Achievement: ${formatBandEstimate(feedback.taskAchievement?.score ?? feedback.estimatedBand)}
-- 综合训练估计｜Overall training estimate: ${formatBandEstimate(feedback.estimatedBand)}
+- 任务完成度｜Task Achievement: ${formatConservativeBandEstimate(feedback.taskAchievement?.score ?? feedback.estimatedBand)}
+- 综合训练估计｜Overall training estimate: ${formatConservativeBandEstimate(feedback.estimatedBand)}
+- 目标层级｜Target layer: ${getTargetLabel(feedback.estimatedBand, 'report')} / ${getTargetLabelZh(feedback.estimatedBand, 'report')}
 
 ## 4. Overview 与关键信息｜Overview / Key Features
 - Overview: ${conciseAction(feedback.overviewFeedback, 28)}
@@ -864,7 +901,7 @@ ${feedback.report}
 ## 6. 语言修改｜Language Corrections
 ${languageCorrections.length ? languageCorrections.map(item => `- Original: ${item.original}\n  - Better: ${item.correction}\n  - 中文说明: ${conciseAction(item.explanation, 20)}`).join('\n') : '- 暂无稳定语言修改；先检查 overview、比较句和数据表达。'}
 
-## 7. 优化范文｜Improved Report
+## 7. ${getTargetLabel(feedback.estimatedBand, 'report')}｜${getTargetLabelZh(feedback.estimatedBand, 'report')}
 ${feedback.improvedReport || feedback.modelExcerpt || 'No improved report returned.'}
 
 ## 8. 下次写作前检查｜Next Attempt Checklist

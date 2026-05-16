@@ -150,6 +150,13 @@ Overlay should be a lightweight but complete correction panel, not a tiny toolti
 
 ## H. Target Model Answer Principles
 
+- Global training target policy:
+  - Current estimate is conservative and must describe the user's current answer, essay, or report.
+  - Training targets are always upward: below Band 7.0 gets a Band 7.0+ target answer/report/model; Band 7.0 or above gets a Band 8+ examiner-friendly upgrade.
+  - Do not inflate current scores to match the target layer.
+  - Do not use Band 9 as the default learner-facing label.
+  - Do not use intermediate Target Band 7.5 or 7.5-8.0 labels.
+  - Target answers must apply feedback, idea-development advice, and retained useful learner material, not merely paraphrase the original.
 - Target Model Answer should be a full training target answer, not a short excerpt.
 - Acceptable target length is about 280-350 words.
 - It should preserve the learner's position, fix the highest-priority Logic Review issue, and integrate Language Bank / Expression Upgrade / key corrections.

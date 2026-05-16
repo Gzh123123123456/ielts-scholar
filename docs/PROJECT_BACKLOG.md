@@ -59,7 +59,7 @@ _Last updated: 2026-05-16_
 - Require user edit/confirm before moving to Phase 2.
 
 ### 2b) Future UI Consistency Notes
-- **Done closeout**: Speaking Practice now uses the shared wide practice workspace consistently with Writing Task 1 / Task 2, while the High-Band Transformation text itself keeps a readable inner width.
+- **Done closeout**: Speaking Practice now uses the shared wide practice workspace consistently with Writing Task 1 / Task 2, while the Idea & Expression Upgrade text itself keeps a readable inner width.
 - **Done closeout**: global TopBar width is independent from medium/wide page content widths.
 - **Done closeout**: learner-facing feedback labels should render readable Chinese-first labels instead of provider/schema enum keys.
 - **Done basic V1.2**: Writing Task 1 Academic now inherits the Writing workspace design language in a minimal two-column practice page:
@@ -76,6 +76,15 @@ _Last updated: 2026-05-16_
   - optional AI tagging later, kept separate from static prep taxonomy
 
 ## P1 — Learning Loop Depth
+
+### Global Feedback Target Policy
+- **Done 2026-05-16**: Speaking, Writing Task 2, and Writing Task 1 share one target standard.
+- Current estimates stay conservative and describe the user's current performance.
+- Target answers/reports/models are always at least Band 7.0+.
+- If the current estimate is 7.0 or above, the next generated target must be Band 8+ examiner-friendly.
+- Do not use default learner-facing Band 9 wording or intermediate Target Band 7.5 / 7.5-8.0 labels.
+- Do not inflate current scores to match target answers.
+- Target outputs must apply corrections, idea-development advice, and retained useful learner material.
 
 ### 2.4) Prompt Bank Depth
 - **Done minimal V1.1**: small original local-testing prompt bank:
@@ -146,7 +155,7 @@ _Last updated: 2026-05-16_
 - **Done minimal V1.1**: cleaner pre-analysis layout and wider post-analysis feedback layout.
 - **Done minimal V1.1**: Change Question works across Parts 1/2/3 when alternatives exist.
 - **Done minimal V1.1**: Practice This Question Again starts a fresh attempt for the same prompt without re-calling AI.
-- **Done minimal V1.1**: Band 9 Refinement / Examiner-Friendly Refinement layer for already-strong answers.
+- **Done minimal V1.1, renamed 2026-05-16**: Idea & Expression Upgrade layer for already-strong answers.
 - **Done 2026-05-16**: Speaking provider prompts and attempt markdown export calibrated for concise spoken training notes.
   - Part 1 stays short, natural, and conversation-oriented.
   - Part 2 uses a spoken story spine for long turns.

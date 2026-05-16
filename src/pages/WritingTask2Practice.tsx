@@ -6,7 +6,7 @@ import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
 import { routedAnalyzeWriting, routedCoachWritingFramework, routedExtractWritingFramework } from '@/src/lib/ai';
-import { formatBandEstimate } from '@/src/lib/bands';
+import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import {
   WritingFeedback,
@@ -64,7 +64,7 @@ const isInsufficientTask2Sample = (text: string) => {
 
 const isPlaceholderModelAnswer = (text: string) =>
   !text.trim() ||
-  text === 'Sample Band 9 essay content...' ||
+  text === 'Sample high-band essay content...' ||
   /too short for a high training estimate|provider returned incomplete|malformed or incomplete/i.test(text);
 
 const humanizeKey = (value: string) =>
@@ -221,12 +221,8 @@ const averageWritingScore = (feedback: WritingFeedback) =>
     feedback.scores.grammaticalRangeAccuracy) / 4) * 2) / 2;
 
 const getTargetModelLevel = (feedback: WritingFeedback) => {
-  if (feedback.modelAnswerTargetLevel?.trim()) return feedback.modelAnswerTargetLevel.trim();
   const estimate = averageWritingScore(feedback);
-  if (estimate <= 5.5) return 'Target Band 7.0';
-  if (estimate <= 6.5) return 'Target Band 7.5';
-  if (estimate <= 7.0) return 'Target Band 7.5-8.0';
-  return 'Examiner-friendly refinement';
+  return getTargetLabel(estimate, 'modelAnswer');
 };
 
 const uniqueStrings = (items: (string | undefined)[]) => {
@@ -1806,8 +1802,8 @@ ${logicItems}
 ## Sentence Corrections
 ${sentenceItems}
 
-## Target Model Answer
-- Training estimate: ${formatBandEstimate(averageWritingScore(feedback))}
+## ${targetLevel}
+- Training estimate: ${formatConservativeBandEstimate(averageWritingScore(feedback))}
 - Target level: ${targetLevel}
 
 ### Next Rewrite Focus
@@ -2120,7 +2116,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   <div title={`${dimension.label}: training estimate`} aria-label={`${dimension.label} training estimate`}>
                     <div className="text-[10px] font-sans font-bold text-paper-ink/50 uppercase mb-1 leading-snug">{dimension.label}</div>
                     <div className={isInsufficientSample ? 'text-xs font-bold text-paper-ink/50 uppercase tracking-widest font-sans pt-1' : 'text-xl font-bold text-accent-terracotta'}>
-                      {isInsufficientSample ? 'Insufficient' : formatBandEstimate(feedback.scores[dimension.key])}
+                      {isInsufficientSample ? 'Insufficient' : formatConservativeBandEstimate(feedback.scores[dimension.key])}
                     </div>
                     <div className="mt-1 text-[10px] font-sans text-paper-ink/35">{dimension.helper}</div>
                   </div>
@@ -2330,14 +2326,14 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
             <PaperCard className="min-h-[220px]">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                 <h3 className="text-sm font-bold uppercase tracking-widest">
-                  Target Model Answer
+                  {getTargetModelLevel(feedback)}
                 </h3>
                 <div className="flex flex-wrap gap-2 text-[10px] font-sans font-bold uppercase tracking-widest">
                   <span className="border border-paper-ink/10 bg-paper-ink/5 px-2 py-1 rounded-sm text-paper-ink/55">
-                    Training estimate {formatBandEstimate(averageWritingScore(feedback))}
+                    Training estimate {formatConservativeBandEstimate(averageWritingScore(feedback))}
                   </span>
                   <span className="border border-accent-terracotta/20 bg-accent-terracotta/5 px-2 py-1 rounded-sm text-accent-terracotta">
-                    Target level: {getTargetModelLevel(feedback)}
+                    {getTargetLabelZh(averageWritingScore(feedback), 'modelAnswer')}
                   </span>
                 </div>
               </div>

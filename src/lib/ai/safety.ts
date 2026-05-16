@@ -18,7 +18,7 @@ import {
   WritingTask1Feedback,
   WritingTask,
 } from './schemas';
-import { capBand, floorToHalfBand, formatBandEstimate, roundToHalfBand } from '../bands';
+import { capBand, floorToHalfBand, formatConservativeBandEstimate, getTargetLabel, roundToHalfBand } from '../bands';
 import {
   buildSpeakingTrainingMarkdown,
   buildWritingTask1TrainingMarkdown,
@@ -39,7 +39,7 @@ interface SafeAnalyzeResult<T> {
 const FALLBACK_SCORE = 0;
 const FALLBACK_TEXT = 'Provider output was malformed or incomplete.';
 const BLOCKED_LEARNING_CONTENT =
-  /provider output was malformed or incomplete|please retry analysis after checking the debug panel|provider_safety|raw parse|validation failure|parse_or_schema|incomplete feedback|debug panel/i;
+  /provider output was malformed or incomplete|please retry analysis after checking the debug panel|provider_safety|raw parse|validation failure|parse_or_schema|incomplete feedback|debug panel|\[remove or rephrase sentence\]/i;
 
 const countWords = (text: string): number =>
   text.trim().split(/\s+/).filter(Boolean).length;
@@ -179,7 +179,12 @@ const asString = (
   path: string,
   errors: string[],
 ): string => {
-  if (typeof value === 'string' && value.trim()) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const cleaned = value.trim();
+    if (!BLOCKED_LEARNING_CONTENT.test(cleaned)) return cleaned;
+    errors.push(`${path} contained blocked provider/fallback text`);
+    return fallback === FALLBACK_TEXT ? '' : fallback;
+  }
   errors.push(`${path} missing or invalid string`);
   return fallback;
 };
@@ -221,7 +226,8 @@ const normalizeStringArray = (
   errors: string[],
 ): string[] =>
   asArray(value, path, errors)
-    .map((item, index) => asString(item, FALLBACK_TEXT, `${path}[${index}]`, errors));
+    .map((item, index) => asString(item, FALLBACK_TEXT, `${path}[${index}]`, errors))
+    .filter(Boolean);
 
 const tryParseJson = (source: string): { parsedJson: unknown; parseError?: string } => {
   try {
@@ -998,10 +1004,7 @@ const averageWritingScore = (scores: WritingFeedback['scores']): number =>
   ) / 4);
 
 const getWritingTargetLevel = (estimate: number): string => {
-  if (estimate <= 5.5) return 'Target Band 7.0';
-  if (estimate <= 6.5) return 'Target Band 7.5';
-  if (estimate <= 7.0) return 'Target Band 7.5-8.0';
-  return 'Examiner-friendly refinement';
+  return getTargetLabel(estimate, 'modelAnswer');
 };
 
 const normalizeModelAnswerAnnotations = (
@@ -1108,7 +1111,7 @@ ${logicItems}
 ${sentenceItems}
 
 ## Target Model Answer
-- Training estimate: ${formatBandEstimate(estimate)}
+- Training estimate: ${formatConservativeBandEstimate(estimate)}
 - Target level: ${feedback.modelAnswerTargetLevel || getWritingTargetLevel(estimate)}
 
 ### Next Rewrite Focus
@@ -1237,9 +1240,7 @@ const normalizeWritingFeedback = (
       250,
     ),
   };
-  const targetLevel = typeof source.modelAnswerTargetLevel === 'string' && source.modelAnswerTargetLevel.trim()
-    ? source.modelAnswerTargetLevel.trim()
-    : getWritingTargetLevel(averageWritingScore(scoresNormalized));
+  const targetLevel = getWritingTargetLevel(averageWritingScore(scoresNormalized));
   const vocabularyUpgrade = buildLocalVocabularyUpgrade(source, request, sentenceFeedback, validationErrors);
   const firstTopicExpression = vocabularyUpgrade.topicVocabulary[0]?.expression || 'topic-specific language';
   const firstExpressionUpgrade = vocabularyUpgrade.expressionUpgrades[0]?.better || 'a clearer argument frame';
@@ -1304,7 +1305,7 @@ ${feedback.instruction}
 ${feedback.visualBrief}
 
 ## Training Estimate
-${formatBandEstimate(feedback.estimatedBand)}
+${formatConservativeBandEstimate(feedback.estimatedBand)}
 
 ## Must Fix
 ${feedback.mustFix.length ? feedback.mustFix.map(item => `- ${item}`).join('\n') : '- No critical Task 1 issue returned.'}
@@ -1315,7 +1316,7 @@ ${feedback.rewriteTask}
 ## Reusable Report Patterns
 ${feedback.reusableReportPatterns.length ? feedback.reusableReportPatterns.map(item => `- ${item}`).join('\n') : '- No reusable pattern returned.'}
 
-## Improved Report / Model Excerpt
+## ${getTargetLabel(feedback.estimatedBand, 'report')}
 ${feedback.improvedReport || feedback.modelExcerpt || FALLBACK_TEXT}`;
 
 const normalizeTaskAchievement = (

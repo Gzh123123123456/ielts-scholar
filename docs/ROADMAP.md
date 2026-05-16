@@ -25,7 +25,7 @@ _Last updated: 2026-05-16_
 - Add a small original prompt bank for local testing.
   - Done: Speaking Part 1/2/3 and Writing Task 2 prompt coverage sufficient for local QA.
 - Improve Speaking feedback readability and high-band usefulness.
-  - Done: wider result layout, prominent upgraded answer, and Band 9 Refinement section.
+  - Done: wider result layout, prominent upgraded answer, and Idea & Expression Upgrade section.
 - Current stage: V1.1 closing.
 
 ### Writing Task 2 Framework Intelligence
@@ -63,7 +63,16 @@ _Last updated: 2026-05-16_
 ### Speaking Prompt / Export Calibration
 - **Done 2026-05-16**: Speaking Part 1/2/3 provider prompts and attempt markdown export were recalibrated for spoken IELTS training notes.
 - Speaking export now uses a minimal review card: part requirements, answer route, compact issue list, target answer, reusable expressions, and one transfer/follow-up section.
-- Speaking single-question estimates are conservative training estimates excluding pronunciation; target answers remain Band 7.0+ training targets, with Band 8-9 refinement reserved for already-strong answers.
+- Speaking single-question estimates are conservative training estimates excluding pronunciation; target answers use the global two-layer policy: below Band 7.0 -> Band 7.0+ target, Band 7.0 or above -> Band 8+ examiner-friendly upgrade.
+
+## Global Feedback Target Policy
+
+- Current estimates are conservative and must not be inflated to match target outputs.
+- Training targets are minimum Band 7.0+ across Speaking, Writing Task 2, and Writing Task 1.
+- If current estimate is 7.0 or above, the next generated answer/report/model targets Band 8+ examiner-friendly quality.
+- Do not use default learner-facing Band 9 labels or Target Band 7.5 / 7.5-8.0 intermediate labels.
+- Target outputs must apply corrections, idea-development guidance, and retained useful learner material.
+- Part 1 topic-thread practice, Part 3 discussion-thread practice, and question-bank browse/select remain future work.
 - Future interaction model remains pending and roadmap-only:
   - Part 1 Topic Thread Practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, and one topic-level analysis focused on short natural answers, personal details, consistency, and avoiding memorized long answers.
   - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, and one analysis focused on story spine, detail, timing, and sustained fluency.

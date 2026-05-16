@@ -6,7 +6,7 @@ import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
 import { getAIProviderName, routedAnalyzeSpeaking } from '@/src/lib/ai';
-import { formatBandEstimate } from '@/src/lib/bands';
+import { formatBandEstimate, formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
 import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/questions/bank';
 import { SpeakingFeedback } from '@/src/lib/ai/schemas';
 import {
@@ -990,7 +990,7 @@ export default function SpeakingPractice() {
           {step === 'analyzing' && (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
               <RefreshCcw className="w-6 h-6 animate-spin text-accent-terracotta/40" />
-              <p className="font-serif text-paper-ink/45 text-sm">Cross-referencing output with Band 9 descriptors...</p>
+              <p className="font-serif text-paper-ink/45 text-sm">Checking the training estimate and target layer...</p>
             </div>
           )}
         </div>
@@ -1002,10 +1002,10 @@ export default function SpeakingPractice() {
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">Language Performance</h3>
                 <div className="flex flex-wrap items-end gap-4 mb-8">
-                  <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
+                  <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
                   <div className="flex flex-col pb-2">
                     <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">Single-question training estimate</span>
-                    <span className="text-xs text-paper-ink/45">约 {formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}，不含发音；短样本按保守值处理。</span>
+                    <span className="text-xs text-paper-ink/45">约 {formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)}，不含发音；短样本按保守值处理。</span>
                   </div>
                 </div>
                 
@@ -1076,18 +1076,36 @@ export default function SpeakingPractice() {
               {!shouldShowDevelopmentPlan && feedback.band9Refinements.length > 0 && (
                 <section className="space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-paper-ink/55 ml-1">
-                    Band 9 Refinement / Examiner-Friendly Refinement
+                    Idea & Expression Upgrade / 表达与思路升级
                   </h4>
                   <PaperCard className="border-l-2 border-l-paper-ink/30 bg-paper-50">
                     <p className="text-sm font-sans uppercase tracking-widest text-paper-ink/35 mb-4">
-                      Not mistakes. These are high-level refinements for stronger spoken delivery.
+                      Not mistakes. These are idea-development and expression upgrades for stronger spoken delivery.
                     </p>
                     <div className="grid gap-4 lg:grid-cols-2">
                       {feedback.band9Refinements.map((item, index) => (
                         <div key={index} className="border border-paper-ink/10 bg-paper-ink/[0.03] p-4 rounded-sm">
-                          <p className="text-base leading-7 text-paper-ink/75 mb-3">{item.observation}</p>
-                          <p className="text-lg leading-8 font-bold text-paper-ink mb-3">{item.refinement}</p>
-                          <p className="text-base leading-8 text-paper-ink/85">{item.explanationZh}</p>
+                          <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">中文升级点</p>
+                          <p className="text-base leading-8 text-paper-ink/85 mb-4">{item.explanationZh || item.observation}</p>
+                          <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">英文可用表达</p>
+                          <ul className="space-y-1 mb-4">
+                            {[item.refinement, item.observation]
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map(expression => (
+                                <li key={expression} className="text-base leading-7 text-paper-ink border-l-2 border-l-accent-terracotta/25 pl-3">
+                                  {expression}
+                                </li>
+                              ))}
+                          </ul>
+                          <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">为什么适合这题</p>
+                          <p className="text-sm leading-7 text-paper-ink/70">
+                            {feedback.part === 3
+                              ? 'Part 3 需要从观点推进到原因、例子或影响。'
+                              : feedback.part === 2
+                                ? 'Part 2 需要把素材串成有细节和感受变化的长回答。'
+                                : 'Part 1 需要短而自然的个人细节。'}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -1098,13 +1116,23 @@ export default function SpeakingPractice() {
               {feedback.preservedStyle.length > 0 && (
                 <section className="border border-paper-ink/10 bg-paper-ink/[0.02] p-5">
                   <h4 className="text-sm font-sans font-bold uppercase tracking-widest text-paper-ink/50 mb-4">
-                    <span>Preserved Personal Style</span>
+                    <span>Personal Material & Idea Expansion / 个人素材与观点发散</span>
                   </h4>
                   <div className="grid gap-3 md:grid-cols-2">
                     {feedback.preservedStyle.slice(0, 4).map((style, i) => (
                       <div key={i} className="border-l-2 border-l-accent-terracotta/30 pl-4 py-1">
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">你的素材</p>
                         <p className="text-lg text-paper-ink leading-8">"{style.text}"</p>
-                        <div className="text-base leading-8 mt-2 text-paper-ink/75">{style.reasonZh}</div>
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">可以保留的原因</p>
+                        <div className="text-base leading-8 text-paper-ink/75">{style.reasonZh}</div>
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">怎么发散</p>
+                        <div className="text-base leading-8 text-paper-ink/75">
+                          {feedback.part === 3
+                            ? '把这个素材继续推到 cause / contrast / consequence，避免只列事实。'
+                            : feedback.part === 2
+                              ? '补场景、动作、情绪变化和为什么重要。'
+                              : '补一个真实细节，再说一个简短原因。'}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1116,9 +1144,12 @@ export default function SpeakingPractice() {
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
                     {shouldShowDevelopmentPlan
                       ? 'Band 7.0+ Starter Target'
-                      : feedback.bandEstimateExcludingPronunciation >= 7
-                        ? 'Band 8-9 Examiner-friendly Refinement'
-                        : 'Band 7.0+ Target Answer'}
+                      : getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}
+                    {!shouldShowDevelopmentPlan && (
+                      <span className="block mt-2 text-xs normal-case tracking-normal text-paper-ink/45">
+                        {getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}
+                      </span>
+                    )}
                   </h4>
                   {shouldShowDevelopmentPlan ? (
                     <div className="max-w-5xl space-y-5 text-paper-ink">

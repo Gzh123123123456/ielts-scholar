@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-16] Global IELTS Training Target Policy
+
+- Current estimate remains conservative and describes the user's current answer, essay, or report.
+- Training target is minimum Band 7.0+ across Speaking, Writing Task 2, and Writing Task 1.
+- If the current estimate is 7.0 or above, the next generated answer/report/model/refinement must target Band 8+ examiner-friendly quality.
+- Do not use Band 9 as a default learner-facing label.
+- Do not use Target Band 7.5 or 7.5-8.0 intermediate labels.
+- Do not inflate current score to match the target output.
+- Target outputs must apply feedback, idea-development advice, and retained useful learner material.
+- Future Speaking flow remains: Part 1 topic-thread practice, Part 2 single long-turn practice, Part 3 discussion-thread practice.
+- Question-bank count/browse/random/select remains future work; counts should be computed from data, not hardcoded.
+
 ## [2026-05-16] Speaking Estimate, Band 7+ Target, and Future Interaction Model
 - **Decision**: Treat single-question Speaking scores as conservative training estimates excluding pronunciation, while keeping target answers and practice direction at Band 7.0+.
 - **Reason**: IELTS Speaking is scored across a full test, so one Part 1/2/3 answer should not look like an official complete Speaking band. Training feedback should still uplift toward at least Band 7.0.
@@ -7,7 +19,7 @@
   - Learner-facing Speaking estimate wording now says single-question training estimate / not including pronunciation, and normalization prefers the lower visible half-band when evidence is between bands.
   - Speaking markdown issue lists use Chinese learner-facing labels and a short Chinese explanation column.
   - Speaking reusable expressions and filler notes are filtered more strictly so provider/debug text, bracketed instructions, unclear fragments, and default filler advice do not enter review cards.
-  - Provider and mock wording now targets Band 7.0+ for weak/medium answers and Band 8-9 refinement for already-strong answers.
+  - Provider and mock wording now targets Band 7.0+ for weak/medium answers and Band 8+ examiner-friendly upgrades for already-strong answers.
 - **Future interaction model**:
   - Part 1 Topic Thread Practice: one topic, 3-4 examiner-style questions, one connected mini-conversation, and one topic-level analysis.
   - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, and one analysis.
@@ -160,7 +172,7 @@
   - Vocabulary & Expression Upgrade is now a compact learning bank, not a duplicate correction list.
   - Logic-to-correction inference now checks location, task-response markers, off-topic openings, balance/concession gaps, and thesis/conclusion issues more deliberately.
   - Final writing analysis now receives optional Phase 1 framework notes and editable framework summary so new provider output can produce a personalized model excerpt.
-  - New provider prompts require a learnable Band 7.5-8 personalized excerpt, not a generic Band 9 essay.
+  - New provider prompts require a learnable personalized target excerpt instead of a generic high-band essay.
   - Task 2 markdown export includes sentence primary/secondary/micro fields and the personalized excerpt section when supported.
 - **Explicitly unchanged**: no underline markers, no dot markers, no popovers, no overlay, no click-to-locate behavior, no provider routing change, no `.env.local` edits, no merge, no push.
 
@@ -234,7 +246,7 @@
 - **Decision**: Treat insufficient Speaking samples as an answer-development problem at render time.
 - **Reason**: Very short or low-signal transcripts, including old restored records, should not display a full high-band rewrite just because one exists in stored feedback.
 - **Implemented**:
-  - Speaking feedback shows **Answer Development Plan** instead of full High-Band Transformation for insufficient samples.
+  - Speaking feedback shows **Answer Development Plan** instead of full target-answer transformation for insufficient samples.
   - The transformation card stays aligned with the main wide feedback container while long text uses readable line length.
   - Writing Task 2 correction labels are display-mapped from schema/provider keys to readable Chinese-first labels.
 - **Explicitly unchanged**: no provider-default changes, no scoring formula changes, no record mutation/migration, no exports/routing/RAG/database/server/auth/API-key changes.
@@ -330,7 +342,7 @@
   - Added navigation from Home, TopBar, Speaking, and Writing.
 - **Explicitly unchanged**: Mock Provider remains default, no RAG, no database, no server, no auth, no production API key logic, no cross-attempt analytics, no session export, no Mock mode changes, no redesign.
 
-## [2026-05-07] Speaking Practice Records, Prompt Bank, and High-Band Refinement
+## [2026-05-07] Speaking Practice Records, Prompt Bank, and Idea Upgrade
 - **Decision**: Close the first real-use Speaking QA gaps before adding larger product features.
 - **Reason**: Practice needed reliable record access, meaningful question switching, and clearer coaching for answers that are already strong.
 - **Implemented**:
@@ -344,7 +356,7 @@
     - Writing Task 2: 22 IELTS-style prompts.
   - Speaking feedback uses a wider result layout with Must Fix / Optional Polish, a prominent upgraded answer, and secondary preserved-style context.
   - `obsidianMarkdown`-only provider issues are repaired locally when core Speaking feedback is valid, so valid feedback is not replaced with generic fallback.
-  - Added **Band 9 Refinement / Examiner-Friendly Refinement** as a distinct high-level coaching layer for strong answers with few or no true errors.
+  - Added a distinct high-level coaching layer for strong answers with few or no true errors; renamed later to Idea & Expression Upgrade.
   - Added **Practice This Question Again** so learners can retry the same prompt while preserving the analyzed attempt.
 - **Explicitly unchanged**: Mock Provider remains default, no provider selection changes, no RAG, no pronunciation scoring, no SpeechRecognition behavior change, no Writing layout change, no API usage panel.
 

@@ -8,7 +8,7 @@ import { writingTask1Academic, WritingTask1AcademicPrompt } from '@/src/data/que
 import { routedAnalyzeWritingTask1 } from '@/src/lib/ai';
 import { useApp } from '@/src/context/AppContext';
 import { ProviderDiagnostic, WritingTask1Feedback } from '@/src/lib/ai/schemas';
-import { formatBandEstimate } from '@/src/lib/bands';
+import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
 import {
   createRecordId,
   getActiveWritingTask1,
@@ -156,7 +156,8 @@ const buildTask1Markdown = (
 - Module: Writing Task 1 Academic
 - Task type: ${prompt.taskType}
 - Topic: ${prompt.topic}
-- Training Estimate: ${formatBandEstimate(feedback.estimatedBand)}
+- Training Estimate: ${formatConservativeBandEstimate(feedback.estimatedBand)}
+- Target Layer: ${getTargetLabel(feedback.estimatedBand, 'report')} / ${getTargetLabelZh(feedback.estimatedBand, 'report')}
 
 ## Task Instruction
 ${feedback.instruction}
@@ -191,7 +192,7 @@ ${bulletList(getRewriteActions(feedback), 'Rewrite with a clearer overview and g
 ## Reusable Report Patterns
 ${bulletList(feedback.reusableReportPatterns, 'No reusable pattern returned.')}
 
-## Improved Report / Model Excerpt
+## ${getTargetLabel(feedback.estimatedBand, 'report')} / ${getTargetLabelZh(feedback.estimatedBand, 'report')}
 ${feedback.improvedReport || feedback.modelExcerpt || 'No improved report returned.'}
 `;
 };
@@ -476,7 +477,7 @@ export default function WritingTask1Placeholder() {
                 <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/40 mb-2">
                   Training Estimate
                 </p>
-                <p className="text-4xl font-bold text-accent-terracotta">{formatBandEstimate(feedback.estimatedBand)}</p>
+                <p className="text-4xl font-bold text-accent-terracotta">{formatConservativeBandEstimate(feedback.estimatedBand)}</p>
               </div>
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Diagnosis of My Report</h3>
@@ -509,7 +510,10 @@ export default function WritingTask1Placeholder() {
           </PaperCard>
 
           <PaperCard>
-            <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Improved Report / Model Excerpt</h3>
+            <h3 className="text-sm font-bold uppercase tracking-widest mb-1">{getTargetLabel(feedback.estimatedBand, 'report')}</h3>
+            <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-4">
+              {getTargetLabelZh(feedback.estimatedBand, 'report')}
+            </p>
             <p className="whitespace-pre-wrap text-base leading-8 text-paper-ink/80">{feedback.improvedReport || feedback.modelExcerpt}</p>
             <div className="flex flex-wrap gap-3 mt-5">
               <SerifButton onClick={rewriteThisTask} variant="outline" className="text-xs">

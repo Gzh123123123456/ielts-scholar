@@ -39,9 +39,9 @@ _Last updated: 2026-05-15_
 - Provider unavailable failures are distinguished from schema/parse fallback; provider-unavailable attempts preserve the transcript and show a retry-later message instead of normal coaching.
 - Speaking feedback readability was improved with larger Part tabs, clearer Training Estimate presentation, fully visible Must Fix / Optional Polish sections, a more readable upgraded-answer layout, and larger preserved-style context.
 - Short Speaking samples across Parts 1/2/3 are capped conservatively and receive insufficient-sample feedback instead of inflated training estimates.
-- Speaking feedback now suppresses full High-Band Transformation rendering for very short, nonsense, or insufficient-sample transcripts, including old restored records; the UI shows a concise Answer Development Plan instead without mutating saved records.
+- Speaking feedback now suppresses full target-answer transformation rendering for very short, nonsense, or insufficient-sample transcripts, including old restored records; the UI shows a concise Answer Development Plan instead without mutating saved records.
 - Speaking Practice uses the wide practice workspace consistently with Writing Task 1 / Task 2; feedback cards align to the same main container while long transformation text keeps a readable inner line length.
-- Speaking feedback now supports a distinct **Band 9 Refinement / Examiner-Friendly Refinement** section for strong answers with few or no true errors.
+- Speaking feedback now supports a distinct **Idea & Expression Upgrade** section for strong answers with few or no true errors.
 - Speaking markdown export can be locally generated when the provider returns valid core feedback but omits `obsidianMarkdown`; this is shown as a normalized field in diagnostics rather than a full feedback failure.
 - `no-speech` auto-retry is implemented and preserved.
 - Retry clears current-attempt state (transcript, feedback, timer, attempt refs).
@@ -115,7 +115,7 @@ _Last updated: 2026-05-15_
 - Scope is Academic only; General Training letters are deferred.
 - Task 1 uses original text-based visual briefs and simple data cards for line graph, bar chart, table, pie chart, mixed chart, process, and map practice.
 - Task 1 feedback has its own schema and Mock Provider analysis path covering overview, key features, comparisons, data accuracy, coherence, must-fix items, rewrite task, reusable report patterns, improved report/model excerpt, and markdown export.
-- Task 1 diagnosis is Chinese-first in learner-facing sections, with English corrections/examples where useful; Improved Report / Model Excerpt remains English.
+- Task 1 diagnosis is Chinese-first in learner-facing sections, with English corrections/examples where useful; the target report remains English and follows the shared Band 7.0+ / Band 8+ target policy.
 - Old Task 1 feedback records with sparse, English-only, or malformed display text receive Chinese-first display framing at render time without rewriting stored records.
 - Task 1 under-length and extremely short answers receive conservative training estimates and explicit length feedback instead of high mock/local scores.
 - Active Writing Task 1 practice links to History instead of embedding a recent-record list.

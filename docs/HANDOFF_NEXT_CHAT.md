@@ -24,10 +24,16 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Recent Events
 
+- **2026-05-16**: Global IELTS training target policy calibration completed.
+  - Current estimates remain conservative and separate from generated targets.
+  - All Speaking, Writing Task 2, and Writing Task 1 target answers/reports/models now use the two-layer policy: below Band 7.0 -> Band 7.0+ target; Band 7.0 or above -> Band 8+ examiner-friendly upgrade.
+  - Removed learner-facing intermediate targets such as Target Band 7.5 / 7.5-8.0 and default Band 9 wording.
+  - Speaking feedback now renders Idea & Expression Upgrade plus Personal Material & Idea Expansion instead of treating retained ideas as a shallow preserved-style note.
+  - Speaking/Writing markdown exports keep current estimate and target layer separate.
 - **2026-05-16**: Speaking prompt/export calibration slice completed.
   - Speaking provider prompts now separate Part 1 conversational short answers, Part 2 spoken long-turn story spine, and Part 3 natural spoken discussion.
   - Speaking markdown export changed from a guided self-study manual to a minimal review card: part requirements, answer route, compact issue list, target answer, reusable expressions, and one transfer/follow-up section.
-  - Follow-up calibration records single-question Speaking scores as conservative training estimates, excluding pronunciation, while keeping target answers at Band 7.0+.
+  - Follow-up calibration records single-question Speaking scores as conservative training estimates, excluding pronunciation, while target answers follow the global Band 7.0+ / Band 8+ two-layer policy.
   - Future Speaking interaction model recorded only, with no thread UI or session flow implemented:
     - Part 1 Topic Thread Practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, and one topic-level analysis focused on short natural answers, personal details, consistency, and avoiding memorized long answers.
     - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, one analysis focused on story spine, detail, timing, and sustained fluency.
@@ -83,6 +89,19 @@ Future backlog item after this slice: **Question bank count + browse/random/sele
 - Writing Task 2 question page: show task type, question count, browse bank, random question.
 - First slice can add visible entry buttons/counts only; full browse/select modal or panel is a separate larger UI task.
 - Counts must be computed from question data, not hardcoded.
+
+Global hard standard for all future feedback-loop work:
+- Current estimate is conservative.
+- Training target is minimum Band 7.0+.
+- If current estimate is 7.0 or above, the next answer/report/model/refinement targets Band 8+.
+- Do not use Band 9 as a default learner-facing label.
+- Do not use Target Band 7.5 or 7.5-8.0 intermediate labels.
+- Do not inflate current score to match the target.
+- Target outputs must apply feedback, idea-development advice, and retained useful learner material.
+- Part 1 future remains topic-thread practice.
+- Part 2 remains single long-turn practice.
+- Part 3 future remains discussion-thread practice.
+- Question-bank browse/select remains future work and is not part of this slice.
 
 Remaining future scoring work, if needed, belongs to a larger scoring calibration task. Do not reopen scoring/provider routing unless explicitly scoped.
 

@@ -7,6 +7,7 @@ import {
   WritingFrameworkSummary,
   WritingTask1Feedback,
 } from '../schemas';
+import { getTargetLabel } from '../../bands';
 
 const firstNonEmptyLine = (text: string, fallback: string): string => {
   const line = text
@@ -34,11 +35,15 @@ export class MockProvider implements AIProvider {
   }): Promise<SpeakingFeedback> {
     await new Promise(r => setTimeout(r, 1500));
     const transcriptWords = params.transcript.trim().split(/\s+/).filter(Boolean).length;
-    const conservativeEstimate = params.part === 3
-      ? 5.5
-      : transcriptWords < 20
-        ? 5.0
-        : 6.0;
+    const looksStrong = transcriptWords >= (params.part === 2 ? 140 : params.part === 3 ? 75 : 35)
+      && /\b(because|although|for example|for instance|which means|as a result|on the other hand)\b/i.test(params.transcript);
+    const conservativeEstimate = looksStrong
+      ? 7.0
+      : params.part === 3
+        ? 5.5
+        : transcriptWords < 20
+          ? 5.0
+          : 6.0;
     return {
       mode: 'practice',
       module: 'speaking',
@@ -72,7 +77,9 @@ export class MockProvider implements AIProvider {
       band9Refinements: [
         {
           observation: 'The answer is clear, but it could sound more spontaneous.',
-          refinement: 'Add one short personal detail instead of making the answer more formal.',
+          refinement: conservativeEstimate >= 7
+            ? "cities are trying to become more liveable / this probably leads to / a good example would be"
+            : "I usually... / it helps me... / one small example is...",
           explanationZh: 'Band 7.0+ 口语不只是更复杂，也要像真实交流。Part 1 尤其适合简短、自然、带一点个人细节的回答。',
         },
       ],
@@ -82,11 +89,17 @@ export class MockProvider implements AIProvider {
           reasonZh: '保留了个人成长故事，这在 Part 1 中很真实。',
         },
       ],
-      upgradedAnswer: params.part === 1
-        ? "Yes, I do. I usually read short novels or articles when I want to relax. It helps me slow down after a busy day, and it gives me something interesting to think about."
-        : params.part === 2
-          ? "One daily routine I really enjoy is having a slow but active morning. If I don't have an early class or meeting, I like to wake up naturally, make a simple breakfast, and then go for a short jog or do some light exercise. After that, I usually feel much more awake, so I can sit down and focus on work or study without feeling rushed. In the evening, I might play PC games with my roommates or call my family for a while. I like this routine because it gives me a balance between activity, productivity, and connection with people I care about."
-          : "I'd say cities have become much larger and more convenient in recent years. In many places, areas that used to feel quite rural have turned into residential districts with apartments, shops, and better public services. A good example would be public transport, because buses and metro lines now connect places that were hard to reach before. At the same time, many cities have added more parks and green spaces, so they are not just bigger and busier. I think the main result is that modern cities can feel more liveable, although they also need careful planning to avoid overcrowding.",
+      upgradedAnswer: conservativeEstimate >= 7
+        ? (params.part === 1
+            ? "Yes, definitely. I tend to read short essays or fiction when I want to slow down a bit, especially after a busy day. It is not a huge hobby, but it gives me a quiet way to reset."
+            : params.part === 2
+              ? "One routine I genuinely enjoy is having a slow but active morning when my schedule allows it. I usually make a simple breakfast, go for a short jog, and then sit down to work while my mind still feels clear. What I like is the sense of control it gives me: the day starts with something healthy rather than a rush of messages and deadlines. It is a small routine, but it makes the rest of the day feel more balanced and manageable."
+              : "I'd say the biggest change is that cities have become denser, but also more aware of liveability. In many places, rural edges have turned into residential districts because of population growth and housing demand. At the same time, local governments are adding parks and improving public transport, partly because people are more concerned about health, commuting pressure and car dependence. So the change is not simply that cities are getting bigger; they are also trying, with mixed success, to become easier places to live in.")
+        : params.part === 1
+          ? "Yes, I do. I usually read short novels or articles when I want to relax. It helps me slow down after a busy day, and it gives me something interesting to think about."
+          : params.part === 2
+            ? "One daily routine I really enjoy is having a slow but active morning. If I don't have an early class or meeting, I like to wake up naturally, make a simple breakfast, and then go for a short jog or do some light exercise. After that, I usually feel much more awake, so I can sit down and focus on work or study without feeling rushed. In the evening, I might play PC games with my roommates or call my family for a while. I like this routine because it gives me a balance between activity, productivity, and connection with people I care about."
+            : "I'd say cities have become much larger and more convenient in recent years. In many places, areas that used to feel quite rural have turned into residential districts with apartments, shops, and better public services. A good example would be public transport, because buses and metro lines now connect places that were hard to reach before. At the same time, many cities have added more parks and green spaces, so they are not just bigger and busier. I think the main result is that modern cities can feel more liveable, although they also need careful planning to avoid overcrowding.",
       reusableExample: {
         example: 'The rapid transformation of my city',
         canBeReusedFor: params.part === 1
@@ -373,7 +386,12 @@ Overall, students should not be forced into subjects chosen only by adults, beca
             { quote: 'connect personal interests with realistic career pathways', type: 'logic_repair', labelZh: '逻辑修复' },
           ],
       modelAnswerPersonalized: Boolean(params.finalFrameworkSummary || params.frameworkNotes || params.essay.trim()),
-      modelAnswerTargetLevel: scores.taskResponse <= 5.5 ? 'Target Band 7.0' : 'Target Band 7.5',
+      modelAnswerTargetLevel: getTargetLabel((
+        scores.taskResponse +
+        scores.coherenceCohesion +
+        scores.lexicalResource +
+        scores.grammaticalRangeAccuracy
+      ) / 4, 'modelAnswer'),
       reusableArguments: [
         {
           argument: 'Personal interest leads to better academic performance',
