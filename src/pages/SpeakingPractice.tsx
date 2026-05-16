@@ -1004,8 +1004,8 @@ export default function SpeakingPractice() {
                 <div className="flex flex-wrap items-end gap-4 mb-8">
                   <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
                   <div className="flex flex-col pb-2">
-                    <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">Training Estimate</span>
-                    <span className="text-xs text-paper-ink/45">Pronunciation is not assessed in V1.</span>
+                    <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">Single-question training estimate</span>
+                    <span className="text-xs text-paper-ink/45">约 {formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}，不含发音；短样本按保守值处理。</span>
                   </div>
                 </div>
                 
@@ -1114,7 +1114,11 @@ export default function SpeakingPractice() {
               <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
                 <div>
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
-                    {shouldShowDevelopmentPlan ? 'Answer Development Plan' : 'Examiner-friendly refinement'}
+                    {shouldShowDevelopmentPlan
+                      ? 'Band 7.0+ Starter Target'
+                      : feedback.bandEstimateExcludingPronunciation >= 7
+                        ? 'Band 8-9 Examiner-friendly Refinement'
+                        : 'Band 7.0+ Target Answer'}
                   </h4>
                   {shouldShowDevelopmentPlan ? (
                     <div className="max-w-5xl space-y-5 text-paper-ink">

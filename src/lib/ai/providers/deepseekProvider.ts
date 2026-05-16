@@ -69,8 +69,8 @@ Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 ${speakingPromptCalibration}
 If the transcript is extremely short, nonsensical, or too thin for the part, return conservative insufficient-sample feedback.
-Feedback must be target-uplift training feedback. Keep the current estimate defensible, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim above the current output level.
-If the learner is weak, produce a clean, natural target answer around Band 6.5-7.0 for that part, not merely a minimal correction. If the learner is already strong, provide examiner-friendly Band 8-9 refinements rather than saying there is nothing to improve.
+Feedback must be target-uplift training feedback. The current score is a conservative single-question training estimate, excluding pronunciation, not an official complete IELTS Speaking band. If evidence sits between two bands, prefer the lower visible estimate.
+For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice direction aim at a natural Band 7.0+ training target, not merely a minimal correction. If the learner is already strong, provide examiner-friendly Band 8-9 refinements rather than saying there is nothing to improve.
 Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
 For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
 

@@ -1,5 +1,20 @@
 # Decision Log
 
+## [2026-05-16] Speaking Estimate, Band 7+ Target, and Future Interaction Model
+- **Decision**: Treat single-question Speaking scores as conservative training estimates excluding pronunciation, while keeping target answers and practice direction at Band 7.0+.
+- **Reason**: IELTS Speaking is scored across a full test, so one Part 1/2/3 answer should not look like an official complete Speaking band. Training feedback should still uplift toward at least Band 7.0.
+- **Implemented**:
+  - Learner-facing Speaking estimate wording now says single-question training estimate / not including pronunciation, and normalization prefers the lower visible half-band when evidence is between bands.
+  - Speaking markdown issue lists use Chinese learner-facing labels and a short Chinese explanation column.
+  - Speaking reusable expressions and filler notes are filtered more strictly so provider/debug text, bracketed instructions, unclear fragments, and default filler advice do not enter review cards.
+  - Provider and mock wording now targets Band 7.0+ for weak/medium answers and Band 8-9 refinement for already-strong answers.
+- **Future interaction model**:
+  - Part 1 Topic Thread Practice: one topic, 3-4 examiner-style questions, one connected mini-conversation, and one topic-level analysis.
+  - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, and one analysis.
+  - Part 3 Discussion Thread Practice: one abstract topic cluster, 3-4 related follow-up questions, and one discussion-level analysis.
+  - Full Speaking Mock later combines Part 1 topic thread, Part 2 long turn, and Part 3 discussion thread.
+- **Explicitly unchanged**: no Part 1 topic-thread UI, no Part 3 discussion-thread UI, no 3-4 question conversation flow, no session-level Speaking export, no provider routing changes, no recording/transcription mechanics changes, no History architecture changes, and no Writing changes.
+
 ## [2026-05-16] Speaking Prompt and Minimal Review Card Export
 - **Decision**: Calibrate Speaking Part 1/2/3 provider prompts around spoken-answer targets and rebuild attempt-level Speaking markdown as a minimal review card.
 - **Reason**: Speaking feedback and exports should feel like concise training notes, not a guided self-study manual or Writing Task 2 advice applied to speech.

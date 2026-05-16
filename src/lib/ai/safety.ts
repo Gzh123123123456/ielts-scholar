@@ -135,7 +135,7 @@ const applySpeakingLengthCap = (score: number, words: number, part: SpeakingPart
   if (part === 2 && words < speakingMinimumWords(part)) return floorToHalfBand(capBand(score, 5.0));
   if (part === 3 && words < 25) return floorToHalfBand(capBand(score, 4.0));
   if (part === 3 && words < speakingMinimumWords(part)) return floorToHalfBand(capBand(score, 5.0));
-  return roundToHalfBand(score);
+  return floorToHalfBand(score);
 };
 
 const buildSpeakingLengthMustFix = (words: number, part: SpeakingPart): FatalError | null => {

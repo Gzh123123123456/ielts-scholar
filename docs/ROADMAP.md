@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-15_
+_Last updated: 2026-05-16_
 
 ## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -63,7 +63,13 @@ _Last updated: 2026-05-15_
 ### Speaking Prompt / Export Calibration
 - **Done 2026-05-16**: Speaking Part 1/2/3 provider prompts and attempt markdown export were recalibrated for spoken IELTS training notes.
 - Speaking export now uses a minimal review card: part requirements, answer route, compact issue list, target answer, reusable expressions, and one transfer/follow-up section.
-- Future Part 1 topic-thread practice remains pending: 3-4 same-topic follow-up questions with one final topic-level analysis. No topic-thread UI or session flow was implemented in this slice.
+- Speaking single-question estimates are conservative training estimates excluding pronunciation; target answers remain Band 7.0+ training targets, with Band 8-9 refinement reserved for already-strong answers.
+- Future interaction model remains pending and roadmap-only:
+  - Part 1 Topic Thread Practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, and one topic-level analysis focused on short natural answers, personal details, consistency, and avoiding memorized long answers.
+  - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, and one analysis focused on story spine, detail, timing, and sustained fluency.
+  - Part 3 Discussion Thread Practice: one abstract topic cluster, 3-4 related follow-up questions, and one discussion-level analysis focused on position, reasoning, contrast, examples, consequences, and spoken discussion logic.
+  - Full Speaking Mock later combines Part 1 topic thread, Part 2 long turn, and Part 3 discussion thread.
+- No topic-thread UI, discussion-thread UI, conversation flow, or session-level Speaking export was implemented in this slice.
 
 ### Unified Speaking Note Standard *(standard finalized; product export not yet updated)*
 - **Done 2026-05-13 (final handoff)**: `docs/IELTS_SPEAKING_NOTE_STANDARD.md` finalized.

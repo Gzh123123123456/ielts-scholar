@@ -37,7 +37,8 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
 }`;
 
 export const speakingPromptCalibration = `Speaking feedback must be spoken IELTS feedback, not writing-style feedback.
-Target uplift: weak answers should receive reachable Band 6.5-7 spoken language; strong answers should receive Band 8-9 examiner-friendly refinement. Do not make upgraded answers over-formal or essay-like.
+Current estimate: this is a conservative single-question training estimate, excluding pronunciation. IELTS Speaking is scored across a complete test, so do not present one Part 1/2/3 answer as an official complete Speaking band. If evidence sits between two bands, prefer the lower visible estimate, e.g. 5.5-6.0 should be handled as 5.5.
+Target uplift: weak or medium answers should receive a natural Band 7.0+ training target answer; strong answers around 7.0-7.5 should receive Band 8-9 examiner-friendly refinement. Do not inflate the current estimate to match the target, and do not make upgraded answers over-formal or essay-like.
 Preserve the learner's idea where possible. Do not fabricate excessive personal details. Do not return "nothing to improve" unless the answer is genuinely excellent; even then, provide a concise refinement.
 Never put debug, fallback, parser, validation, provider_safety, or retry-panel messages into learning fields.
 
@@ -243,8 +244,8 @@ Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 ${speakingPromptCalibration}
 Avoid endless sentence-level nitpicking. If the answer is already strong, return an empty fatalErrors array and use naturalnessHints or band9Refinements for concise examiner-friendly refinement.
-Feedback must be target-uplift training feedback. Keep the current estimate defensible, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim above the current output level.
-If the learner is weak, produce a clean, natural target answer around Band 6.5-7.0 for that part, not merely a minimal correction. If the learner is already strong, provide examiner-friendly Band 8-9 refinements rather than saying there is nothing to improve.
+Feedback must be target-uplift training feedback. Keep the current estimate defensible and conservative, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim at least Band 7.0.
+If the learner is weak or medium, produce a clean, natural Band 7.0+ target answer for that part, not merely a minimal correction. If the learner is already strong, provide examiner-friendly Band 8-9 refinements rather than saying there is nothing to improve.
 Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
 If the transcript is extremely short, nonsensical, or too thin for the part, do not write a long upgradedAnswer. Return an insufficient-sample message with a short starter outline instead. Be stricter for Part 2 and Part 3 than Part 1.
 Use fatalErrors only for true mistakes. Use band9Refinements for high-level examiner-friendly refinements, especially when fatalErrors is empty or short.

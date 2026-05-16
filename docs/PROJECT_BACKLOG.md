@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-15_
+_Last updated: 2026-05-16_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -153,7 +153,12 @@ _Last updated: 2026-05-15_
   - Part 3 uses natural spoken discussion logic rather than essay-style paragraphs.
   - Export is now a minimal review card, not a Start Here / Mission / Ready checklist manual.
 - Still pending:
-  - Part 1 topic-thread practice: one topic, 3-4 same-topic examiner-style questions, one connected mini-conversation, and final topic-level analysis. Current slice only keeps prompts/export compact so this future design is not blocked.
+  - Future Speaking interaction model:
+    - Part 1 Topic Thread Practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, and one topic-level analysis. Focus: short natural answers, personal details, consistency, not memorized long answers.
+    - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, and one analysis. Focus: story spine, detail, timing, and sustained fluency.
+    - Part 3 Discussion Thread Practice: one abstract topic cluster, 3-4 related follow-up questions, and one discussion-level analysis. Focus: position, reasoning, contrast, examples, consequences, and spoken discussion logic, not Writing Task 2 spoken aloud.
+    - Full Speaking Mock later: Part 1 topic thread + Part 2 long turn + Part 3 discussion thread.
+    - This is roadmap-only; no thread UI/session flow is implemented yet.
   - richer repeated-attempt comparison views
   - more advanced speaking structure coaching beyond the current prompt/schema layer
   - broader transcript-based naturalness upgrades

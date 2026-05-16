@@ -33,19 +33,25 @@ export class MockProvider implements AIProvider {
     transcript: string;
   }): Promise<SpeakingFeedback> {
     await new Promise(r => setTimeout(r, 1500));
+    const transcriptWords = params.transcript.trim().split(/\s+/).filter(Boolean).length;
+    const conservativeEstimate = params.part === 3
+      ? 5.5
+      : transcriptWords < 20
+        ? 5.0
+        : 6.0;
     return {
       mode: 'practice',
       module: 'speaking',
       part: params.part as any,
       question: params.question,
       transcript: params.transcript,
-      bandEstimateExcludingPronunciation: 6.5,
+      bandEstimateExcludingPronunciation: conservativeEstimate,
       scores: {
-        fluencyCoherence: 6.5,
-        lexicalResource: 7.0,
-        grammaticalRangeAccuracy: 6.0,
+        fluencyCoherence: conservativeEstimate,
+        lexicalResource: Math.min(conservativeEstimate + 0.5, 7.0),
+        grammaticalRangeAccuracy: conservativeEstimate,
         pronunciation: null,
-        pronunciationNote: 'Not formally assessed in V1.',
+        pronunciationNote: 'Not formally assessed in V1; this is a single-question training estimate only.',
       },
       fatalErrors: [
         {
@@ -67,7 +73,7 @@ export class MockProvider implements AIProvider {
         {
           observation: 'The answer is clear, but it could sound more spontaneous.',
           refinement: 'Add one short personal detail instead of making the answer more formal.',
-          explanationZh: '高分口语不只是更复杂，也要像真实交流。Part 1 尤其适合简短、自然、带一点个人细节的回答。',
+          explanationZh: 'Band 7.0+ 口语不只是更复杂，也要像真实交流。Part 1 尤其适合简短、自然、带一点个人细节的回答。',
         },
       ],
       preservedStyle: [

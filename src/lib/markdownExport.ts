@@ -181,7 +181,8 @@ const phraseChunk = (value?: string, maxWords = 7) => {
 };
 
 const INCOMPLETE_PHRASE_ENDINGS = /\b(?:to|with|and|or|because|so|so i|when|where|that|which|of|for|in|on|at|by|from|the|a|an)$/i;
-const META_INSTRUCTION_PATTERN = /^(?:add|include|mention|explain|describe|use|integrate|avoid|try to|make sure|expand|replace|rewrite|give)\b/i;
+const META_INSTRUCTION_PATTERN = /^(?:add|include|mention|explain|describe|use|integrate|avoid|try to|make sure|expand|replace|rewrite|give|remove|rephrase|correct|fix)\b/i;
+const UNCLEAR_REUSABLE_PHRASE_PATTERN = /^(?:wherever possible|increasingly|very|really|actually|basically|generally|overall|more|better|good|bad)$/i;
 
 const cleanReusablePhrase = (value?: string, maxWords = 8) => {
   const cleaned = cleanLearningText(value)
@@ -191,10 +192,12 @@ const cleanReusablePhrase = (value?: string, maxWords = 8) => {
     .trim()
     .replace(/[.!?]+$/g, '');
   if (!cleaned) return '';
+  if (/^\[[^\]]+\]$/.test(cleaned) || /[\u4e00-\u9fff]/.test(cleaned)) return '';
   const words = cleaned.split(/\s+/).filter(Boolean);
   if (words.length > maxWords) return '';
-  if (/[,;:]/.test(cleaned)) return '';
+  if (/[,;:/]/.test(cleaned)) return '';
   if (META_INSTRUCTION_PATTERN.test(cleaned)) return '';
+  if (UNCLEAR_REUSABLE_PHRASE_PATTERN.test(cleaned)) return '';
   if (INCOMPLETE_PHRASE_ENDINGS.test(cleaned)) return '';
   if (/\b(?:specific genre|specific detail|personal reason|instruction|answer path)\b/i.test(cleaned)) return '';
   return cleaned;
@@ -430,47 +433,116 @@ const reviewCardRequirements = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdo
 };
 
 const reviewCardRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
-  if (isSpeakingInsufficient(feedback)) {
-    return [{
+  const labelIssueType = (type?: string, sourceText = '') => {
+    const normalized = `${type || ''} ${sourceText}`.toLowerCase().replace(/[_-]+/g, ' ');
+    if (/spelling|word form|typo/.test(normalized)) return '拼写';
+    if (/lexical|vocabulary|word choice|collocation/.test(normalized)) return '词汇';
+    if (/noun agreement|plural|countable noun|count noun|singular/.test(normalized)) return '单复数 / 可数名词';
+    if (/tense|grammatical tense|present perfect|past tense/.test(normalized)) return '时态';
+    if (/awkward|phrasing|clarity|naturalness|wording/.test(normalized)) return '表达不自然';
+    if (/grammar|grammatical|subject verb|article|preposition/.test(normalized)) return '语法';
+    if (/discourse marker|opening phrase|cohesion|transition|connector/.test(normalized)) return '开头 / 衔接';
+    if (/filler|hesitation|you know|um|uh|like/.test(normalized)) return '填充词';
+    if (/reason|effect|impact|consequence|develop|logic|explain|why|so what|展开|逻辑|影响|原因/.test(normalized)) return '展开 / 逻辑';
+    if (/high band|高分|refinement|band9/.test(normalized)) return '高分打磨';
+    if (/insufficient|sample|short/.test(normalized)) return '展开';
+    return '表达';
+  };
+
+  const conciseIssueNote = (type: string, item: { original: string; correction: string; explanationZh?: string }) => {
+    const source = `${item.original} ${item.correction}`.toLowerCase();
+    const firstSentence = (item.explanationZh || '').replace(/\s+/g, ' ').trim().match(/[^。！？.!?]+[。！？.!?]?/)?.[0]?.trim() || '';
+    if (/回答展开不足/.test(item.original) && firstSentence) return firstSentence;
+    if (/拼写/.test(type)) return '关键词拼写错误会影响理解。';
+    if (/可数名词|单复数/.test(type)) return '可数名词要和数量词、单复数形式保持一致。';
+    if (/时态/.test(type)) return '描述近年变化或持续影响时要选对时态。';
+    if (/表达不自然/.test(type)) return '这个说法能理解，但不够像自然口语。';
+    if (/词汇/.test(type)) return '换成更准确的搭配后意思更清楚。';
+    if (/填充词/.test(type)) return '重复填充词会削弱流利度和连贯性。';
+    if (/开头|衔接/.test(type)) return '开头和衔接要帮助考官马上听清逻辑。';
+    if (/语法/.test(type)) return '基础语法错误会影响句子清晰度。';
+    if (/高分打磨/.test(type)) return '这不是硬错误，但可以让答案更像高分口语。';
+    if (/展开|逻辑/.test(type) || /why|so what|consequence|effect|reason/.test(source)) {
+      return 'Part 3 需要说明原因或影响，而不是只列变化。';
+    }
+    return firstSentence && !BLOCKED_LEARNING_CONTENT.test(firstSentence)
+      ? firstSentence.replace(/[.!?]$/, '。')
+      : '下次优先把这个点说得更清楚。';
+  };
+
+  const part3NeedsMacroReasoningRow = () => {
+    if (feedback.part !== 3) return false;
+    const text = `${feedback.question} ${feedback.transcript} ${feedback.upgradedAnswer}`.toLowerCase();
+    const hasContent = countWords(feedback.transcript) >= 25;
+    const hasChangeList = /change|changed|become|became|now|before|city|cities|urban|transport|apartment|park|green/.test(text);
+    const alreadyCovered = [...feedback.fatalErrors, ...feedback.naturalnessHints]
+      .some(item => {
+        const replacement = 'correction' in item ? item.correction : item.better;
+        return /reason|effect|impact|consequence|develop|logic|why|so what|展开|逻辑|影响|原因/.test(`${item.tag} ${item.original} ${replacement} ${item.explanationZh}`.toLowerCase());
+      });
+    return hasContent && hasChangeList && !alreadyCovered;
+  };
+
+  const insufficientRows = isSpeakingInsufficient(feedback)
+    && !feedback.fatalErrors.some(item => item.tag === 'insufficient_sample')
+    ? [{
+      priority: 0,
       original: '回答展开不足',
       correction: feedback.part === 1 ? '补 direct answer + detail + reason' : '先说完整路线，再补细节和影响',
       type: '展开',
-    }];
-  }
+      explanationZh: feedback.part === 1 ? 'Part 1 至少要有直接回答和一个真实细节。' : '当前样本不足，先把答案说完整再看语言细节。',
+    }]
+    : [];
 
   const rows = [
+    ...insufficientRows,
     ...feedback.fatalErrors.map(item => ({
       priority: 1,
       original: item.original,
       correction: item.correction,
       type: item.tag || '错误',
+      explanationZh: item.explanationZh,
     })),
     ...feedback.naturalnessHints.map(item => ({
       priority: 2,
       original: item.original,
       correction: item.better,
       type: item.tag || '自然度',
+      explanationZh: item.explanationZh,
     })),
     ...feedback.band9Refinements.map(item => ({
       priority: 3,
       original: item.observation,
       correction: item.refinement,
       type: '高分打磨',
+      explanationZh: item.explanationZh,
     })),
+    ...(part3NeedsMacroReasoningRow() ? [{
+      priority: 2,
+      original: '原因和影响展开不足',
+      correction: '每个变化后补一句 why / so what',
+      type: '展开',
+      explanationZh: 'Part 3 需要说明变化背后的原因或影响，而不是只列变化。',
+    }] : []),
   ]
     .map(item => ({
       ...item,
       original: escapeTableCell(item.original),
       correction: escapeTableCell(item.correction),
-      type: escapeTableCell(item.type),
+      type: escapeTableCell(labelIssueType(item.type, `${item.original} ${item.correction} ${item.explanationZh || ''}`)),
     }))
-    .filter(item => item.original && item.correction && item.type)
+    .map(item => ({
+      ...item,
+      note: escapeTableCell(conciseIssueNote(item.type, item)),
+    }))
+    .filter(item => item.original && item.correction && item.type && item.note)
     .sort((a, b) => a.priority - b.priority);
 
   return rows.length ? rows : [{
     original: '回答可以更具体',
     correction: feedback.part === 1 ? '补一个真实个人细节' : feedback.part === 2 ? '补具体场景和感受变化' : '补 cause / example / so what',
     type: '展开',
+    note: feedback.part === 3 ? 'Part 3 需要把观点后的原因、例子或影响说出来。' : '具体细节能让答案更真实、更容易展开。',
   }];
 };
 
@@ -512,24 +584,48 @@ const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkd
 };
 
 const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const targetLabel = feedback.bandEstimateExcludingPronunciation >= 7
+    ? '目标训练方向：Band 8–9 examiner-friendly refinement。'
+    : '目标训练方向：Band 7.0+，保持自然口语，不写成作文。';
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) {
-    return `${starterTargetAnswer(feedback)}\n\n请把方括号里的内容替换成你的真实细节。`;
+    return `${targetLabel}\n\n${starterTargetAnswer(feedback)}\n\n请把方括号里的内容替换成你的真实细节。`;
   }
   if (isSpeakingInsufficient(feedback)) {
     return '当前录音/转写不足以生成可靠目标答案。请先重录一个可理解的完整答案。';
   }
-  return cleanLearningText(feedback.upgradedAnswer) || '请先重录一个完整答案。';
+  return `${targetLabel}\n\n${cleanLearningText(feedback.upgradedAnswer) || '请先重录一个完整答案。'}`;
 };
 
 const speakingExpressionMeaning = (expression: string) => {
   const normalized = expression.toLowerCase();
+  if (normalized === 'urban expansion') return '城市扩张';
   if (normalized === 'residential districts') return '住宅区';
   if (normalized === 'green spaces') return '城市绿地';
   if (normalized === 'public transport has improved') return '公共交通改善';
+  if (normalized === 'cities are increasingly investing in green spaces') return '城市越来越重视绿地建设';
   if (normalized === 'more efficient and liveable') return '更高效、更宜居';
+  if (normalized === 'more liveable') return '更宜居';
   if (normalized === 'my day feels balanced') return '一天的节奏很平衡';
   if (normalized === 'work-life balance') return '工作与生活平衡';
   return '';
+};
+
+const topicExpressionCandidates = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const source = `${feedback.question} ${feedback.transcript} ${feedback.upgradedAnswer}`.toLowerCase();
+  const candidates: string[] = [];
+  if (/urban|city|cities|rural|residential|transport|green spaces|liveable/.test(source)) {
+    candidates.push(
+      'urban expansion',
+      'residential districts',
+      'green spaces',
+      'public transport has improved',
+      'more liveable',
+    );
+  }
+  if (/balance|routine|work|study|relax|productive/.test(source)) {
+    candidates.push('my day feels balanced', 'work-life balance');
+  }
+  return candidates;
 };
 
 const reviewCardExpressions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
@@ -537,6 +633,7 @@ const reviewCardExpressions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdow
     ...feedback.naturalnessHints.map(item => cleanReusablePhrase(item.better)),
     ...feedback.band9Refinements.map(item => cleanReusablePhrase(item.refinement)),
     feedback.reusableExample && cleanReusablePhrase(feedback.reusableExample.example),
+    ...topicExpressionCandidates(feedback).map(item => cleanReusablePhrase(item)),
   ])).slice(0, 5);
   return expressions.length
     ? expressions.map(item => {
@@ -553,8 +650,9 @@ export const buildSpeakingTrainingMarkdown = (
   const shortQuestion = limitWords(feedback.question, 9);
   const path = reviewCardAnswerPath(feedback).map(cleanLearningText).filter(Boolean);
   const rows = reviewCardRows(feedback)
-    .map(item => `| ${item.original} | ${item.correction} | ${item.type} |`)
+    .map(item => `| ${item.original} | ${item.correction} | ${item.type} | ${item.note} |`)
     .join('\n');
+  const estimateLine = `- 当前单题训练估计：${formatBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右，不含发音；样本短或证据有限时按保守值处理。`;
   const transferTitle = feedback.part === 1
     ? '## 6. 可能追问｜Possible follow-ups'
     : '## 6. 可迁移题目';
@@ -565,14 +663,15 @@ export const buildSpeakingTrainingMarkdown = (
   return `# IELTS Speaking Part ${feedback.part}｜${shortQuestion}
 
 ## 1. 本题要求
+${estimateLine}
 ${reviewCardRequirements(feedback).map(item => `- ${item}`).join('\n')}${fillerNote}
 
 ## 2. 回答路线
 ${path.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 
 ## 3. 问题清单
-| 原表达 | 修改 | 类型 |
-|---|---|---|
+| 原表达 | 修改 | 类型 | 说明 |
+|---|---|---|---|
 ${rows}
 
 ${reviewCardTargetHeading(feedback)}
