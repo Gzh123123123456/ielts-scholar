@@ -1,5 +1,18 @@
 # Decision Log
 
+## [2026-05-17] Lightweight Question Bank Pickers
+- **Decision**: Add question-bank browsing as modal selection inside the existing practice flows, not as a separate browse page.
+- **Implemented**:
+  - Speaking practice removed the visible **Read Prompt** button and replaced it with **Browse Bank**.
+  - Speaking bank browsing is current-Part only: Part 1, Part 2, and Part 3 each open only their own questions.
+  - Writing landing cards now show data-derived bank counts and **Browse Bank** modals for Task 1 and Task 2.
+  - Selecting a Writing prompt routes via local route state (`selectedWritingTask1PromptId` / `selectedWritingTask2QuestionId`) and starts a fresh attempt with previous draft/feedback cleared.
+  - Question counts and filter chips are derived from bank data fields such as topic, topicCategory, taskType, type, and tags.
+  - Practice counts include only stable records where `status === 'analyzed'` and feedback exists.
+  - Drafts, empty scratchpad attempts, and `provider_failed` records do not count as practiced.
+- **Explicitly unchanged**: no separate question-bank page, no search, no favorites/bookmarks, no mastery status, no wrong-question notebook, no Part 1 topic-thread practice, no Part 3 discussion-thread practice, no session-level Speaking analysis/export, no provider routing changes, no scoring changes, no AI feedback prompt changes.
+- **Data note**: Future bank updates should keep stable `id` values and populate topic/type/category/tags metadata so filters, counts, and practice-count matching remain accurate.
+
 ## [2026-05-14] Writing Task 2 Phase 3 Annotation and Score Transparency
 - **Decision**: Treat visible Writing Task 2 scores as conservative training estimates with compact provenance, not official IELTS scoring.
 - **Implemented**:

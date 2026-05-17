@@ -1,6 +1,6 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-05-17_
 
 ## Repo
 
@@ -24,6 +24,14 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Recent Events
 
+- **2026-05-17**: Codex added lightweight question-bank picker modals for Speaking and Writing.
+  - Speaking practice removed the visible **Read Prompt** button and replaced it with **Browse Bank**.
+  - Speaking bank browsing is current-Part only; there are no cross-Part tabs or cross-Part selection.
+  - Writing landing cards now show bank counts and **Browse Bank** modals for Task 1 and Task 2.
+  - Question counts and filter chips are computed from bank data, not hardcoded.
+  - Practice counts use only stable records with `status === 'analyzed'` and feedback present. Drafts, empty scratchpad attempts, and `provider_failed` records do not count as practiced.
+  - No separate question-bank page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, or Part 3 discussion-thread practice was implemented.
+  - Future bank updates should keep stable `id`, topic/type/category fields, and tags populated so filters and practice-count matching remain accurate.
 - **2026-05-13**: Speaking note standard finalized and handed off.
   - `docs/IELTS_SPEAKING_NOTE_STANDARD.md` is the final unified standard. Do not create new versions.
   - Standard adapts by session size: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).

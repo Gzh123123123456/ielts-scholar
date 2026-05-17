@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -1174,6 +1175,8 @@ const Task2PhaseTabs = ({
 
 export default function WritingTask2Practice() {
   const { addDebugLog, saveSession, setProviderDiagnostic } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [question, setQuestion] = useState<WritingQuestion | null>(null);
   const [phase, setPhase] = useState<'framework' | 'writing' | 'results'>('framework');
   const [frameworkChat, setFrameworkChat] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
@@ -1208,6 +1211,16 @@ export default function WritingTask2Practice() {
   const isRestoringRecordRef = useRef(false);
 
   useEffect(() => {
+    const selectedWritingTask2QuestionId = (location.state as { selectedWritingTask2QuestionId?: string } | null)?.selectedWritingTask2QuestionId;
+    if (selectedWritingTask2QuestionId) {
+      const selected = writingTask2.find(item => item.id === selectedWritingTask2QuestionId);
+      if (selected) {
+        loadSelectedQuestion(selected);
+        addDebugLog(`Loaded selected writing bank question: ${selected.id}`);
+      }
+      navigate('/writing/task2/practice', { replace: true, state: null });
+      return;
+    }
     const active = getActiveWritingTask2();
     if (active) {
       restoreWritingAttempt(active);
@@ -1354,6 +1367,7 @@ export default function WritingTask2Practice() {
     setFeedbackFallbackUsed(false);
     setFeedbackDiagnostic(null);
     setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
+    setFrameworkInput('');
     setFrameworkReadiness('not_ready');
     setLatestFrameworkCoach(null);
     setFinalFrameworkSummary('');
@@ -1363,6 +1377,30 @@ export default function WritingTask2Practice() {
     setApiStatusMessage('');
     setRestoreMessage('');
     addDebugLog(`Loaded writing question: ${random.id}`);
+  };
+
+  const loadSelectedQuestion = (selected: WritingQuestion) => {
+    cancelActiveAnalysis();
+    activeAttemptIdRef.current = createRecordId('wt2');
+    restoredRecordRef.current = null;
+    setQuestion(selected);
+    setPhase('framework');
+    setEssay('');
+    setFeedback(null);
+    setAnalyzedEssaySnapshot('');
+    setFeedbackFallbackUsed(false);
+    setFeedbackDiagnostic(null);
+    setFrameworkChat([{ role: 'ai', text: "First, define your position and two main arguments regarding this prompt. You may explain them in Chinese or English." }]);
+    setFrameworkInput('');
+    setFrameworkReadiness('not_ready');
+    setLatestFrameworkCoach(null);
+    setFinalFrameworkSummary('');
+    setFrameworkSummaryGenerated(false);
+    setFrameworkExtractMessage('');
+    setProviderErrorMessage('');
+    setApiStatusMessage('');
+    setRestoreMessage('');
+    setProviderDiagnostic(null);
   };
 
   const practiceSameQuestionAgain = () => {

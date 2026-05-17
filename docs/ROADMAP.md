@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-13 (daily closeout)_
+_Last updated: 2026-05-17_
 
 ## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -70,9 +70,15 @@ _Last updated: 2026-05-13 (daily closeout)_
 ### Speaking Seasonal Question Bank (Data Scaffolding)
 - **Done 2026-05-12 (scaffolding pass)**: Created `src/data/speaking/` with type definitions, 2026 May-August bank data, V1 re-export, and index with priority helpers.
 - **Done 2026-05-12 (completeness pass)**: Evergreen Part 1 (5 topics) and mainland reused Part 2&3 (26 topics) completed with full source questions from extracted markdown. New May topics remain partial only where the source explicitly marks them as 待补充.
-- Data files are scaffolding only; runtime selection integration is deferred to a later Codex/product implementation step.
+- **Done 2026-05-17**: lightweight bank picker modals are connected to the existing practice flow.
+  - Speaking **Browse Bank** replaces **Read Prompt** and browses only the current Speaking Part.
+  - Writing Task 1 and Task 2 bank modals open from the Writing landing cards and route selected prompts into practice pages.
+  - Counts and filter chips are data-derived; practice status counts only analyzed records with feedback.
+  - Drafts, empty scratchpad attempts, and provider-failed records do not count as practiced.
+- Seasonal data files remain prepared for deeper runtime priority integration; current picker uses the bank arrays already connected to practice pages.
 - Non-mainland topics are stored as optional data and should not be default-priority for mainland practice.
-- Speaking seasonal bank runtime integration remains pending, but the immediate next planned product task after the 2026-05-13 Writing Task 2 closeout is Annotated Essay interaction / My Essay annotation.
+- Full browse page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, and Part 3 discussion-thread practice are still future scope.
+- Future bank updates should preserve stable IDs plus topic/type/category and tags so filters, counts, and practice-count matching stay accurate.
 
 ## V1.2 - Writing Task 1 Academic Basic Practice
 - Add a minimal Academic Task 1 practice page.

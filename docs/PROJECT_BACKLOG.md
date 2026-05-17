@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-05-17_
 
 ## P0 — Provider Safety + API Readiness
 
@@ -83,12 +83,20 @@ _Last updated: 2026-05-14_
   - Speaking Part 2: 12 cue cards.
   - Speaking Part 3: 37 follow-up discussion questions.
   - Writing Task 2: 22 prompts across common IELTS Task 2 types.
+- **Done 2026-05-17**: lightweight bank browsing and direct selection:
+  - Speaking **Browse Bank** replaces the visible **Read Prompt** control in practice.
+  - Speaking bank modal is current-Part only for Part 1, Part 2, or Part 3.
+  - Writing landing cards expose **Browse Bank** modals for Task 1 and Task 2.
+  - Counts and filter chips are derived from bank arrays and prompt metadata.
+  - Practice counts include only analyzed records with feedback; drafts, empty scratchpads, and provider-failed attempts do not count as practiced.
+  - Full browse page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, and Part 3 discussion-thread practice remain unimplemented.
 - **Done minimal V1.1**: static preparation topic metadata supports Progress topic coverage:
   - Speaking: 12 preparation categories.
   - Writing Task 2: 12 preparation categories.
 - Still pending:
   - larger curated prompt bank
   - richer topic taxonomy and difficulty metadata
+  - future bank data should keep stable `id`, topic/type/category, and `tags` fields populated for modal filters and practice-count matching
   - stronger scoring calibration with real provider data and larger local attempt samples
   - official-source review, source-quality review, and deduplication
   - optional AI tagging later, clearly separated from static prep taxonomy and never treated as official syllabus coverage

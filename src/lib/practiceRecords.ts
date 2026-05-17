@@ -511,10 +511,12 @@ export const getPracticeRecords = (limit = 12): PracticeRecord[] =>
   readJsonArray(RECORDS_KEY)
     .map(sanitizePracticeRecord)
     .filter((record): record is PracticeRecord => Boolean(record))
+    .filter(record => record.status !== 'draft')
     .sort((a, b) => sortTimestamp(b).localeCompare(sortTimestamp(a)))
     .slice(0, limit);
 
 export const upsertPracticeRecord = (record: PracticeRecord) => {
+  if (record.status === 'draft') return;
   const rawRecords = readJsonArray(RECORDS_KEY);
   const validRecords = rawRecords
     .map(sanitizePracticeRecord)

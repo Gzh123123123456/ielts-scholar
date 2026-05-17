@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FileDown } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -194,21 +195,30 @@ ${feedback.improvedReport || feedback.modelExcerpt || 'No improved report return
 
 export default function WritingTask1Placeholder() {
   const { setProviderDiagnostic } = useApp();
-  const activeRecord = useMemo(() => getActiveWritingTask1(), []);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const selectedWritingTask1PromptId = (location.state as { selectedWritingTask1PromptId?: string } | null)?.selectedWritingTask1PromptId;
+  const selectedPrompt = selectedWritingTask1PromptId
+    ? writingTask1Academic.find(item => item.id === selectedWritingTask1PromptId)
+    : undefined;
+  const activeRecord = useMemo(
+    () => selectedPrompt ? null : getActiveWritingTask1(),
+    [selectedPrompt],
+  );
   const initialActiveRecordRef = useRef(activeRecord);
   const isInitialRestoreRef = useRef(Boolean(activeRecord));
-  const initialPrompt = writingTask1Academic.find(prompt => prompt.id === activeRecord?.questionId) || writingTask1Academic[0];
+  const initialPrompt = selectedPrompt || writingTask1Academic.find(prompt => prompt.id === activeRecord?.questionId) || writingTask1Academic[0];
 
-  const [recordId, setRecordId] = useState(activeRecord?.id || createRecordId('writing_task1'));
-  const [createdAt, setCreatedAt] = useState(activeRecord?.createdAt || new Date().toISOString());
+  const [recordId, setRecordId] = useState(selectedPrompt ? createRecordId('writing_task1') : activeRecord?.id || createRecordId('writing_task1'));
+  const [createdAt, setCreatedAt] = useState(selectedPrompt ? new Date().toISOString() : activeRecord?.createdAt || new Date().toISOString());
   const [prompt, setPrompt] = useState<WritingTask1AcademicPrompt>(initialPrompt);
-  const [quickPlan, setQuickPlan] = useState<WritingTask1QuickPlan>(activeRecord?.quickPlan || emptyPlan);
-  const [report, setReport] = useState(activeRecord?.report || '');
-  const [feedback, setFeedback] = useState<WritingTask1Feedback | undefined>(activeRecord?.feedback);
+  const [quickPlan, setQuickPlan] = useState<WritingTask1QuickPlan>(selectedPrompt ? emptyPlan : activeRecord?.quickPlan || emptyPlan);
+  const [report, setReport] = useState(selectedPrompt ? '' : activeRecord?.report || '');
+  const [feedback, setFeedback] = useState<WritingTask1Feedback | undefined>(selectedPrompt ? undefined : activeRecord?.feedback);
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [providerErrorMessage, setProviderErrorMessage] = useState(
-    activeRecord?.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your report is preserved.' : '',
+    !selectedPrompt && activeRecord?.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your report is preserved.' : '',
   );
   const [apiStatusMessage, setApiStatusMessage] = useState('');
 
@@ -254,13 +264,21 @@ export default function WritingTask1Placeholder() {
   };
 
   useEffect(() => {
+    if (selectedWritingTask1PromptId) {
+      navigate('/writing/task1', { replace: true, state: null });
+    }
+  }, []);
+
+  useEffect(() => {
     if (isInitialRestoreRef.current) {
       isInitialRestoreRef.current = false;
       return;
     }
     const record = buildRecord();
     saveActiveWritingTask1(record);
-    upsertPracticeRecord(record);
+    if (record.status !== 'draft') {
+      upsertPracticeRecord(record);
+    }
   }, [recordId, createdAt, prompt, quickPlan, report, feedback, providerErrorMessage]);
 
   const updatePlan = (field: keyof WritingTask1QuickPlan, value: string) => {

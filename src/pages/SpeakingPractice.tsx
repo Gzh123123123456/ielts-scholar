@@ -3,6 +3,7 @@ import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
+import { QuestionBankItem, QuestionBankModal } from '@/src/components/practice/QuestionBankModal';
 import { useApp } from '@/src/context/AppContext';
 import { getAIProviderName, routedAnalyzeSpeaking } from '@/src/lib/ai';
 import { formatBandEstimate } from '@/src/lib/bands';
@@ -17,7 +18,7 @@ import {
   summarizeDiagnostic,
   upsertPracticeRecord,
 } from '@/src/lib/practiceRecords';
-import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Volume2, Info } from 'lucide-react';
+import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Info, BookOpen } from 'lucide-react';
 
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
@@ -83,7 +84,7 @@ export default function SpeakingPractice() {
   const [timer, setTimer] = useState(0);
   const [feedback, setFeedback] = useState<SpeakingFeedback | null>(null);
   const [, setFeedbackFallbackUsed] = useState(false);
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [isBankOpen, setIsBankOpen] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
   const [apiStatusMessage, setApiStatusMessage] = useState('');
@@ -165,7 +166,9 @@ export default function SpeakingPractice() {
       updatedAt: new Date().toISOString(),
     };
     saveActiveSpeakingSession(activeSessionRef.current);
-    upsertPracticeRecord(record);
+    if (record.status !== 'draft') {
+      upsertPracticeRecord(record);
+    }
   };
 
   const restoreSpeakingRecord = (record: SpeakingPracticeRecord, message = '') => {
@@ -298,26 +301,48 @@ export default function SpeakingPractice() {
     addDebugLog('Started a fresh attempt for the same speaking question.');
   };
 
-
-  const readQuestion = () => {
-    if (!question) return;
-    if (!window.speechSynthesis) {
-      addDebugLog('SpeechSynthesis not available');
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance(
-      question.cueCard ? question.question + '. ' + question.cueCard : question.question
-    );
-    utterance.lang = 'en-US';
-    utterance.rate = 0.9;
-    setIsSynthesizing(true);
-    utterance.onend = () => setIsSynthesizing(false);
-    utterance.onerror = () => {
-      setIsSynthesizing(false);
-      addDebugLog('SpeechSynthesis error');
+  const clearActiveSpeakingAttemptForCurrentPart = () => {
+    if (!activeSessionRef.current) return;
+    activeSessionRef.current = {
+      ...activeSessionRef.current,
+      currentPart: part,
+      attemptsByPart: {
+        ...activeSessionRef.current.attemptsByPart,
+        [part]: undefined,
+      },
+      updatedAt: new Date().toISOString(),
     };
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    saveActiveSpeakingSession(activeSessionRef.current);
+  };
+
+  const selectBankQuestion = (selected: SpeakingQuestion) => {
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) { /* already stopped */ }
+      recognitionRef.current = null;
+    }
+    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
+    clearActiveSpeakingAttemptForCurrentPart();
+    activeAttemptIdRef.current = createRecordId('sp');
+    setQuestion(selected);
+    setStep('idle');
+    setTranscript('');
+    setFeedback(null);
+    setFeedbackFallbackUsed(false);
+    setProviderDiagnostic(null);
+    setTimer(0);
+    setIsRecording(false);
+    setStatusMessage('Ready');
+    setProviderErrorMessage('');
+    setApiStatusMessage('');
+    setRestoreMessage('');
+    transcriptOriginRef.current = 'manual';
+    setIsBankOpen(false);
+    addDebugLog(`Selected speaking bank question: ${selected.id}`);
   };
 
   const startRecording = async () => {
@@ -570,10 +595,34 @@ export default function SpeakingPractice() {
   const isMock = getAIProviderName() !== 'gemini';
   const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
   const developmentPlan = answerDevelopmentPlan(part, question?.question);
+  const speakingBankCounts = {
+    1: speakingPart1.length,
+    2: speakingPart2.length,
+    3: speakingPart3.length,
+  };
+  const speakingBankItems: QuestionBankItem[] = getBank(part).map(item => ({
+    id: item.id,
+    title: item.question,
+    metadata: item.topic,
+    tags: item.tags || [item.topicCategory, item.topic].filter((value): value is string => Boolean(value)),
+    questionText: item.question,
+    module: 'speaking',
+    part,
+  }));
 
   return (
     <PageShell size="wide">
       <TopBar />
+      <QuestionBankModal
+        isOpen={isBankOpen}
+        title={`Speaking Part ${part} Bank`}
+        items={speakingBankItems}
+        onClose={() => setIsBankOpen(false)}
+        onSelect={(item) => {
+          const selected = getBank(part).find(questionItem => questionItem.id === item.id);
+          if (selected) selectBankQuestion(selected);
+        }}
+      />
       
       <div className="flex flex-col gap-3 mb-8 sm:flex-row sm:items-center sm:justify-center">
         <div className="flex gap-3 p-1.5 bg-paper-ink/5 rounded-sm self-start sm:self-auto font-sans text-sm uppercase tracking-widest font-bold">
@@ -635,8 +684,8 @@ export default function SpeakingPractice() {
             <div className="flex flex-wrap gap-4 pt-4 border-t border-paper-ink/5">
               {step === 'idle' && (
                 <>
-                  <SerifButton onClick={readQuestion} variant="outline" disabled={isSynthesizing} className="flex items-center gap-2 group">
-                    <Volume2 className={`w-4 h-4 ${isSynthesizing ? 'animate-pulse' : ''}`} /> Read Prompt
+                  <SerifButton onClick={() => setIsBankOpen(true)} variant="outline" className="flex items-center gap-2 group">
+                    <BookOpen className="w-4 h-4" /> Browse Bank
                   </SerifButton>
                   <SerifButton onClick={changeQuestion} variant="outline" className="flex items-center gap-2">
                     <RefreshCcw className="w-4 h-4" /> Change Question
@@ -675,6 +724,9 @@ export default function SpeakingPractice() {
                 </>
               )}
             </div>
+            <p className="mt-3 text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35">
+              Part 1: {speakingBankCounts[1]} · Part 2: {speakingBankCounts[2]} · Part 3: {speakingBankCounts[3]}
+            </p>
           </PaperCard>
 
           {(step !== 'idle' && step !== 'analyzing') && (
