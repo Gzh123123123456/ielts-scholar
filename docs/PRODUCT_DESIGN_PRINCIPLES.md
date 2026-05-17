@@ -1,6 +1,6 @@
 # Product Design Principles
 
-_Last updated: 2026-05-13_
+_Last updated: 2026-05-17_
 
 This document is the long-term product design source of truth for IELTS Scholar.
 It applies to all modules, all phases, and all future implementation work.
@@ -54,6 +54,7 @@ IELTS Scholar is designed for Chinese-native IELTS learners.
 - Chinese guidance helps the learner understand safely.
 - English content is where the learner enters output / input / memorization mode.
 - Do not force all guidance into English when it harms comprehension.
+- Functional UI labels and commands should remain English-only; Chinese belongs in AI feedback, analysis, learning guidance, and explanations.
 
 ---
 
@@ -156,6 +157,8 @@ Overlay should be a lightweight but complete correction panel, not a tiny toolti
   - Do not inflate current scores to match the target layer.
   - Do not use Band 9 as the default learner-facing label.
   - Do not use intermediate Target Band 7.5 or 7.5-8.0 labels.
+  - Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
+  - Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
   - Target answers must apply feedback, idea-development advice, and retained useful learner material, not merely paraphrase the original.
 - Target Model Answer should be a full training target answer, not a short excerpt.
 - Acceptable target length is about 280-350 words.

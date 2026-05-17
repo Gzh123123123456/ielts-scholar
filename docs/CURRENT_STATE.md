@@ -1,6 +1,13 @@
-# Current State (V1.1 closing)
+# Current State (V1.3 closeout)
 
-_Last updated: 2026-05-15_
+_Last updated: 2026-05-17_
+
+## Branch / Sync State
+- Local `main` contains today's completed question-bank picker work plus the consolidated Speaking reliability / markdown / global target-policy branch.
+- Integration commit on local `main`: `f7b24f0 Consolidate completed IELTS Scholar slices`.
+- GitHub `origin/main` should be updated during closeout only after lint/build pass and `main` is confirmed not diverged.
+- `codex/speaking-reliability-uplift` has been integrated.
+- `codex/speaking-single-attempt-export` and `codex/task2-command-feedback` were inspected and kept unapplied as superseded.
 
 ## Product Baseline
 - Mock Provider remains the default provider.
@@ -21,6 +28,13 @@ _Last updated: 2026-05-15_
   - Vite/client API keys are local-personal prototype only and are not production-safe.
 - No RAG pipeline is connected.
 - V1 pronunciation is **not formally assessed**.
+- Global target policy is active:
+  - current estimates stay conservative and honest;
+  - target answers/model answers/improved reports are minimum Band 7.0+;
+  - if the current estimate is 7.0 or above, the next target is Band 8+ Examiner-Friendly;
+  - learner-facing Band 9 and Target Band 7.5 / 7.5-8.0 labels are not default target tiers;
+  - current scores must not be inflated to match target outputs;
+  - Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution, not more formal or more essay-like language by default.
 - V1.1 provider safety scaffolding is implemented:
   - Speaking and Writing provider calls route through safe analysis wrappers.
   - Malformed provider output is normalized into safe feedback objects.
@@ -35,6 +49,8 @@ _Last updated: 2026-05-15_
   - Part 2: 12 cue cards.
   - Part 3: 37 follow-up discussion questions.
 - Speaking Change Question now avoids returning the same prompt when alternatives exist and does not call AI.
+- Speaking **Browse Bank** replaces the visible **Read Prompt** button.
+- Speaking Browse Bank is current-Part only and the question card shows the current-Part bank count only.
 - Speaking users can start **Practice This Question Again** after analysis, preserving the analyzed attempt while opening a fresh attempt for the same question.
 - Provider unavailable failures are distinguished from schema/parse fallback; provider-unavailable attempts preserve the transcript and show a retry-later message instead of normal coaching.
 - Speaking feedback readability was improved with larger Part tabs, clearer Training Estimate presentation, fully visible Must Fix / Optional Polish sections, a more readable upgraded-answer layout, and larger preserved-style context.
@@ -42,7 +58,10 @@ _Last updated: 2026-05-15_
 - Speaking feedback now suppresses full target-answer transformation rendering for very short, nonsense, or insufficient-sample transcripts, including old restored records; the UI shows a concise Answer Development Plan instead without mutating saved records.
 - Speaking Practice uses the wide practice workspace consistently with Writing Task 1 / Task 2; feedback cards align to the same main container while long transformation text keeps a readable inner line length.
 - Speaking feedback now supports a distinct **Idea & Expression Upgrade** section for strong answers with few or no true errors.
-- Speaking markdown export can be locally generated when the provider returns valid core feedback but omits `obsidianMarkdown`; this is shown as a normalized field in diagnostics rather than a full feedback failure.
+- Speaking prompts are calibrated by part: Part 1 short natural answers, Part 2 single long-turn story spine, and Part 3 natural spoken abstract discussion rather than Writing Task 2 spoken aloud.
+- Speaking markdown export uses the local minimal review-card structure from `src/lib/markdownExport.ts`.
+- Malformed provider/debug strings are filtered out of learning content.
+- Incomplete provider feedback remains retryable instead of rendering as normal results.
 - `no-speech` auto-retry is implemented and preserved.
 - Retry clears current-attempt state (transcript, feedback, timer, attempt refs).
 - Stop & Review prevents recognition restart after user stop.
@@ -51,6 +70,7 @@ _Last updated: 2026-05-15_
 ## Writing Task 2 Practice (Implemented)
 - Writing Task 2 now saves active local-first drafts for Phase 1 notes, final framework, essay draft, and existing analysis result.
 - Active Writing Task 2 practice no longer shows a large Recent Attempts panel; History is the learner-facing record center and restore path.
+- Writing landing cards show bank counts, **Start Practice**, and **Browse Bank**; selected Task 2 prompts route into this practice page.
 - Provider unavailable failures preserve the draft/framework/essay and show a retry-later message instead of presenting fallback output as successful coaching.
 - Phase 1 separates:
   - Coach Discussion (process)
@@ -121,6 +141,7 @@ _Last updated: 2026-05-15_
 - Active Writing Task 1 practice links to History instead of embedding a recent-record list.
 - Task 1 reports save local-first records with module `writing_task1`, task type, topic/tags, instruction, visual brief, quick plan, report, feedback, status, and timestamps.
 - Task 1 retry/new prompt starts a new attempt without clearing unrelated saved records.
+- Writing landing cards show bank counts, **Start Practice**, and **Browse Bank**; selected Task 1 prompts route into this practice page.
 - Text-based visual briefs are the V1.2 baseline; interactive charts and richer data-accuracy mapping remain later work.
 
 ## Export Behavior (Implemented)
@@ -130,15 +151,17 @@ _Last updated: 2026-05-15_
 - Task 1 exports a downloaded `.md` file using the same pattern as other modules; if provider markdown is absent, the app generates a complete local note from structured feedback.
 - Session-level consolidated note export is not implemented yet.
 
-## Future Question Bank Entry Points (Deferred)
-- Future task: **Question bank count + browse/random/select entry points**.
-- Add low-noise question-bank status near module/practice question cards.
-- Speaking: show Part/topic question count, browse bank, random question, and later topic-filtered random.
-- Writing landing: show Task 1 / Task 2 question count, browse bank, random practice.
-- Writing Task 2 question page: show task type, question count, browse bank, random question.
-- First slice can add visible entry buttons/counts only; full browse/select modal or panel is separate.
-- Counts must be computed from question data, not hardcoded.
-- This is deferred and not implemented in the markdown/status polish slice.
+## Question Bank Picker (Implemented)
+- Lightweight picker modals are implemented inside existing practice flows.
+- Speaking **Browse Bank** is current-Part only; **Change Question** remains the random-switch action.
+- Writing module cards show bank counts, **Start Practice**, and **Browse Bank** for Task 1 and Task 2.
+- Writing Browse Bank selections route selected prompts into the proper practice page.
+- Modal backdrop is full viewport; outside clicks do not close it, X closes it, and the list is scrollable.
+- Tags, filters, and counts are derived from question data, not hardcoded.
+- Practice counts include only analyzed records with real feedback; drafts, empty drafts, and `provider_failed` records do not count as practiced.
+- New functional UI labels should remain English-only; Chinese remains for AI feedback and analysis content.
+- Full standalone question-bank page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, and Part 3 discussion-thread practice remain future work.
+- Future question-bank updates must preserve stable `id`, topic/type/category, and tags so counts, filters, route-state selection, and practice-count matching stay accurate.
 
 ## Practice History (Implemented)
 - A lightweight `/practice-history` page lists existing localStorage practice records without starting a new attempt.

@@ -24,12 +24,24 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Recent Events
 
+- **2026-05-17 closeout**: Local `main` was consolidated for daily closeout.
+  - `main` now contains the question-bank picker commits (`3df306d`, `a7b2bef`) plus `f7b24f0 Consolidate completed IELTS Scholar slices`.
+  - `codex/speaking-reliability-uplift` was integrated into `main`, including Speaking auto-restore reliability, markdown export, prompt calibration, and the global target-policy work.
+  - `codex/speaking-single-attempt-export` was inspected and marked superseded by the newer `src/lib/markdownExport.ts` architecture.
+  - `codex/task2-command-feedback` was inspected and not applied because it conflicts with the newer Band 7.0+ / Band 8+ target policy and reintroduces old Target Band 7.5 logic.
+  - Older equivalent branches were not re-merged.
+  - GitHub `origin/main` should be updated only during this closeout after lint/build pass and `main` is confirmed not diverged.
 - **2026-05-17**: Codex added lightweight question-bank picker modals for Speaking and Writing.
   - Speaking practice removed the visible **Read Prompt** button and replaced it with **Browse Bank**.
   - Speaking bank browsing is current-Part only; there are no cross-Part tabs or cross-Part selection.
-  - Writing landing cards now show bank counts and **Browse Bank** modals for Task 1 and Task 2.
+  - Change Question remains the random-switch action.
+  - Speaking question cards show the current-Part bank count only.
+  - Writing landing cards now show bank counts plus **Start Practice** and **Browse Bank** actions for Task 1 and Task 2.
+  - Writing bank selections route into the correct Task 1 / Task 2 practice page.
+  - The bank modal uses a full-viewport backdrop; outside clicks do not close it, X closes it, and the list is scrollable.
   - Question counts and filter chips are computed from bank data, not hardcoded.
   - Practice counts use only stable records with `status === 'analyzed'` and feedback present. Drafts, empty scratchpad attempts, and `provider_failed` records do not count as practiced.
+  - New functional UI labels should remain English-only; Chinese remains for AI feedback and analysis content.
   - No separate question-bank page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, or Part 3 discussion-thread practice was implemented.
   - Future bank updates should keep stable `id`, topic/type/category fields, and tags populated so filters and practice-count matching remain accurate.
 - **2026-05-16**: Global IELTS training target policy calibration completed.
@@ -86,17 +98,9 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Current Priority
 
-Current polish slice: markdown note extraction quality for Speaking/Writing exports, plus lower-noise learner-facing Writing Task 2 score/provenance status.
+Current closeout state: question-bank picker modals, picker UI polish, and completed Speaking reliability / markdown / global target-policy work are consolidated into local `main`.
 
-Do not implement question-bank browse/select UI in this slice.
-
-Future backlog item after this slice: **Question bank count + browse/random/select entry points**.
-- Add low-noise question-bank status near module/practice question cards.
-- Speaking: show Part/topic question count, browse bank, random question, and later topic-filtered random.
-- Writing landing: show Task 1 / Task 2 question count, browse bank, random practice.
-- Writing Task 2 question page: show task type, question count, browse bank, random question.
-- First slice can add visible entry buttons/counts only; full browse/select modal or panel is a separate larger UI task.
-- Counts must be computed from question data, not hardcoded.
+No new product feature is in progress. The next task should be selected from the backlog after this closeout.
 
 Global hard standard for all future feedback-loop work:
 - Current estimate is conservative.
@@ -105,11 +109,12 @@ Global hard standard for all future feedback-loop work:
 - Do not use Band 9 as a default learner-facing label.
 - Do not use Target Band 7.5 or 7.5-8.0 intermediate labels.
 - Do not inflate current score to match the target.
+- Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
 - Target outputs must apply feedback, idea-development advice, and retained useful learner material.
 - Part 1 future remains topic-thread practice.
 - Part 2 remains single long-turn practice.
 - Part 3 future remains discussion-thread practice.
-- Question-bank browse/select remains future work and is not part of this slice.
+- Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
 
 Remaining future scoring work, if needed, belongs to a larger scoring calibration task. Do not reopen scoring/provider routing unless explicitly scoped.
 

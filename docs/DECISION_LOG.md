@@ -17,10 +17,24 @@
 - **Decision**: Keep the question-bank picker lightweight but make actions and modal behavior clearer.
 - **Implemented**:
   - Speaking practice now shows only the current Part bank count near the action buttons.
-  - Writing module cards expose both **Start Practice** and **Browse Bank** actions.
-  - The bank modal is portaled to the document body with a full-viewport fixed backdrop; backdrop clicks are absorbed and do not close the modal.
+  - Change Question remains the random-switch action.
+  - Writing module cards expose bank counts plus **Start Practice** and **Browse Bank** actions.
+  - Writing bank selections route selected Task 1 / Task 2 prompts into the proper practice page.
+  - The bank modal is portaled to the document body with a full-viewport fixed backdrop; backdrop clicks are absorbed and do not close the modal, X closes it, and the list is scrollable.
   - Modal row metadata is deduplicated and kept concise.
+  - New functional UI labels should remain English-only; Chinese remains for AI feedback and analysis content.
 - **Explicitly unchanged**: no browse page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, Part 3 discussion-thread practice, provider prompt changes, scoring changes, or History architecture changes.
+
+## [2026-05-17] Daily Closeout Branch Consolidation
+- **Decision**: Consolidate completed task branches into local `main` and use GitHub as the sync point after closeout validation.
+- **Integrated**:
+  - `codex/speaking-reliability-uplift` was merged into `main`.
+  - Question-bank picker commits `3df306d` and `a7b2bef` were preserved.
+  - Integration commit: `f7b24f0 Consolidate completed IELTS Scholar slices`.
+- **Inspected but not applied**:
+  - `codex/speaking-single-attempt-export` / `783b93d` is superseded by the newer `src/lib/markdownExport.ts` architecture.
+  - `codex/task2-command-feedback` / `085e2c1` is superseded and conflicts with the newer Band 7.0+ / Band 8+ target policy by reintroducing old Target Band 7.5 logic.
+- **Explicitly unchanged**: no remote branches deleted, no force push, no history rewrite, and old equivalent branches were not re-merged.
 
 ## [2026-05-16] Global IELTS Training Target Policy
 
@@ -30,6 +44,8 @@
 - Do not use Band 9 as a default learner-facing label.
 - Do not use Target Band 7.5 or 7.5-8.0 intermediate labels.
 - Do not inflate current score to match the target output.
+- Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
+- Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
 - Target outputs must apply feedback, idea-development advice, and retained useful learner material.
 - Future Speaking flow remains: Part 1 topic-thread practice, Part 2 single long-turn practice, Part 3 discussion-thread practice.
 - Question-bank count/browse/random/select was implemented later as a lightweight modal picker; counts should remain computed from data, not hardcoded.

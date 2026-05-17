@@ -84,6 +84,8 @@ _Last updated: 2026-05-17_
 - If the current estimate is 7.0 or above, the next generated target must be Band 8+ examiner-friendly.
 - Do not use default learner-facing Band 9 wording or intermediate Target Band 7.5 / 7.5-8.0 labels.
 - Do not inflate current scores to match target answers.
+- Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
+- Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
 - Target outputs must apply corrections, idea-development advice, and retained useful learner material.
 
 ### 2.4) Prompt Bank Depth
@@ -95,9 +97,14 @@ _Last updated: 2026-05-17_
 - **Done 2026-05-17**: lightweight bank browsing and direct selection:
   - Speaking **Browse Bank** replaces the visible **Read Prompt** control in practice.
   - Speaking bank modal is current-Part only for Part 1, Part 2, or Part 3.
-  - Writing landing cards expose **Browse Bank** modals for Task 1 and Task 2.
+  - Change Question remains the random-switch action.
+  - Speaking question cards show the current-Part bank count only.
+  - Writing landing cards expose bank counts, **Start Practice**, and **Browse Bank** modals for Task 1 and Task 2.
+  - Writing bank selections load the selected Task 1 / Task 2 prompt into the proper practice route.
+  - The bank modal uses a full-viewport backdrop; outside clicks do not close it, X closes it, and the list is scrollable.
   - Counts and filter chips are derived from bank arrays and prompt metadata.
   - Practice counts include only analyzed records with feedback; drafts, empty scratchpads, and provider-failed attempts do not count as practiced.
+  - New functional UI labels should remain English-only; Chinese remains for AI feedback and analysis content.
   - Full browse page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, and Part 3 discussion-thread practice remain unimplemented.
 - **Done minimal V1.1**: static preparation topic metadata supports Progress topic coverage:
   - Speaking: 12 preparation categories.
@@ -161,6 +168,8 @@ _Last updated: 2026-05-17_
   - Part 2 uses a spoken story spine for long turns.
   - Part 3 uses natural spoken discussion logic rather than essay-style paragraphs.
   - Export is now a minimal review card, not a Start Here / Mission / Ready checklist manual.
+  - Malformed provider/debug strings are filtered out of learning content.
+  - Incomplete provider feedback remains retryable instead of rendering as normal results.
 - Still pending:
   - Future Speaking interaction model:
     - Part 1 Topic Thread Practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, and one topic-level analysis. Focus: short natural answers, personal details, consistency, not memorized long answers.
@@ -263,7 +272,7 @@ Implemented according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
 
 ## P1 Future — Speaking Note Standard & Export
 
-### Unified IELTS Speaking Note Standard *(standard finalized; product export code not yet updated)*
+### Unified IELTS Speaking Note Standard *(standard finalized; product export now follows the minimal review-card direction)*
 - **Done 2026-05-13 (final handoff)**: `docs/IELTS_SPEAKING_NOTE_STANDARD.md` finalized. Do not create new versions.
   - Single standard adapts by session size: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).
   - Part 1, Part 2, and Part 3 share one Attempt Block; only Answer Path and readiness criteria differ.
@@ -273,11 +282,18 @@ Implemented according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
   - `/ielts-session` and `/ielts-export` commands updated for final handoff.
   - Three local validation notes under `notes/ielts/speaking/final/` (Work, Accommodation, Hometown) — must not be committed/pushed.
 - **Still pending**:
-  - Update product markdown export code to follow this standard.
   - Implement session-level export aggregation.
   - Add Part 1 Conversation Thread practice to product.
   - Add Personal Material Bank / Error Pattern Bank / Filler Detox / Transfer Loop to product export gradually.
-- **Next** (after Task 2 Phase 3): Update product Speaking export to match `docs/IELTS_SPEAKING_NOTE_STANDARD.md`.
+- **Next**: extend from attempt-level review-card export toward session-level aggregation only after the interaction model is scoped.
+
+## P1 Closeout Notes - Branch Consolidation
+
+- **Done 2026-05-17**: `codex/speaking-reliability-uplift` was integrated into local `main`.
+- The question-bank picker commits (`3df306d`, `a7b2bef`) were preserved.
+- `codex/speaking-single-attempt-export` was inspected and marked superseded by the newer `src/lib/markdownExport.ts` architecture.
+- `codex/task2-command-feedback` was inspected and marked superseded because it conflicts with the newer global Band 7.0+ / Band 8+ target policy.
+- Older equivalent branches were not re-merged.
 
 ## P1 Future — Speaking Seasonal Question Bank
 

@@ -71,8 +71,10 @@ _Last updated: 2026-05-17_
 - Training targets are minimum Band 7.0+ across Speaking, Writing Task 2, and Writing Task 1.
 - If current estimate is 7.0 or above, the next generated answer/report/model targets Band 8+ examiner-friendly quality.
 - Do not use default learner-facing Band 9 labels or Target Band 7.5 / 7.5-8.0 intermediate labels.
+- Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
 - Target outputs must apply corrections, idea-development guidance, and retained useful learner material.
-- Part 1 topic-thread practice, Part 3 discussion-thread practice, and question-bank browse/select remain future work.
+- Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
+- Part 1 topic-thread practice and Part 3 discussion-thread practice remain future work.
 - Future interaction model remains pending and roadmap-only:
   - Part 1 Topic Thread Practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, and one topic-level analysis focused on short natural answers, personal details, consistency, and avoiding memorized long answers.
   - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, and one analysis focused on story spine, detail, timing, and sustained fluency.
@@ -80,21 +82,24 @@ _Last updated: 2026-05-17_
   - Full Speaking Mock later combines Part 1 topic thread, Part 2 long turn, and Part 3 discussion thread.
 - No topic-thread UI, discussion-thread UI, conversation flow, or session-level Speaking export was implemented in this slice.
 
-### Unified Speaking Note Standard *(standard finalized; product export not yet updated)*
+### Unified Speaking Note Standard *(standard finalized; product export now follows the minimal review-card direction)*
 - **Done 2026-05-13 (final handoff)**: `docs/IELTS_SPEAKING_NOTE_STANDARD.md` finalized.
 - Session density: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).
 - Part 1 includes Conversation Thread. Part 2 includes Story Spine + long-turn retry. Part 3 includes Discussion Path + nuance training.
 - `/ielts-session` and `/ielts-export` updated.
-- Future product markdown export reads this standard as its specification.
+- Product attempt-level markdown export now follows the concise review-card direction; session-level aggregation remains future work.
 
 ### Speaking Seasonal Question Bank (Data Scaffolding)
 - **Done 2026-05-12 (scaffolding pass)**: Created `src/data/speaking/` with type definitions, 2026 May-August bank data, V1 re-export, and index with priority helpers.
 - **Done 2026-05-12 (completeness pass)**: Evergreen Part 1 (5 topics) and mainland reused Part 2&3 (26 topics) completed with full source questions from extracted markdown. New May topics remain partial only where the source explicitly marks them as 待补充.
 - **Done 2026-05-17**: lightweight bank picker modals are connected to the existing practice flow.
   - Speaking **Browse Bank** replaces **Read Prompt** and browses only the current Speaking Part.
-  - Writing Task 1 and Task 2 bank modals open from the Writing landing cards and route selected prompts into practice pages.
+  - Change Question remains the random-switch action and the Speaking card shows the current-Part bank count only.
+  - Writing Task 1 and Task 2 cards show bank counts, Start Practice, and Browse Bank; bank selections route selected prompts into practice pages.
+  - The modal backdrop is full viewport; outside clicks do not close it, X closes it, and the list is scrollable.
   - Counts and filter chips are data-derived; practice status counts only analyzed records with feedback.
   - Drafts, empty scratchpad attempts, and provider-failed records do not count as practiced.
+  - New functional UI labels should remain English-only; Chinese remains for AI feedback and analysis content.
 - Seasonal data files remain prepared for deeper runtime priority integration; current picker uses the bank arrays already connected to practice pages.
 - Non-mainland topics are stored as optional data and should not be default-priority for mainland practice.
 - Full browse page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, and Part 3 discussion-thread practice are still future scope.
@@ -133,12 +138,9 @@ _Last updated: 2026-05-17_
 - Practice and Mock modes remain separate.
 
 ## V3 - Data & Visualization
-- Question bank count + browse/random/select entry points:
-  - Add low-noise question-bank status near Speaking and Writing question cards.
-  - Speaking should expose Part/topic count, browse bank, random question, and later topic-filtered random.
-  - Writing should expose Task 1 / Task 2 counts, browse bank, random practice, and Task 2 task-type/count context.
-  - First slice may add visible entry buttons/counts only; full browse/select modal or panel is separate.
-  - Counts must come from question data, not hardcoded values.
+- Full question-bank system beyond the lightweight picker:
+  - Standalone bank page, search, favorites/mastery, wrong-question notebook, richer filters, and topic-filtered practice are future work.
+  - Keep question-bank data stable: `id`, topic/type/category, and tags are required for filters, counts, route-state selection, and practice-count matching.
 - Task 1 Academic data-driven chart rendering with richer data accuracy mapping.
 - Task 1 General Training letter prompts.
 - Stronger scoring calibration using real provider data and larger local attempt samples.
