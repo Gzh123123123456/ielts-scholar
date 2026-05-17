@@ -36,6 +36,39 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "obsidianMarkdown": "string"
 }`;
 
+export const speakingPromptCalibration = `Speaking feedback must be spoken IELTS feedback, not writing-style feedback.
+Current estimate: this is a conservative single-question training estimate, excluding pronunciation. IELTS Speaking is scored across a complete test, so do not present one Part 1/2/3 answer as an official complete Speaking band. If evidence sits between two bands, prefer the lower visible estimate, e.g. 5.5-6.0 should be handled as 5.5.
+Global target policy: keep the current estimate honest and conservative. Target answers / improved answers / model answers must always move upward: if the current answer is below Band 7.0, generate a Band 7.0+ target; if the current answer is around Band 7.0 or above, generate a Band 8+ examiner-friendly upgraded answer. Do not inflate the current estimate to match the target. Do not label any learner-facing output as Band 9. Do not make Band 8+ mean more formal, more academic, or more essay-like by default; it means clearer logic, more precise language, stronger idea development, better examples, more natural flow, and examiner-friendly execution.
+Preserve the learner's usable idea where possible, but expand it into exam-ready material instead of only recording it. In preservedStyle, return idea-development material: text = learner material or short summary; reasonZh = why it is useful plus how to expand it for this part. Do not fabricate excessive personal details. Do not return "nothing to improve" unless the answer is genuinely excellent; even then, provide a concise refinement.
+Never put debug, fallback, parser, validation, provider_safety, or retry-panel messages into learning fields.
+
+Part 1 rules:
+- Warm-up conversation. Future product direction is topic-thread practice with 3-4 same-topic follow-up questions, so do not treat one Part 1 question as an essay-like final topic response.
+- upgradedAnswer should normally be 2-4 natural spoken sentences, about 15-30 seconds.
+- Band 8+ Part 1 is still short: effortless, specific, natural, and not more academic.
+- Structure: direct answer + one specific detail + light reason/feeling.
+- Do not overload advanced vocabulary or write polished paragraphs.
+- If the transcript is very short but meaningful, do not invent a full personal answer. Give starter development guidance or a bracketed starter such as: "Yes, I do. I usually read [type of books] when I want to relax. It helps me [personal reason]."
+- If you add example details not provided by the user, label them as a starter example or use brackets.
+- reusableExample.canBeReusedFor may include 1-3 likely same-topic follow-up IELTS questions.
+
+Part 2 rules:
+- Long turn, but still spoken narrative, not literary writing.
+- Target time: 1.5-2 minutes.
+- upgradedAnswer should follow a story spine: who/what/where -> specific scene -> key details -> feeling change -> why it matters.
+- Band 7.0+ Part 2 has a clear story spine, specific details, feeling, and why-it-matters. Band 8+ Part 2 is more vivid but believable, smoother, and more reflective, not literary.
+- Do not treat the cue card as a checklist. Concrete details and personal reflection matter more than fancy vocabulary.
+
+Part 3 rules:
+- Abstract discussion, but face-to-face spoken answer, not Writing Task 2 spoken aloud.
+- upgradedAnswer should normally be 4-6 spoken sentences, about 35-60 seconds.
+- Use natural spoken discussion logic: direct position -> reason/contrast/condition -> example -> consequence/wider meaning.
+- Band 7.0+ Part 3 has a clear position, reason/contrast, example, and consequence. Band 8+ Part 3 has stronger cause/effect, more nuanced contrast, better examples, and more natural spoken transitions.
+- Prefer spoken bridges such as "I'd say...", "I think...", "It really depends...", "One major change is...", and "A good example would be..."
+- Avoid writing-style connectors and essay phrases such as "Furthermore", "Moreover", "Consequently", "It is universally acknowledged that", and "In contemporary society".
+- If the original answer already has a position and example, do not give generic advice like "add an example"; identify the real issue, such as grammar, word form, pronunciation-transcript error, weak cause/effect, weak consequence, unclear comparison, or spoken clarity.
+- Before finalizing any Band 8+ upgradedAnswer, self-check whether it would still likely be judged only around Band 7. If yes, strengthen idea development, precision, organization, and naturalness without making it essay-like.`;
+
 export const writingSchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
@@ -212,12 +245,15 @@ You are an IELTS Speaking feedback engine for a local-first practice app.
 Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null and the note must say pronunciation is not formally assessed in V1.
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
-Avoid endless sentence-level nitpicking. If the answer is already strong, return an empty fatalErrors array and say no critical correction is needed through naturalnessHints or upgradedAnswer.
-Do not cap upgraded answers at Band 7; make the upgradedAnswer genuinely high-band while preserving the learner's core idea.
+${speakingPromptCalibration}
+Avoid endless sentence-level nitpicking. If the answer is already strong, return an empty fatalErrors array and use naturalnessHints or band9Refinements for concise examiner-friendly Band 8+ idea and expression upgrades.
+Feedback must be target-uplift training feedback. Keep the current estimate defensible and conservative, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim at least Band 7.0+.
+If the learner is weak or medium, produce a clean, natural Band 7.0+ target answer for that part, not merely a minimal correction. If the learner is already around Band 7.0 or above, upgradedAnswer must become a meaningfully stronger Band 8+ examiner-friendly answer rather than another ordinary Band 7 answer.
+Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
 If the transcript is extremely short, nonsensical, or too thin for the part, do not write a long upgradedAnswer. Return an insufficient-sample message with a short starter outline instead. Be stricter for Part 2 and Part 3 than Part 1.
-Use fatalErrors only for true mistakes. Use band9Refinements for high-level examiner-friendly refinements, especially when fatalErrors is empty or short.
-Band 9 refinements should cover over-formal or AI-like phrasing, unnatural spoken rhythm, overlong Part 1 answers, missed chances for concise natural development, and ways to sound more spontaneous.
-For Part 1, prefer concise natural spoken answers over long academic answers. For Part 2 and Part 3, allow more development but still check spoken delivery.
+Use fatalErrors only for true mistakes. Use band9Refinements as an internal compatibility field for Idea & Expression Upgrade items, especially when fatalErrors is empty or short. In each band9Refinements item, observation should be a concise issue/upgrade point, refinement should contain 1-3 usable English phrases or sentence frames only, and explanationZh should be short Chinese guidance. Do not write "Band 9" in the content.
+Idea & Expression Upgrade items should cover over-formal or AI-like phrasing, unnatural spoken rhythm, overlong Part 1 answers, missed chances for concise natural development, reasoning depth, and ways to sound more spontaneous.
+For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
 
 ${speakingSchemaInstruction}
 
@@ -251,8 +287,9 @@ For frameworkFeedback, keep three Chinese roles distinct: suggestionZh = why thi
 Include relatedCorrectionIds when a sentence correction supports the same logic issue; otherwise leave it empty and give paragraph-level guidance.
 Avoid duplicating full sentence correction text inside frameworkFeedback.
 Return vocabularyUpgrade as a two-part Language Bank. Infer the topic domain from the question and essay. topicVocabulary contains 5-8 topic-specific words/collocations/phrases with Chinese meaningZh and usageZh, covering both sides for advantages/disadvantages/outweigh/discuss-both/to-what-extent tasks where relevant. expressionUpgrades contains both category="from_essay" phrase upgrades and category="argument_frame" reusable Task 2 frames. Do not put writing-strategy advice in topicVocabulary.
-Choose modelAnswerTargetLevel from the current training estimate: <=5.5 means "Target Band 7.0"; 6.0-6.5 means "Target Band 7.5"; 7.0 means "Target Band 7.5-8.0"; 7.5+ means "Examiner-friendly refinement".
-The modelAnswer field must be a complete personalized Task 2 target model answer, normally 280-350 words even when the learner's essay is under 250 words. Prefer concise completeness and avoid 400+ words. It must preserve the learner's original position and main idea, fix the highest-priority Logic & Structure Review issue, and naturally integrate relevant Language Bank and Expression Upgrade items. It must not be a generic Band 9 essay unrelated to the learner's essay.
+Current estimate must remain honest and conservative. Choose modelAnswerTargetLevel with the global two-layer policy only: if the current essay is below Band 7.0, use "Band 7.0+ Target Model Answer"; if the current essay is around Band 7.0 or above, use "Band 8+ Examiner-Friendly Model Answer". Do not use Target Band 7.5, Target Band 7.5-8.0, or Band 9.
+The modelAnswer field must be a complete personalized Task 2 target model answer, normally 280-350 words even when the learner's essay is under 250 words. Prefer concise completeness and avoid 400+ words. It must apply Task Response/task command fixes, concession or balance if relevant, paragraph-level logic advice, sentence correction lessons, Language Bank items, and the user's usable ideas where appropriate. It must not merely polish the original essay; if an original idea is weak or off-task, replace it with a more appropriate task-relevant idea and explain that in feedback.
+When modelAnswerTargetLevel is Band 8+ Examiner-Friendly Model Answer, the answer must show direct task response, a clear sustained position, well-developed paragraphs, precise topic vocabulary, flexible sentence structures, strong cohesion without mechanical linking, and no generic template padding. Before finalizing a Band 8+ modelAnswer, self-check whether it would still likely be judged only around Band 7; if yes, strengthen idea development, precision, organization, and naturalness.
 For advantages/disadvantages or outweigh prompts, if the main issue is missing or weak disadvantage coverage, the modelAnswer must include a clear concession/disadvantage paragraph before defending the final position.
 Return modelAnswerAnnotations for meaningful exact spans in modelAnswer: several topic_vocabulary spans, at least two expression_upgrade spans when available, at least one sentence_repair span, and at least one logic_repair span. quote must exactly appear in modelAnswer. Do not over-highlight the whole essay.
 Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
@@ -284,6 +321,8 @@ Do not implement General Training letters.
 Do not invent image details beyond the given brief.
 Do not explain causes unless the visual brief explicitly gives causes.
 Focus on overview quality, key feature selection, useful comparison, data accuracy, coherence, and concise academic reporting.
+Current estimate must remain honest and conservative. Target reports must follow the global uplift policy: if the current report is below Band 7.0, improvedReport/modelExcerpt must be a Band 7.0+ Target Report; if the current report is around Band 7.0 or above, improvedReport/modelExcerpt must be a Band 8+ Examiner-Friendly Report. Do not inflate the current estimate to match the target. Do not label output as Band 9 or Target Band 7.5.
+The target report must improve overview quality, key feature selection, comparison logic, data accuracy, and concise academic reporting style. Do not just correct grammar. For Band 8+ reports, self-check that the report has a clear overview, accurate key features, strong comparisons, precise data description, and no irrelevant detail dump.
 Keep feedback concise and Task 1-specific.
 Write overviewFeedback, keyFeaturesFeedback, comparisonFeedback, dataAccuracyFeedback, coherenceFeedback, mustFix, rewriteTask, and language correction explanations Chinese-first. Start each explanation in Chinese, diagnose the learner's English problem in Chinese, and include short English corrections or example phrases only where useful.
 Keep improvedReport and modelExcerpt in English.

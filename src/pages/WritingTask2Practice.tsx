@@ -7,7 +7,7 @@ import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
 import { routedAnalyzeWriting, routedCoachWritingFramework, routedExtractWritingFramework } from '@/src/lib/ai';
-import { formatBandEstimate } from '@/src/lib/bands';
+import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import {
   WritingFeedback,
@@ -23,6 +23,10 @@ import {
   ProviderDiagnosticSummary,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
+import {
+  buildMarkdownExportFilename,
+  buildWritingTask2TrainingMarkdown,
+} from '@/src/lib/markdownExport';
 import { Send, ArrowRight, FileDown, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
 
 type LanguageBankView = {
@@ -61,7 +65,7 @@ const isInsufficientTask2Sample = (text: string) => {
 
 const isPlaceholderModelAnswer = (text: string) =>
   !text.trim() ||
-  text === 'Sample Band 9 essay content...' ||
+  text === 'Sample high-band essay content...' ||
   /too short for a high training estimate|provider returned incomplete|malformed or incomplete/i.test(text);
 
 const humanizeKey = (value: string) =>
@@ -218,12 +222,8 @@ const averageWritingScore = (feedback: WritingFeedback) =>
     feedback.scores.grammaticalRangeAccuracy) / 4) * 2) / 2;
 
 const getTargetModelLevel = (feedback: WritingFeedback) => {
-  if (feedback.modelAnswerTargetLevel?.trim()) return feedback.modelAnswerTargetLevel.trim();
   const estimate = averageWritingScore(feedback);
-  if (estimate <= 5.5) return 'Target Band 7.0';
-  if (estimate <= 6.5) return 'Target Band 7.5';
-  if (estimate <= 7.0) return 'Target Band 7.5-8.0';
-  return 'Examiner-friendly refinement';
+  return getTargetLabel(estimate, 'modelAnswer');
 };
 
 const uniqueStrings = (items: (string | undefined)[]) => {
@@ -619,33 +619,19 @@ const getEssayWarnings = (feedback: WritingFeedback, isInsufficientSample: boole
   return merged.filter(item => !isWordCountWarning(item) || item === firstWordCountWarning);
 };
 
-const providerDisplayNames: Record<string, string> = {
-  mock: 'Mock provider',
-  gemini: 'Gemini',
-  deepseek: 'DeepSeek',
-};
-
-const displayProviderName = (providerName?: string) => {
-  if (!providerName) return 'Provider not recorded';
-  const normalized = providerName.trim().toLowerCase();
-  return providerDisplayNames[normalized] || humanizeKey(providerName);
-};
-
 const getScoreTransparencyParts = (
   diagnostic: ProviderDiagnosticSummary | null,
   fallbackUsed: boolean,
   wordCount: number,
   isUnderTask2Minimum: boolean,
 ) => {
-  const parts = ['Training estimate'];
-  if (isUnderTask2Minimum) parts.push(`capped under 250 words (${wordCount}/250)`);
-  if (diagnostic?.providerName) parts.push(displayProviderName(diagnostic.providerName));
-  if (diagnostic?.fallbackUsed || fallbackUsed) parts.push('fallback used');
-  if (diagnostic?.normalizedFields?.length) parts.push(`${diagnostic.normalizedFields.length} normalized field${diagnostic.normalizedFields.length > 1 ? 's' : ''}`);
+  const parts: string[] = [];
+  if (isUnderTask2Minimum) parts.push(`训练估计已保守处理：${wordCount}/250 词，低于 Task 2 建议字数。`);
+  if (diagnostic?.failureKind === 'provider_unavailable') parts.push('AI 提供方暂时不可用，本次保留草稿，请稍后重试。');
+  if (diagnostic?.fallbackUsed || fallbackUsed) parts.push('本次使用备用反馈，分数和建议请保守参考。');
+  if (diagnostic?.normalizedFields?.length) parts.push('部分反馈字段已自动修正，详细信息可在 Debug Panel 查看。');
   if (diagnostic?.validationErrors?.length) {
-    parts.push(`${diagnostic.validationErrors.length} validation issue${diagnostic.validationErrors.length > 1 ? 's' : ''}`);
-  } else if (diagnostic) {
-    parts.push('validation clear');
+    parts.push('本次反馈不完整，详细诊断可在 Debug Panel 查看。');
   }
   return parts;
 };
@@ -1854,19 +1840,28 @@ ${logicItems}
 ## Sentence Corrections
 ${sentenceItems}
 
-## Target Model Answer
-- Training estimate: ${formatBandEstimate(averageWritingScore(feedback))}
+## ${targetLevel}
+- Training estimate: ${formatConservativeBandEstimate(averageWritingScore(feedback))}
 - Target level: ${targetLevel}
 
 ### Next Rewrite Focus
 ${missionItems.length ? missionItems.map(item => `- ${item}`).join('\n') : '- 下次修改时至少主动使用两个 Language Bank 表达。'}
 
 ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAnswerPersonalized ? '\n\nHighlighted phrases come from the Language Bank above.' : ''}` : '- No reliable personalized model answer for this attempt.'}`;
-    const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
+    const localMarkdown = buildWritingTask2TrainingMarkdown({
+      ...feedback,
+      essay: resultEssay,
+    });
+    const blob = new Blob([localMarkdown || markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ielts-writing-${new Date().toISOString().split('T')[0]}.md`;
+    a.download = buildMarkdownExportFilename({
+      module: 'writing',
+      taskOrPart: 'task2',
+      topic: question?.topicCategory,
+      prompt: feedback.question || question?.question,
+    });
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -2159,7 +2154,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   <div title={`${dimension.label}: training estimate`} aria-label={`${dimension.label} training estimate`}>
                     <div className="text-[10px] font-sans font-bold text-paper-ink/50 uppercase mb-1 leading-snug">{dimension.label}</div>
                     <div className={isInsufficientSample ? 'text-xs font-bold text-paper-ink/50 uppercase tracking-widest font-sans pt-1' : 'text-xl font-bold text-accent-terracotta'}>
-                      {isInsufficientSample ? 'Insufficient' : formatBandEstimate(feedback.scores[dimension.key])}
+                      {isInsufficientSample ? 'Insufficient' : formatConservativeBandEstimate(feedback.scores[dimension.key])}
                     </div>
                     <div className="mt-1 text-[10px] font-sans text-paper-ink/35">{dimension.helper}</div>
                   </div>
@@ -2167,14 +2162,16 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               ))}
             </div>
 
-            <div
-              className="rounded-sm border border-paper-ink/10 bg-paper-ink/[0.025] px-3 py-2"
-              aria-label="Score transparency"
-            >
-              <p className="text-xs leading-6 text-paper-ink/55">
-                {scoreTransparencyParts.join(' · ')}
-              </p>
-            </div>
+            {scoreTransparencyParts.length > 0 && (
+              <div
+                className="rounded-sm border border-paper-ink/10 bg-paper-ink/[0.025] px-3 py-2"
+                aria-label="Score transparency"
+              >
+                <p className="text-xs leading-6 text-paper-ink/55">
+                  {scoreTransparencyParts.join(' ')}
+                </p>
+              </div>
+            )}
 
             {essayWarnings.length > 0 && (
               <section className="space-y-3">
@@ -2367,14 +2364,14 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
             <PaperCard className="min-h-[220px]">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                 <h3 className="text-sm font-bold uppercase tracking-widest">
-                  Target Model Answer
+                  {getTargetModelLevel(feedback)}
                 </h3>
                 <div className="flex flex-wrap gap-2 text-[10px] font-sans font-bold uppercase tracking-widest">
                   <span className="border border-paper-ink/10 bg-paper-ink/5 px-2 py-1 rounded-sm text-paper-ink/55">
-                    Training estimate {formatBandEstimate(averageWritingScore(feedback))}
+                    Training estimate {formatConservativeBandEstimate(averageWritingScore(feedback))}
                   </span>
                   <span className="border border-accent-terracotta/20 bg-accent-terracotta/5 px-2 py-1 rounded-sm text-accent-terracotta">
-                    Target level: {getTargetModelLevel(feedback)}
+                    {getTargetLabelZh(averageWritingScore(feedback), 'modelAnswer')}
                   </span>
                 </div>
               </div>

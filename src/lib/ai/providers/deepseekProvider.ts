@@ -2,6 +2,7 @@ import { AIProvider } from './base';
 import {
   frameworkCoachSchemaInstruction,
   frameworkSchemaInstruction,
+  speakingPromptCalibration,
   speakingSchemaInstruction,
   strictJsonInstruction,
   writingSchemaInstruction,
@@ -66,7 +67,12 @@ You are an IELTS Speaking feedback engine for a local-first practice app.
 Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null and the note must say pronunciation is not formally assessed in V1.
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
+${speakingPromptCalibration}
 If the transcript is extremely short, nonsensical, or too thin for the part, return conservative insufficient-sample feedback.
+Feedback must be target-uplift training feedback. The current score is a conservative single-question training estimate, excluding pronunciation, not an official complete IELTS Speaking band. If evidence sits between two bands, prefer the lower visible estimate.
+For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice direction aim at a natural Band 7.0+ training target, not merely a minimal correction. If the learner is already around Band 7.0 or above, upgradedAnswer must become a meaningfully stronger Band 8+ examiner-friendly answer rather than another ordinary Band 7 answer. Do not label output as Band 9.
+Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
+For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
 
 ${speakingSchemaInstruction}
 
@@ -100,8 +106,9 @@ For frameworkFeedback, keep three Chinese roles distinct: suggestionZh = why thi
 Include relatedCorrectionIds when a sentence correction supports the same logic issue; otherwise leave it empty and give paragraph-level guidance.
 Avoid duplicating full sentence correction text inside frameworkFeedback.
 Return vocabularyUpgrade as a two-part Language Bank. Infer the topic domain from the question and essay. topicVocabulary contains 5-8 topic-specific words/collocations/phrases with Chinese meaningZh and usageZh, covering both sides for advantages/disadvantages/outweigh/discuss-both/to-what-extent tasks where relevant. expressionUpgrades contains both category="from_essay" phrase upgrades and category="argument_frame" reusable Task 2 frames. Do not put writing-strategy advice in topicVocabulary.
-Choose modelAnswerTargetLevel from the current training estimate: <=5.5 means "Target Band 7.0"; 6.0-6.5 means "Target Band 7.5"; 7.0 means "Target Band 7.5-8.0"; 7.5+ means "Examiner-friendly refinement".
-The modelAnswer field must be a complete personalized Task 2 target model answer, normally 280-350 words even when the learner's essay is under 250 words. Prefer concise completeness and avoid 400+ words. It must preserve the learner's original position and main idea, fix the highest-priority Logic & Structure Review issue, and naturally integrate relevant Language Bank and Expression Upgrade items. It must not be a generic Band 9 essay unrelated to the learner's essay.
+Current estimate must remain honest and conservative. Choose modelAnswerTargetLevel with the global two-layer policy only: if the current essay is below Band 7.0, use "Band 7.0+ Target Model Answer"; if the current essay is around Band 7.0 or above, use "Band 8+ Examiner-Friendly Model Answer". Do not use Target Band 7.5, Target Band 7.5-8.0, or Band 9.
+The modelAnswer field must be a complete personalized Task 2 target model answer, normally 280-350 words even when the learner's essay is under 250 words. Prefer concise completeness and avoid 400+ words. It must apply Task Response/task command fixes, concession or balance if relevant, paragraph-level logic advice, sentence correction lessons, Language Bank items, and the user's usable ideas where appropriate. It must not merely polish the original essay; if an original idea is weak or off-task, replace it with a more appropriate task-relevant idea and explain that in feedback.
+When modelAnswerTargetLevel is Band 8+ Examiner-Friendly Model Answer, the answer must show direct task response, a clear sustained position, well-developed paragraphs, precise topic vocabulary, flexible sentence structures, strong cohesion without mechanical linking, and no generic template padding. Before finalizing a Band 8+ modelAnswer, self-check whether it would still likely be judged only around Band 7; if yes, strengthen idea development, precision, organization, and naturalness.
 For advantages/disadvantages or outweigh prompts, if the main issue is missing or weak disadvantage coverage, the modelAnswer must include a clear concession/disadvantage paragraph before defending the final position.
 Return modelAnswerAnnotations for meaningful exact spans in modelAnswer: several topic_vocabulary spans, at least two expression_upgrade spans when available, at least one sentence_repair span, and at least one logic_repair span. quote must exactly appear in modelAnswer. Do not over-highlight the whole essay.
 Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
@@ -130,6 +137,8 @@ ${JSON.stringify(params, null, 2)}`);
 You are an IELTS Academic Writing Task 1 feedback engine for a local-first practice app.
 Assess only the user's report against the supplied text visual brief and data.
 Do not invent image details beyond the given brief.
+Current estimate must remain honest and conservative. Target reports must follow the global uplift policy: if the current report is below Band 7.0, improvedReport/modelExcerpt must be a Band 7.0+ Target Report; if the current report is around Band 7.0 or above, improvedReport/modelExcerpt must be a Band 8+ Examiner-Friendly Report. Do not inflate the current estimate to match the target. Do not label output as Band 9 or Target Band 7.5.
+The target report must improve overview quality, key feature selection, comparison logic, data accuracy, and concise academic reporting style. Do not just correct grammar. For Band 8+ reports, self-check that the report has a clear overview, accurate key features, strong comparisons, precise data description, and no irrelevant detail dump.
 Write diagnosis Chinese-first where useful; keep improvedReport and modelExcerpt in English.
 
 ${writingTask1SchemaInstruction}

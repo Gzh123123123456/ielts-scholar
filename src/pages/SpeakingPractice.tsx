@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -6,9 +7,13 @@ import { SerifButton } from '@/src/components/ui/SerifButton';
 import { QuestionBankItem, QuestionBankModal } from '@/src/components/practice/QuestionBankModal';
 import { useApp } from '@/src/context/AppContext';
 import { getAIProviderName, routedAnalyzeSpeaking } from '@/src/lib/ai';
-import { formatBandEstimate } from '@/src/lib/bands';
+import { formatBandEstimate, formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
 import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/questions/bank';
 import { SpeakingFeedback } from '@/src/lib/ai/schemas';
+import {
+  buildMarkdownExportFilename,
+  buildSpeakingTrainingMarkdown,
+} from '@/src/lib/markdownExport';
 import {
   ActiveSpeakingPracticeSession,
   createRecordId,
@@ -74,8 +79,128 @@ const answerDevelopmentPlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
   return { questionReference, starter, items };
 };
 
+type TranscriptCleanupResult = {
+  transcript: string;
+  corrections: string[];
+};
+
+const starterPracticePlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
+  const items = speakingPart === 1
+    ? [
+      'Direct answer: Yes / No / It depends.',
+      'Detail: what kind, when, where, or how often.',
+      'Reason: why you like it, dislike it, or do it.',
+      'Stop after 2-4 spoken sentences.',
+    ]
+    : speakingPart === 2
+      ? [
+        'Introduce the person, place, time, or activity.',
+        'Add two concrete details instead of only giving a conclusion.',
+        'Explain your feeling, change, or why it mattered.',
+        'End the story naturally.',
+      ]
+      : [
+        'State a clear position first.',
+        'Compare two situations or two groups of people.',
+        'Add one realistic example.',
+        'Explain the wider consequence.',
+      ];
+  const targetAnswer = speakingPart === 1 && /^do you/i.test(prompt.trim())
+    ? 'Yes, I do. I usually [specific detail] when I want to relax. It helps me [personal reason].'
+    : speakingPart === 1
+      ? 'I usually [direct answer]. For example, [specific detail]. I like it because [personal reason].'
+      : speakingPart === 2
+        ? 'I want to talk about [person/place/activity]. It happened / happens [time or place]. The main reason I remember it is [personal reason].'
+        : 'In my view, [direct position]. This is because [reason]. For example, [specific example]. So I think [balanced close].';
+
+  return {
+    questionReference: prompt ? `当前题目：${prompt}` : '先围绕当前题目补出一个完整答案。',
+    items,
+    targetAnswer,
+  };
+};
+
+const replaceWithCleanup = (
+  text: string,
+  pattern: RegExp,
+  replacement: string,
+  corrections: string[],
+) => text.replace(pattern, match => {
+  corrections.push(`${match} → ${replacement}`);
+  return replacement;
+});
+
+const normalizeSpeakingTranscript = (
+  rawTranscript: string,
+  questionText: string,
+  speakingPart: 1 | 2 | 3,
+): TranscriptCleanupResult => {
+  let transcript = rawTranscript;
+  const corrections: string[] = [];
+  const context = `${questionText} ${rawTranscript}`.toLowerCase();
+  const placeContext = /\b(hometown|home town|travel|travelling|traveling|trip|city|place|from|live|lived|university|study|studied|japan|island)\b/.test(context)
+    || speakingPart === 2;
+  const xiamenContext = placeContext && /\b(from|in|near|around|live in|lived in|come from|city|university)\s+(salmon|shaman)\b|\b(salmon|shaman)\s+(city|university)\b/i.test(transcript);
+
+  if (xiamenContext) {
+    transcript = replaceWithCleanup(transcript, /\b(salmon|shaman)\b/gi, 'Xiamen', corrections);
+  }
+
+  if (/\b(xiamen|island|hometown|travel|trip)\b/i.test(`${context} ${transcript}`)) {
+    transcript = replaceWithCleanup(transcript, /\bgerman you\b/gi, 'Gulangyu', corrections);
+  }
+
+  if (/\b(work|company|travel|ticket|ota|office|job)\b/.test(context)) {
+    transcript = replaceWithCleanup(transcript, /\bsky tickets?\b/gi, 'skyticket', corrections);
+  }
+
+  if (/\b(university|study|studied|student|japan|japanese)\b/.test(context)) {
+    transcript = replaceWithCleanup(transcript, /\bq shoe\b/gi, 'Kyushu', corrections);
+    transcript = replaceWithCleanup(transcript, /\bcasual(?=\s+university\b)/gi, 'Kyushu', corrections);
+    transcript = transcript.replace(/\b(in|at|from)\s+casual\b/gi, match => {
+      const prefix = match.split(/\s+/)[0];
+      corrections.push('casual → Kyushu');
+      return `${prefix} Kyushu`;
+    });
+  }
+
+  return {
+    transcript,
+    corrections: Array.from(new Set(corrections)),
+  };
+};
+
+const isIncompleteSpeakingFeedback = (
+  feedback: SpeakingFeedback,
+  failureKind?: string,
+) => {
+  const placeholderAnswer = /provider returned incomplete feedback|please retry analysis|malformed or incomplete/i.test(feedback.upgradedAnswer);
+  const scores = [
+    feedback.bandEstimateExcludingPronunciation,
+    feedback.scores.fluencyCoherence,
+    feedback.scores.lexicalResource,
+    feedback.scores.grammaticalRangeAccuracy,
+  ];
+  const allScoresMissing = scores.every(score => !Number.isFinite(score) || score <= 0);
+  const hasIntentionalInsufficientGuidance = feedback.fatalErrors.some(error => error.tag === 'insufficient_sample')
+    || /insufficient sample|starter outline/i.test(feedback.upgradedAnswer);
+  const hasCoreFeedback = feedback.fatalErrors.length > 0
+    || feedback.naturalnessHints.length > 0
+    || feedback.band9Refinements.length > 0
+    || feedback.preservedStyle.length > 0
+    || Boolean(feedback.upgradedAnswer.trim() && !placeholderAnswer);
+
+  if (failureKind === 'parse_or_schema' && allScoresMissing) return true;
+  if (hasIntentionalInsufficientGuidance) return false;
+  if (placeholderAnswer) return true;
+  if (allScoresMissing && !hasCoreFeedback) return true;
+  return failureKind === 'parse_or_schema' && (allScoresMissing || !hasCoreFeedback);
+};
+
 export default function SpeakingPractice() {
   const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [part, setPart] = useState<1 | 2 | 3>(1);
   const [question, setQuestion] = useState<SpeakingQuestion | null>(null);
   const [step, setStep] = useState<'idle' | 'recording' | 'editing' | 'analyzing' | 'results'>('idle');
@@ -88,6 +213,7 @@ export default function SpeakingPractice() {
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
   const [apiStatusMessage, setApiStatusMessage] = useState('');
+  const [transcriptCleanupNote, setTranscriptCleanupNote] = useState('');
   const [statusMessage, setStatusMessage] = useState<'Ready' | 'Requesting microphone...' | 'Listening...' | 'No speech detected' | 'Transcription unavailable' | 'Mic denied'>('Ready');
 
   const recognitionRef = useRef<any>(null);
@@ -115,7 +241,11 @@ export default function SpeakingPractice() {
 
   const getBank = (p: 1 | 2 | 3) => p === 1 ? speakingPart1 : p === 2 ? speakingPart2 : speakingPart3;
 
-  const buildCurrentSpeakingRecord = (status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft'): SpeakingPracticeRecord | null => {
+  const buildCurrentSpeakingRecord = (
+    status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft',
+    feedbackOverride: SpeakingFeedback | null = feedback,
+    transcriptOverride = transcript,
+  ): SpeakingPracticeRecord | null => {
     if (!question) return null;
     const timestamp = new Date().toISOString();
     const existing = activeSessionRef.current?.attemptsByPart[part]?.id === activeAttemptIdRef.current
@@ -135,17 +265,63 @@ export default function SpeakingPractice() {
       createdAt: existing?.createdAt || timestamp,
       updatedAt: timestamp,
       analyzedAt: status === 'analyzed' ? existing?.analyzedAt || timestamp : existing?.analyzedAt,
-      transcript,
+      transcript: transcriptOverride,
       transcriptOrigin: transcriptOriginRef.current,
-      feedback: status === 'provider_failed' ? undefined : feedback || undefined,
-      obsidianMarkdown: status === 'provider_failed' ? undefined : feedback?.obsidianMarkdown,
+      feedback: status === 'provider_failed' ? undefined : feedbackOverride || undefined,
+      obsidianMarkdown: status === 'provider_failed' ? undefined : feedbackOverride?.obsidianMarkdown,
     };
+  };
+
+  const isUnfinishedSpeakingAttempt = (record?: SpeakingPracticeRecord | null) => {
+    if (!record) return false;
+    if (record.status === 'analyzed' || record.feedback) return false;
+    if (record.status === 'draft' || record.status === 'provider_failed') return true;
+    return Boolean(record.transcript.trim() && !record.feedback);
+  };
+
+  const pruneCompletedActiveAttempts = (session: ActiveSpeakingPracticeSession) => {
+    let pruned = false;
+    const attemptsByPart: ActiveSpeakingPracticeSession['attemptsByPart'] = {};
+    ([1, 2, 3] as const).forEach(sessionPart => {
+      const record = session.attemptsByPart[sessionPart];
+      if (!record) return;
+      if (isUnfinishedSpeakingAttempt(record)) {
+        attemptsByPart[sessionPart] = record;
+      } else {
+        pruned = true;
+      }
+    });
+    return {
+      pruned,
+      session: {
+        ...session,
+        attemptsByPart,
+      },
+    };
+  };
+
+  const logSkippedCompletedAutoRestore = () => {
+    console.debug('Skipped auto-restore for completed Speaking attempt; loaded a fresh question instead.');
+  };
+
+  const clearActiveSpeakingAttempt = (sessionPart: 1 | 2 | 3) => {
+    if (!activeSessionRef.current) return;
+    activeSessionRef.current = {
+      ...activeSessionRef.current,
+      attemptsByPart: {
+        ...activeSessionRef.current.attemptsByPart,
+        [sessionPart]: undefined,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    saveActiveSpeakingSession(activeSessionRef.current);
   };
 
   const hasMeaningfulAttemptContent = (status?: 'draft' | 'analyzed' | 'provider_failed') =>
     Boolean(transcript.trim() || feedback || status === 'analyzed' || status === 'provider_failed');
 
   const persistCurrentSpeakingAttempt = (status?: 'draft' | 'analyzed' | 'provider_failed') => {
+    if (feedback || status === 'analyzed') return;
     if (!hasMeaningfulAttemptContent(status)) return;
     const record = buildCurrentSpeakingRecord(status);
     if (!record) return;
@@ -166,9 +342,7 @@ export default function SpeakingPractice() {
       updatedAt: new Date().toISOString(),
     };
     saveActiveSpeakingSession(activeSessionRef.current);
-    if (record.status !== 'draft') {
-      upsertPracticeRecord(record);
-    }
+    upsertPracticeRecord(record);
   };
 
   const restoreSpeakingRecord = (record: SpeakingPracticeRecord, message = '') => {
@@ -188,6 +362,7 @@ export default function SpeakingPractice() {
     setStep(record.feedback ? 'results' : record.transcript.trim() ? 'editing' : 'idle');
     setTimer(0);
     setProviderErrorMessage(record.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later.' : '');
+    setTranscriptCleanupNote('');
     setRestoreMessage(message);
   };
 
@@ -195,11 +370,33 @@ export default function SpeakingPractice() {
     const active = getActiveSpeakingSession();
     if (active) {
       activeSessionRef.current = active;
-      const restored = active.attemptsByPart[active.currentPart] || active.attemptsByPart[1];
-      if (restored) {
-        restoreSpeakingRecord(restored);
+      const explicitRestoreId = typeof location.state === 'object' && location.state && 'restoreSpeakingRecordId' in location.state
+        ? String(location.state.restoreSpeakingRecordId || '')
+        : '';
+      if (explicitRestoreId) {
+        const explicitRecord = Object.values(active.attemptsByPart).find(record => record?.id === explicitRestoreId);
+        if (explicitRecord) {
+          restoreSpeakingRecord(explicitRecord);
+          navigate(location.pathname, { replace: true, state: null });
+          return;
+        }
+      }
+
+      const currentPart = active.currentPart;
+      const candidate = active.attemptsByPart[currentPart];
+      if (isUnfinishedSpeakingAttempt(candidate)) {
+        restoreSpeakingRecord(candidate);
         return;
       }
+
+      const { pruned, session } = pruneCompletedActiveAttempts(active);
+      activeSessionRef.current = session;
+      if (candidate && !isUnfinishedSpeakingAttempt(candidate)) {
+        logSkippedCompletedAutoRestore();
+      }
+      if (pruned) saveActiveSpeakingSession(session);
+      loadRandomQuestion(currentPart);
+      return;
     }
     loadRandomQuestion(1);
   }, []);
@@ -235,6 +432,7 @@ export default function SpeakingPractice() {
     setTimer(0);
     setStatusMessage('Ready');
     setProviderErrorMessage('');
+    setTranscriptCleanupNote('');
     setRestoreMessage('');
     transcriptOriginRef.current = 'manual';
     addDebugLog(`Loaded question: ${random.id}`);
@@ -243,7 +441,7 @@ export default function SpeakingPractice() {
   const switchPart = (p: 1 | 2 | 3) => {
     persistCurrentSpeakingAttempt();
     const existing = activeSessionRef.current?.attemptsByPart[p];
-    if (existing) {
+    if (isUnfinishedSpeakingAttempt(existing)) {
       restoreSpeakingRecord(existing);
       activeSessionRef.current = {
         ...activeSessionRef.current,
@@ -252,6 +450,10 @@ export default function SpeakingPractice() {
       };
       saveActiveSpeakingSession(activeSessionRef.current);
       return;
+    }
+    if (existing) {
+      logSkippedCompletedAutoRestore();
+      clearActiveSpeakingAttempt(p);
     }
     loadRandomQuestion(p);
   };
@@ -296,24 +498,12 @@ export default function SpeakingPractice() {
     setStep('idle');
     setStatusMessage('Ready');
     setProviderErrorMessage('');
+    setTranscriptCleanupNote('');
     setRestoreMessage('');
     transcriptOriginRef.current = 'manual';
     addDebugLog('Started a fresh attempt for the same speaking question.');
   };
 
-  const clearActiveSpeakingAttemptForCurrentPart = () => {
-    if (!activeSessionRef.current) return;
-    activeSessionRef.current = {
-      ...activeSessionRef.current,
-      currentPart: part,
-      attemptsByPart: {
-        ...activeSessionRef.current.attemptsByPart,
-        [part]: undefined,
-      },
-      updatedAt: new Date().toISOString(),
-    };
-    saveActiveSpeakingSession(activeSessionRef.current);
-  };
 
   const selectBankQuestion = (selected: SpeakingQuestion) => {
     if (retryTimeoutRef.current) {
@@ -326,7 +516,7 @@ export default function SpeakingPractice() {
     }
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     if (timerRef.current) clearInterval(timerRef.current);
-    clearActiveSpeakingAttemptForCurrentPart();
+    clearActiveSpeakingAttempt(part);
     activeAttemptIdRef.current = createRecordId('sp');
     setQuestion(selected);
     setStep('idle');
@@ -339,6 +529,7 @@ export default function SpeakingPractice() {
     setStatusMessage('Ready');
     setProviderErrorMessage('');
     setApiStatusMessage('');
+    setTranscriptCleanupNote('');
     setRestoreMessage('');
     transcriptOriginRef.current = 'manual';
     setIsBankOpen(false);
@@ -485,6 +676,7 @@ export default function SpeakingPractice() {
     setIsRecording(false);
     setStatusMessage('Ready');
     setStep('idle');
+    setTranscriptCleanupNote('');
     addDebugLog('Attempt reset (Retry) — transcript, feedback, timer cleared');
   };
 
@@ -507,6 +699,14 @@ export default function SpeakingPractice() {
 
   const analyze = async () => {
     if (!transcript.trim()) return;
+    const cleanup = normalizeSpeakingTranscript(transcript, question?.question || '', part);
+    const cleanedTranscript = cleanup.transcript;
+    if (cleanup.corrections.length) {
+      setTranscript(cleanedTranscript);
+      setTranscriptCleanupNote(`已自动修正可能的转写误差：${cleanup.corrections.join('；')}`);
+    } else {
+      setTranscriptCleanupNote('');
+    }
     setStep('analyzing');
     setProviderErrorMessage('');
     setApiStatusMessage('');
@@ -515,8 +715,8 @@ export default function SpeakingPractice() {
       const { feedback: result, diagnostic, route } = await routedAnalyzeSpeaking({
         part,
         question: question?.question || '',
-        transcript
-      }, isInsufficientSpeakingSample(transcript, part));
+        transcript: cleanedTranscript
+      }, isInsufficientSpeakingSample(cleanedTranscript, part));
       setProviderDiagnostic(diagnostic);
       setApiStatusMessage(route.fallbackReason || route.learnerReason);
 
@@ -524,9 +724,24 @@ export default function SpeakingPractice() {
         setFeedbackFallbackUsed(false);
         setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your transcript is preserved.');
         setStep('editing');
-        persistCurrentSpeakingAttempt('provider_failed');
-        const failedBase = buildCurrentSpeakingRecord('provider_failed');
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, cleanedTranscript);
         if (failedBase) {
+          const session = activeSessionRef.current || {
+            id: createRecordId('speaking_session'),
+            currentPart: part,
+            attemptsByPart: {},
+            updatedAt: new Date().toISOString(),
+          };
+          activeSessionRef.current = {
+            ...session,
+            currentPart: part,
+            attemptsByPart: {
+              ...session.attemptsByPart,
+              [part]: failedBase,
+            },
+            updatedAt: new Date().toISOString(),
+          };
+          saveActiveSpeakingSession(activeSessionRef.current);
           upsertPracticeRecord({
             ...failedBase,
             providerDiagnostic: summarizeDiagnostic(diagnostic),
@@ -536,11 +751,42 @@ export default function SpeakingPractice() {
         return;
       }
 
+      if (isIncompleteSpeakingFeedback(result, diagnostic.failureKind)) {
+        setFeedbackFallbackUsed(diagnostic.fallbackUsed);
+        setFeedback(null);
+        setProviderErrorMessage('AI feedback was incomplete. Your transcript is preserved; please retry analysis.');
+        setStep('editing');
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, cleanedTranscript);
+        if (failedBase) {
+          const session = activeSessionRef.current || {
+            id: createRecordId('speaking_session'),
+            currentPart: part,
+            attemptsByPart: {},
+            updatedAt: new Date().toISOString(),
+          };
+          activeSessionRef.current = {
+            ...session,
+            currentPart: part,
+            attemptsByPart: {
+              ...session.attemptsByPart,
+              [part]: failedBase,
+            },
+            updatedAt: new Date().toISOString(),
+          };
+          saveActiveSpeakingSession(activeSessionRef.current);
+          upsertPracticeRecord({
+            ...failedBase,
+            providerDiagnostic: summarizeDiagnostic(diagnostic),
+          });
+        }
+        addDebugLog("Incomplete speaking feedback preserved as retryable state.");
+        return;
+      }
+
       setFeedbackFallbackUsed(diagnostic.fallbackUsed);
       setFeedback(result);
       setStep('results');
-      persistCurrentSpeakingAttempt('analyzed');
-      const analyzedBase = buildCurrentSpeakingRecord('analyzed');
+      const analyzedBase = buildCurrentSpeakingRecord('analyzed', result, cleanedTranscript);
       if (analyzedBase) {
         upsertPracticeRecord({
           ...analyzedBase,
@@ -550,6 +796,7 @@ export default function SpeakingPractice() {
           providerDiagnostic: summarizeDiagnostic(diagnostic),
         });
       }
+      clearActiveSpeakingAttempt(part);
       
       saveSession({
         id: `sp_${Date.now()}`,
@@ -557,7 +804,7 @@ export default function SpeakingPractice() {
         module: 'speaking',
         mode: 'practice',
         question: question?.question,
-        transcript,
+        transcript: cleanedTranscript,
         transcriptOrigin: transcriptOriginRef.current,
         feedback: result,
         providerDiagnostic: summarizeDiagnostic(diagnostic),
@@ -583,18 +830,24 @@ export default function SpeakingPractice() {
 
   const exportMarkdown = () => {
     if (!feedback) return;
-    const blob = new Blob([feedback.obsidianMarkdown], { type: 'text/markdown' });
+    const markdown = buildSpeakingTrainingMarkdown(feedback);
+    const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ielts-speaking-${new Date().toISOString().split('T')[0]}.md`;
+    a.download = buildMarkdownExportFilename({
+      module: 'speaking',
+      taskOrPart: `p${part}`,
+      topic: question?.topicCategory || question?.topic,
+      prompt: feedback.question || question?.question,
+    });
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const isMock = getAIProviderName() !== 'gemini';
   const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
-  const developmentPlan = answerDevelopmentPlan(part, question?.question);
+  const starterPlan = starterPracticePlan(part, question?.question);
   const speakingBankCounts = {
     1: speakingPart1.length,
     2: speakingPart2.length,
@@ -758,19 +1011,25 @@ export default function SpeakingPractice() {
                 value={transcript}
                 onChange={(e) => {
                   setTranscript(e.target.value);
+                  setTranscriptCleanupNote('');
                   transcriptOriginRef.current = 'manual';
                 }}
                 disabled={step === 'recording' || step === 'results'}
                 placeholder={statusMessage === 'Mic denied' || statusMessage === 'Transcription unavailable' ? "Type your answer manually here..." : "Recognition will appear here..."}
                 className="w-full min-h-[300px] xl:min-h-[420px] bg-transparent border border-transparent rounded-sm font-serif text-lg leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
               />
+              {transcriptCleanupNote && (
+                <p className="mt-2 text-[11px] leading-5 text-paper-ink/45 font-sans">
+                  {transcriptCleanupNote}
+                </p>
+              )}
             </PaperCard>
           )}
 
           {step === 'analyzing' && (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
               <RefreshCcw className="w-6 h-6 animate-spin text-accent-terracotta/40" />
-              <p className="font-serif text-paper-ink/45 text-sm">Cross-referencing output with Band 9 descriptors...</p>
+              <p className="font-serif text-paper-ink/45 text-sm">Checking the training estimate and target layer...</p>
             </div>
           )}
         </div>
@@ -782,10 +1041,10 @@ export default function SpeakingPractice() {
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">Language Performance</h3>
                 <div className="flex flex-wrap items-end gap-4 mb-8">
-                  <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
+                  <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
                   <div className="flex flex-col pb-2">
-                    <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">Training Estimate</span>
-                    <span className="text-xs text-paper-ink/45">Pronunciation is not assessed in V1.</span>
+                    <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">Single-question training estimate</span>
+                    <span className="text-xs text-paper-ink/45">约 {formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)}，不含发音；短样本按保守值处理。</span>
                   </div>
                 </div>
                 
@@ -814,7 +1073,11 @@ export default function SpeakingPractice() {
                   <h4 className="text-sm font-bold uppercase tracking-widest text-red-800 ml-1">Must Fix</h4>
                   {feedback.fatalErrors.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-green-700/50">
-                      <p className="text-lg leading-8 text-paper-ink/85 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">No critical correction needed for this attempt. Focus on making the answer more fluent and specific.</p>
+                      <p className="text-lg leading-8 text-paper-ink/85 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">
+                        {shouldShowDevelopmentPlan
+                          ? 'Starter development needed: give a complete answer first, then review language accuracy.'
+                          : 'No critical correction needed for this attempt. Focus on making the answer more fluent and specific.'}
+                      </p>
                     </PaperCard>
                   ) : (
                     <div className="space-y-4">
@@ -849,21 +1112,39 @@ export default function SpeakingPractice() {
                 </div>
               </div>
 
-              {feedback.band9Refinements.length > 0 && (
+              {!shouldShowDevelopmentPlan && feedback.band9Refinements.length > 0 && (
                 <section className="space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-paper-ink/55 ml-1">
-                    Band 9 Refinement / Examiner-Friendly Refinement
+                    Idea & Expression Upgrade / 表达与思路升级
                   </h4>
                   <PaperCard className="border-l-2 border-l-paper-ink/30 bg-paper-50">
                     <p className="text-sm font-sans uppercase tracking-widest text-paper-ink/35 mb-4">
-                      Not mistakes. These are high-level refinements for stronger spoken delivery.
+                      Not mistakes. These are idea-development and expression upgrades for stronger spoken delivery.
                     </p>
                     <div className="grid gap-4 lg:grid-cols-2">
                       {feedback.band9Refinements.map((item, index) => (
                         <div key={index} className="border border-paper-ink/10 bg-paper-ink/[0.03] p-4 rounded-sm">
-                          <p className="text-base leading-7 text-paper-ink/75 mb-3">{item.observation}</p>
-                          <p className="text-lg leading-8 font-bold text-paper-ink mb-3">{item.refinement}</p>
-                          <p className="text-base leading-8 text-paper-ink/85">{item.explanationZh}</p>
+                          <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">中文升级点</p>
+                          <p className="text-base leading-8 text-paper-ink/85 mb-4">{item.explanationZh || item.observation}</p>
+                          <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">英文可用表达</p>
+                          <ul className="space-y-1 mb-4">
+                            {[item.refinement, item.observation]
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map(expression => (
+                                <li key={expression} className="text-base leading-7 text-paper-ink border-l-2 border-l-accent-terracotta/25 pl-3">
+                                  {expression}
+                                </li>
+                              ))}
+                          </ul>
+                          <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">为什么适合这题</p>
+                          <p className="text-sm leading-7 text-paper-ink/70">
+                            {feedback.part === 3
+                              ? 'Part 3 需要从观点推进到原因、例子或影响。'
+                              : feedback.part === 2
+                                ? 'Part 2 需要把素材串成有细节和感受变化的长回答。'
+                                : 'Part 1 需要短而自然的个人细节。'}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -874,13 +1155,23 @@ export default function SpeakingPractice() {
               {feedback.preservedStyle.length > 0 && (
                 <section className="border border-paper-ink/10 bg-paper-ink/[0.02] p-5">
                   <h4 className="text-sm font-sans font-bold uppercase tracking-widest text-paper-ink/50 mb-4">
-                    <span>Preserved Personal Style</span>
+                    <span>Personal Material & Idea Expansion / 个人素材与观点发散</span>
                   </h4>
                   <div className="grid gap-3 md:grid-cols-2">
                     {feedback.preservedStyle.slice(0, 4).map((style, i) => (
                       <div key={i} className="border-l-2 border-l-accent-terracotta/30 pl-4 py-1">
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">你的素材</p>
                         <p className="text-lg text-paper-ink leading-8">"{style.text}"</p>
-                        <div className="text-base leading-8 mt-2 text-paper-ink/75">{style.reasonZh}</div>
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">可以保留的原因</p>
+                        <div className="text-base leading-8 text-paper-ink/75">{style.reasonZh}</div>
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">怎么发散</p>
+                        <div className="text-base leading-8 text-paper-ink/75">
+                          {feedback.part === 3
+                            ? '把这个素材继续推到 cause / contrast / consequence，避免只列事实。'
+                            : feedback.part === 2
+                              ? '补场景、动作、情绪变化和为什么重要。'
+                              : '补一个真实细节，再说一个简短原因。'}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -890,21 +1181,36 @@ export default function SpeakingPractice() {
               <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
                 <div>
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
-                    {shouldShowDevelopmentPlan ? 'Answer Development Plan' : 'High-Band Transformation'}
+                    {shouldShowDevelopmentPlan
+                      ? 'Band 7.0+ Starter Target'
+                      : getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}
+                    {!shouldShowDevelopmentPlan && (
+                      <span className="block mt-2 text-xs normal-case tracking-normal text-paper-ink/45">
+                        {getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}
+                      </span>
+                    )}
                   </h4>
                   {shouldShowDevelopmentPlan ? (
                     <div className="max-w-5xl space-y-5 text-paper-ink">
                       <p className="text-lg leading-9">
-                        样本太短或信息量不足，不能可靠生成完整高分改写。{developmentPlan.questionReference}
+                        样本太短或信息量不足，不能可靠生成完整高分改写。{starterPlan.questionReference}
                       </p>
                       <ul className="space-y-3">
-                        {developmentPlan.items.map(item => (
+                        {starterPlan.items.map(item => (
                           <li key={item} className="text-base leading-8 border-l-2 border-l-accent-terracotta/35 pl-4">
                             {item}
                           </li>
                         ))}
                       </ul>
-                      <p className="text-base leading-8 text-paper-ink/75">{developmentPlan.starter}</p>
+                      <div className="border border-paper-ink/10 bg-paper-ink/[0.03] p-4 rounded-sm">
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-2">
+                          Starter Target Answer
+                        </p>
+                        <p className="text-lg leading-8 text-paper-ink">{starterPlan.targetAnswer}</p>
+                        <p className="text-sm leading-7 text-paper-ink/60 mt-3">
+                          This is a starter frame, not a fully personalized upgraded answer. Replace the brackets with your real details.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <p className="max-w-5xl text-xl md:text-2xl leading-10 text-paper-ink font-serif">

@@ -22,6 +22,69 @@
   - Modal row metadata is deduplicated and kept concise.
 - **Explicitly unchanged**: no browse page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, Part 3 discussion-thread practice, provider prompt changes, scoring changes, or History architecture changes.
 
+## [2026-05-16] Global IELTS Training Target Policy
+
+- Current estimate remains conservative and describes the user's current answer, essay, or report.
+- Training target is minimum Band 7.0+ across Speaking, Writing Task 2, and Writing Task 1.
+- If the current estimate is 7.0 or above, the next generated answer/report/model/refinement must target Band 8+ examiner-friendly quality.
+- Do not use Band 9 as a default learner-facing label.
+- Do not use Target Band 7.5 or 7.5-8.0 intermediate labels.
+- Do not inflate current score to match the target output.
+- Target outputs must apply feedback, idea-development advice, and retained useful learner material.
+- Future Speaking flow remains: Part 1 topic-thread practice, Part 2 single long-turn practice, Part 3 discussion-thread practice.
+- Question-bank count/browse/random/select was implemented later as a lightweight modal picker; counts should remain computed from data, not hardcoded.
+
+## [2026-05-16] Speaking Estimate, Band 7+ Target, and Future Interaction Model
+- **Decision**: Treat single-question Speaking scores as conservative training estimates excluding pronunciation, while keeping target answers and practice direction at Band 7.0+.
+- **Reason**: IELTS Speaking is scored across a full test, so one Part 1/2/3 answer should not look like an official complete Speaking band. Training feedback should still uplift toward at least Band 7.0.
+- **Implemented**:
+  - Learner-facing Speaking estimate wording now says single-question training estimate / not including pronunciation, and normalization prefers the lower visible half-band when evidence is between bands.
+  - Speaking markdown issue lists use Chinese learner-facing labels and a short Chinese explanation column.
+  - Speaking reusable expressions and filler notes are filtered more strictly so provider/debug text, bracketed instructions, unclear fragments, and default filler advice do not enter review cards.
+  - Provider and mock wording now targets Band 7.0+ for weak/medium answers and Band 8+ examiner-friendly upgrades for already-strong answers.
+- **Future interaction model**:
+  - Part 1 Topic Thread Practice: one topic, 3-4 examiner-style questions, one connected mini-conversation, and one topic-level analysis.
+  - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, and one analysis.
+  - Part 3 Discussion Thread Practice: one abstract topic cluster, 3-4 related follow-up questions, and one discussion-level analysis.
+  - Full Speaking Mock later combines Part 1 topic thread, Part 2 long turn, and Part 3 discussion thread.
+- **Explicitly unchanged**: no Part 1 topic-thread UI, no Part 3 discussion-thread UI, no 3-4 question conversation flow, no session-level Speaking export, no provider routing changes, no recording/transcription mechanics changes, no History architecture changes, and no Writing changes.
+
+## [2026-05-16] Speaking Prompt and Minimal Review Card Export
+- **Decision**: Calibrate Speaking Part 1/2/3 provider prompts around spoken-answer targets and rebuild attempt-level Speaking markdown as a minimal review card.
+- **Reason**: Speaking feedback and exports should feel like concise training notes, not a guided self-study manual or Writing Task 2 advice applied to speech.
+- **Implemented**:
+  - Part 1 prompt/export stays compact and conversation-oriented, with possible same-topic follow-ups.
+  - Part 2 prompt/export emphasizes spoken long-turn story spine.
+  - Part 3 prompt/export emphasizes natural spoken discussion logic, examples, and consequences without essay-style connectors.
+  - Export removes Start Here, Mission, Ready checklist, Why This Works, Mini Review, weighting labels, duplicate transfer sections, and default filler advice.
+  - Safety filtering prevents provider/debug fallback text from entering learning fields or markdown.
+- **Future**: Part 1 should later become topic-thread practice: one topic, 3-4 examiner-style follow-up questions, one connected mini-conversation, and final topic-level analysis.
+- **Explicitly unchanged**: no Part 1 topic-thread UI, no session-level export, no scoring formula changes, no provider routing changes, no recording/transcription mechanics, no History architecture changes, no Writing changes.
+
+## [2026-05-15] Future Question Bank Entry Points Deferred
+- **Decision**: Record **Question bank count + browse/random/select entry points** as future product work, not part of the current markdown/status polish slice.
+- **Future scope**:
+  - Add low-noise question-bank status near module/practice question cards.
+  - Speaking: show Part/topic question count, browse bank, random question, and later topic-filtered random.
+  - Writing landing: show Task 1 / Task 2 question count, browse bank, random practice.
+  - Writing Task 2 question page: show task type, question count, browse bank, random question.
+  - First slice can add visible entry buttons/counts only.
+  - Full browse/select modal or panel is a separate larger UI task.
+  - Counts must be computed from question data, not hardcoded.
+- **Explicitly unchanged**: no question-bank browse/select UI, no picker modal/panel, no disabled future buttons, no scoring/provider changes.
+
+## [2026-05-15] Markdown Export Naming and Chinese-First Notes
+- **Decision**: Attempt-level markdown exports for Speaking, Writing Task 2, and Writing Task 1 use deterministic local builders and Chinese-first training-note structures.
+- **Implemented**:
+  - Filenames now include module, task/part, topic-or-question slug, date, and local HHmm time.
+  - Speaking and Writing exports use Chinese-led headings and guidance while preserving English prompts, learner output, corrections, expressions, and model answers.
+  - Provider-returned `obsidianMarkdown` is kept only as a compatibility/fallback field when structured feedback is unavailable; local structured feedback controls current final export formatting.
+- **Follow-up polish**:
+  - Export builders now compress notes for Obsidian review instead of dumping every feedback item.
+  - Task 2 filenames use shorter topic/task-type slugs such as `remote-work-outweigh`.
+  - Speaking insufficient samples export a Starter Target Answer / Answer Development Plan instead of a fake full upgraded answer.
+- **Explicitly unchanged**: no scoring formula changes, no provider routing changes, no UI redesign, no session-level export, no record migration, no `.env.local` edits.
+
 ## [2026-05-14] Writing Task 2 Phase 3 Annotation and Score Transparency
 - **Decision**: Treat visible Writing Task 2 scores as conservative training estimates with compact provenance, not official IELTS scoring.
 - **Implemented**:
@@ -131,7 +194,7 @@
   - Vocabulary & Expression Upgrade is now a compact learning bank, not a duplicate correction list.
   - Logic-to-correction inference now checks location, task-response markers, off-topic openings, balance/concession gaps, and thesis/conclusion issues more deliberately.
   - Final writing analysis now receives optional Phase 1 framework notes and editable framework summary so new provider output can produce a personalized model excerpt.
-  - New provider prompts require a learnable Band 7.5-8 personalized excerpt, not a generic Band 9 essay.
+  - New provider prompts require a learnable personalized target excerpt instead of a generic high-band essay.
   - Task 2 markdown export includes sentence primary/secondary/micro fields and the personalized excerpt section when supported.
 - **Explicitly unchanged**: no underline markers, no dot markers, no popovers, no overlay, no click-to-locate behavior, no provider routing change, no `.env.local` edits, no merge, no push.
 
@@ -205,7 +268,7 @@
 - **Decision**: Treat insufficient Speaking samples as an answer-development problem at render time.
 - **Reason**: Very short or low-signal transcripts, including old restored records, should not display a full high-band rewrite just because one exists in stored feedback.
 - **Implemented**:
-  - Speaking feedback shows **Answer Development Plan** instead of full High-Band Transformation for insufficient samples.
+  - Speaking feedback shows **Answer Development Plan** instead of full target-answer transformation for insufficient samples.
   - The transformation card stays aligned with the main wide feedback container while long text uses readable line length.
   - Writing Task 2 correction labels are display-mapped from schema/provider keys to readable Chinese-first labels.
 - **Explicitly unchanged**: no provider-default changes, no scoring formula changes, no record mutation/migration, no exports/routing/RAG/database/server/auth/API-key changes.
@@ -301,7 +364,7 @@
   - Added navigation from Home, TopBar, Speaking, and Writing.
 - **Explicitly unchanged**: Mock Provider remains default, no RAG, no database, no server, no auth, no production API key logic, no cross-attempt analytics, no session export, no Mock mode changes, no redesign.
 
-## [2026-05-07] Speaking Practice Records, Prompt Bank, and High-Band Refinement
+## [2026-05-07] Speaking Practice Records, Prompt Bank, and Idea Upgrade
 - **Decision**: Close the first real-use Speaking QA gaps before adding larger product features.
 - **Reason**: Practice needed reliable record access, meaningful question switching, and clearer coaching for answers that are already strong.
 - **Implemented**:
@@ -315,7 +378,7 @@
     - Writing Task 2: 22 IELTS-style prompts.
   - Speaking feedback uses a wider result layout with Must Fix / Optional Polish, a prominent upgraded answer, and secondary preserved-style context.
   - `obsidianMarkdown`-only provider issues are repaired locally when core Speaking feedback is valid, so valid feedback is not replaced with generic fallback.
-  - Added **Band 9 Refinement / Examiner-Friendly Refinement** as a distinct high-level coaching layer for strong answers with few or no true errors.
+  - Added a distinct high-level coaching layer for strong answers with few or no true errors; renamed later to Idea & Expression Upgrade.
   - Added **Practice This Question Again** so learners can retry the same prompt while preserving the analyzed attempt.
 - **Explicitly unchanged**: Mock Provider remains default, no provider selection changes, no RAG, no pronunciation scoring, no SpeechRecognition behavior change, no Writing layout change, no API usage panel.
 

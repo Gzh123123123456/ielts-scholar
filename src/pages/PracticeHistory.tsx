@@ -65,7 +65,7 @@ export default function PracticeHistory() {
       },
       updatedAt: new Date().toISOString(),
     });
-    navigate('/speaking/practice');
+    navigate('/speaking/practice', { state: { restoreSpeakingRecordId: record.id } });
   };
 
   const openWritingAttempt = (record: WritingTask2PracticeRecord) => {

@@ -18,7 +18,12 @@ import {
   WritingTask1Feedback,
   WritingTask,
 } from './schemas';
-import { capBand, floorToHalfBand, formatBandEstimate, roundToHalfBand } from '../bands';
+import { capBand, floorToHalfBand, formatConservativeBandEstimate, getTargetLabel, roundToHalfBand } from '../bands';
+import {
+  buildSpeakingTrainingMarkdown,
+  buildWritingTask1TrainingMarkdown,
+  buildWritingTask2TrainingMarkdown,
+} from '../markdownExport';
 
 type SpeakingRequest = SpeakingAnalysisRequest;
 type WritingRequest = WritingAnalysisRequest;
@@ -33,9 +38,16 @@ interface SafeAnalyzeResult<T> {
 
 const FALLBACK_SCORE = 0;
 const FALLBACK_TEXT = 'Provider output was malformed or incomplete.';
+const BLOCKED_LEARNING_CONTENT =
+  /provider output was malformed or incomplete|please retry analysis after checking the debug panel|provider_safety|raw parse|validation failure|parse_or_schema|incomplete feedback|debug panel|\[remove or rephrase sentence\]/i;
 
 const countWords = (text: string): number =>
   text.trim().split(/\s+/).filter(Boolean).length;
+
+const safeLearningText = (value: string, fallback = ''): string => {
+  const cleaned = value.replace(/\s+/g, ' ').trim();
+  return cleaned && !BLOCKED_LEARNING_CONTENT.test(cleaned) ? cleaned : fallback;
+};
 
 const insufficientSampleMessageZh = (moduleLabel: string, minimumWords: number) =>
   `样本太短，无法形成可靠的 ${moduleLabel} 训练估计。先扩展到接近 ${minimumWords} 词，并补充完整观点、细节和例子后再看语言问题。`;
@@ -79,6 +91,42 @@ const buildInsufficientSpeakingTransformation = (part: SpeakingPart): string => 
   return 'Insufficient sample for a full Part 3 model answer. Starter outline: state a clear opinion, compare two sides, add one real-world example, and explain the wider consequence.';
 };
 
+const isProviderIncompleteSpeakingAnswer = (text: string): boolean =>
+  /provider returned incomplete feedback|please retry analysis|malformed or incomplete/i.test(text);
+
+const splitSentences = (text: string): string[] =>
+  text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+    ?.map(sentence => sentence.trim())
+    .filter(Boolean) || [];
+
+const buildPart1TargetStarter = (transcript: string): string => {
+  const cleaned = transcript.replace(/\s+/g, ' ').trim();
+  if (!cleaned || hasLowSignalSpeakingText(cleaned)) {
+    return "Usually, I like spending time with my friends in a relaxed way. We might grab a coffee or just walk around and chat. I enjoy it because it helps me switch off after a busy day.";
+  }
+  const firstSentence = splitSentences(cleaned)[0] || cleaned;
+  return `${firstSentence.replace(/[.!?]+$/, '')}. Usually I would add one specific detail, like where we go or what we talk about. That makes the answer sound more natural and personal.`;
+};
+
+const calibrateSpeakingUpgradedAnswer = (
+  value: string,
+  part: SpeakingPart,
+  transcript: string,
+  limitTransformation: boolean,
+): string => {
+  if (limitTransformation || part !== 1 || isProviderIncompleteSpeakingAnswer(value)) return value;
+  const words = countWords(value);
+  const sentences = splitSentences(value);
+  if (words <= 80 && sentences.length <= 4) return value;
+
+  const trimmed = sentences.slice(0, 4).join(' ');
+  if (countWords(trimmed) >= 25 && countWords(trimmed) <= 85) return trimmed;
+  return buildPart1TargetStarter(transcript);
+};
+
 const applySpeakingLengthCap = (score: number, words: number, part: SpeakingPart): number => {
   if (!Number.isFinite(score) || score <= 0) return score;
   if (words <= 6) return floorToHalfBand(capBand(score, 3.0));
@@ -87,7 +135,7 @@ const applySpeakingLengthCap = (score: number, words: number, part: SpeakingPart
   if (part === 2 && words < speakingMinimumWords(part)) return floorToHalfBand(capBand(score, 5.0));
   if (part === 3 && words < 25) return floorToHalfBand(capBand(score, 4.0));
   if (part === 3 && words < speakingMinimumWords(part)) return floorToHalfBand(capBand(score, 5.0));
-  return roundToHalfBand(score);
+  return floorToHalfBand(score);
 };
 
 const buildSpeakingLengthMustFix = (words: number, part: SpeakingPart): FatalError | null => {
@@ -131,7 +179,12 @@ const asString = (
   path: string,
   errors: string[],
 ): string => {
-  if (typeof value === 'string' && value.trim()) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const cleaned = value.trim();
+    if (!BLOCKED_LEARNING_CONTENT.test(cleaned)) return cleaned;
+    errors.push(`${path} contained blocked provider/fallback text`);
+    return fallback === FALLBACK_TEXT ? '' : fallback;
+  }
   errors.push(`${path} missing or invalid string`);
   return fallback;
 };
@@ -173,7 +226,8 @@ const normalizeStringArray = (
   errors: string[],
 ): string[] =>
   asArray(value, path, errors)
-    .map((item, index) => asString(item, FALLBACK_TEXT, `${path}[${index}]`, errors));
+    .map((item, index) => asString(item, FALLBACK_TEXT, `${path}[${index}]`, errors))
+    .filter(Boolean);
 
 const tryParseJson = (source: string): { parsedJson: unknown; parseError?: string } => {
   try {
@@ -313,57 +367,8 @@ const buildDiagnostic = (diagnostic: ProviderDiagnostic): ProviderDiagnostic => 
   validationErrors: diagnostic.validationErrors.map(error => redactSecrets(error) as string),
 });
 
-const buildSpeakingObsidianMarkdown = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): string => {
-  const mustFix = feedback.fatalErrors.length
-    ? feedback.fatalErrors
-        .map(item => `- ${item.original} -> ${item.correction}\n  - ${item.explanationZh}`)
-        .join('\n')
-    : '- No critical correction needed.';
-
-  const polish = feedback.naturalnessHints.length
-    ? feedback.naturalnessHints
-        .map(item => `- ${item.original} -> ${item.better}\n  - ${item.explanationZh}`)
-        .join('\n')
-    : '- No optional polish item returned.';
-
-  const refinements = feedback.band9Refinements.length
-    ? feedback.band9Refinements
-        .map(item => `- ${item.observation}\n  - Refinement: ${item.refinement}\n  - ${item.explanationZh}`)
-        .join('\n')
-    : '- No Band 9 refinement returned.';
-
-  const reusable = feedback.reusableExample
-    ? `\n## Reusable Example\n${feedback.reusableExample.example}\n\nCan be reused for: ${feedback.reusableExample.canBeReusedFor.join(', ')}\n\n${feedback.reusableExample.explanationZh}\n`
-    : '';
-
-  return `# IELTS Speaking Note
-
-## Prompt
-${feedback.question}
-
-## Transcript
-${feedback.transcript}
-
-## Score Snapshot
-- Training estimate excluding pronunciation: ${formatBandEstimate(feedback.bandEstimateExcludingPronunciation)}
-- Fluency and Coherence: ${formatBandEstimate(feedback.scores.fluencyCoherence)}
-- Lexical Resource: ${formatBandEstimate(feedback.scores.lexicalResource)}
-- Grammatical Range and Accuracy: ${formatBandEstimate(feedback.scores.grammaticalRangeAccuracy)}
-- Pronunciation: not assessed in V1
-
-## Must Fix
-${mustFix}
-
-## Optional Polish
-${polish}
-
-## Band 9 Refinement
-${refinements}
-
-## High-Band Transformation
-${feedback.upgradedAnswer}
-${reusable}`;
-};
+const buildSpeakingObsidianMarkdown = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): string =>
+  buildSpeakingTrainingMarkdown(feedback);
 
 const normalizeSpeakingFeedback = (
   value: unknown,
@@ -380,6 +385,15 @@ const normalizeSpeakingFeedback = (
   const transcriptWords = countWords(request.transcript || '');
   const lengthMustFix = buildSpeakingLengthMustFix(transcriptWords, part);
   const limitTransformation = shouldLimitSpeakingTransformation(request.transcript || '', transcriptWords, part);
+
+  const rawUpgradedAnswer = limitTransformation
+    ? buildInsufficientSpeakingTransformation(part)
+    : asString(
+        source.upgradedAnswer,
+        'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
+        'upgradedAnswer',
+        validationErrors,
+      );
 
   const feedbackWithoutMarkdown: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -495,14 +509,7 @@ const normalizeSpeakingFeedback = (
         ),
       };
     }),
-    upgradedAnswer: limitTransformation
-      ? buildInsufficientSpeakingTransformation(part)
-      : asString(
-          source.upgradedAnswer,
-          'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
-          'upgradedAnswer',
-          validationErrors,
-        ),
+    upgradedAnswer: calibrateSpeakingUpgradedAnswer(rawUpgradedAnswer, part, request.transcript || '', limitTransformation),
     reusableExample: isRecord(source.reusableExample)
       ? {
           example: asString(source.reusableExample.example, FALLBACK_TEXT, 'reusableExample.example', validationErrors),
@@ -521,14 +528,59 @@ const normalizeSpeakingFeedback = (
       : null,
   };
 
-  return {
+  const sanitizedFeedback: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     ...feedbackWithoutMarkdown,
-    obsidianMarkdown: typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()
-      ? source.obsidianMarkdown
-      : (() => {
-          normalizedFields.push('obsidianMarkdown');
-          return buildSpeakingObsidianMarkdown(feedbackWithoutMarkdown);
-        })(),
+    fatalErrors: feedbackWithoutMarkdown.fatalErrors
+      .map(item => ({
+        ...item,
+        original: safeLearningText(item.original),
+        correction: safeLearningText(item.correction),
+        tag: safeLearningText(item.tag, 'speaking_issue'),
+        explanationZh: safeLearningText(item.explanationZh),
+      }))
+      .filter(item => item.original && item.correction && item.explanationZh),
+    naturalnessHints: feedbackWithoutMarkdown.naturalnessHints
+      .map(item => ({
+        ...item,
+        original: safeLearningText(item.original),
+        better: safeLearningText(item.better),
+        tag: safeLearningText(item.tag, 'naturalness'),
+        explanationZh: safeLearningText(item.explanationZh),
+      }))
+      .filter(item => item.original && item.better && item.explanationZh),
+    band9Refinements: feedbackWithoutMarkdown.band9Refinements
+      .map(item => ({
+        observation: safeLearningText(item.observation),
+        refinement: safeLearningText(item.refinement),
+        explanationZh: safeLearningText(item.explanationZh),
+      }))
+      .filter(item => item.observation && item.refinement && item.explanationZh),
+    preservedStyle: feedbackWithoutMarkdown.preservedStyle
+      .map(item => ({
+        text: safeLearningText(item.text),
+        reasonZh: safeLearningText(item.reasonZh),
+      }))
+      .filter(item => item.text && item.reasonZh),
+    upgradedAnswer: safeLearningText(feedbackWithoutMarkdown.upgradedAnswer),
+    reusableExample: feedbackWithoutMarkdown.reusableExample
+      ? {
+          example: safeLearningText(feedbackWithoutMarkdown.reusableExample.example),
+          canBeReusedFor: feedbackWithoutMarkdown.reusableExample.canBeReusedFor
+            .map(item => safeLearningText(item))
+            .filter(Boolean),
+          explanationZh: safeLearningText(feedbackWithoutMarkdown.reusableExample.explanationZh),
+        }
+      : null,
+  };
+
+  return {
+    ...sanitizedFeedback,
+    obsidianMarkdown: (() => {
+      if (typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()) {
+        normalizedFields.push('obsidianMarkdown');
+      }
+      return buildSpeakingObsidianMarkdown(sanitizedFeedback);
+    })(),
   };
 };
 
@@ -952,10 +1004,7 @@ const averageWritingScore = (scores: WritingFeedback['scores']): number =>
   ) / 4);
 
 const getWritingTargetLevel = (estimate: number): string => {
-  if (estimate <= 5.5) return 'Target Band 7.0';
-  if (estimate <= 6.5) return 'Target Band 7.5';
-  if (estimate <= 7.0) return 'Target Band 7.5-8.0';
-  return 'Examiner-friendly refinement';
+  return getTargetLabel(estimate, 'modelAnswer');
 };
 
 const normalizeModelAnswerAnnotations = (
@@ -1062,7 +1111,7 @@ ${logicItems}
 ${sentenceItems}
 
 ## Target Model Answer
-- Training estimate: ${formatBandEstimate(estimate)}
+- Training estimate: ${formatConservativeBandEstimate(estimate)}
 - Target level: ${feedback.modelAnswerTargetLevel || getWritingTargetLevel(estimate)}
 
 ### Next Rewrite Focus
@@ -1191,9 +1240,7 @@ const normalizeWritingFeedback = (
       250,
     ),
   };
-  const targetLevel = typeof source.modelAnswerTargetLevel === 'string' && source.modelAnswerTargetLevel.trim()
-    ? source.modelAnswerTargetLevel.trim()
-    : getWritingTargetLevel(averageWritingScore(scoresNormalized));
+  const targetLevel = getWritingTargetLevel(averageWritingScore(scoresNormalized));
   const vocabularyUpgrade = buildLocalVocabularyUpgrade(source, request, sentenceFeedback, validationErrors);
   const firstTopicExpression = vocabularyUpgrade.topicVocabulary[0]?.expression || 'topic-specific language';
   const firstExpressionUpgrade = vocabularyUpgrade.expressionUpgrades[0]?.better || 'a clearer argument frame';
@@ -1244,7 +1291,7 @@ const normalizeWritingFeedback = (
 
   return {
     ...feedbackWithoutMarkdown,
-    obsidianMarkdown: buildWritingTask2Markdown(feedbackWithoutMarkdown),
+    obsidianMarkdown: buildWritingTask2TrainingMarkdown(feedbackWithoutMarkdown),
   };
 };
 
@@ -1258,7 +1305,7 @@ ${feedback.instruction}
 ${feedback.visualBrief}
 
 ## Training Estimate
-${formatBandEstimate(feedback.estimatedBand)}
+${formatConservativeBandEstimate(feedback.estimatedBand)}
 
 ## Must Fix
 ${feedback.mustFix.length ? feedback.mustFix.map(item => `- ${item}`).join('\n') : '- No critical Task 1 issue returned.'}
@@ -1269,7 +1316,7 @@ ${feedback.rewriteTask}
 ## Reusable Report Patterns
 ${feedback.reusableReportPatterns.length ? feedback.reusableReportPatterns.map(item => `- ${item}`).join('\n') : '- No reusable pattern returned.'}
 
-## Improved Report / Model Excerpt
+## ${getTargetLabel(feedback.estimatedBand, 'report')}
 ${feedback.improvedReport || feedback.modelExcerpt || FALLBACK_TEXT}`;
 
 const normalizeTaskAchievement = (
@@ -1393,12 +1440,12 @@ const normalizeWritingTask1Feedback = (
 
   return {
     ...feedbackWithoutMarkdown,
-    obsidianMarkdown: typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()
-      ? source.obsidianMarkdown
-      : (() => {
-          normalizedFields.push('obsidianMarkdown');
-          return buildWritingTask1Markdown(feedbackWithoutMarkdown);
-        })(),
+    obsidianMarkdown: (() => {
+      if (typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()) {
+        normalizedFields.push('obsidianMarkdown');
+      }
+      return buildWritingTask1TrainingMarkdown(feedbackWithoutMarkdown);
+    })(),
   };
 };
 

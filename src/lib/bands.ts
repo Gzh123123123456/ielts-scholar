@@ -9,9 +9,80 @@ export const formatBandEstimate = (value: number | null | undefined, fallback = 
   return roundToHalfBand(value).toFixed(1);
 };
 
+export const conservativeDisplayBand = (value: number | null | undefined): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  if (value > 5.5 && value < 6.0) return 5.5;
+  return roundToHalfBand(value);
+};
+
+export const formatConservativeBandEstimate = (
+  value: number | null | undefined,
+  fallback = '-',
+): string => {
+  const conservative = conservativeDisplayBand(value);
+  return conservative === null ? fallback : conservative.toFixed(1);
+};
+
 export const formatApproxBandEstimate = (value: number | null | undefined, fallback = 'Not enough data'): string => {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
-  return `≈ ${roundToHalfBand(value).toFixed(1)}`;
+  return `≈ ${formatConservativeBandEstimate(value)}`;
+};
+
+export type TrainingTargetKind = 'answer' | 'modelAnswer' | 'report';
+
+export const getTargetLayer = (estimate: number | null | undefined) => {
+  const highLayer = typeof estimate === 'number' && Number.isFinite(estimate) && estimate >= 7.0;
+  return highLayer
+    ? {
+        isHighLayer: true,
+        label: 'Band 8+ Examiner-Friendly',
+        zh: '8分以上表达与思路升级',
+      }
+    : {
+        isHighLayer: false,
+        label: 'Band 7.0+ Target',
+        zh: '7分以上目标答案',
+      };
+};
+
+export const getTargetLabel = (
+  estimate: number | null | undefined,
+  kind: TrainingTargetKind,
+): string => {
+  const layer = getTargetLayer(estimate);
+  if (kind === 'modelAnswer') {
+    return layer.isHighLayer
+      ? 'Band 8+ Examiner-Friendly Model Answer'
+      : 'Band 7.0+ Target Model Answer';
+  }
+  if (kind === 'report') {
+    return layer.isHighLayer
+      ? 'Band 8+ Examiner-Friendly Report'
+      : 'Band 7.0+ Target Report';
+  }
+  return layer.isHighLayer
+    ? 'Band 8+ Examiner-Friendly Answer'
+    : 'Band 7.0+ Target Answer';
+};
+
+export const getTargetLabelZh = (
+  estimate: number | null | undefined,
+  kind: TrainingTargetKind,
+): string => {
+  const layer = getTargetLayer(estimate);
+  if (kind === 'modelAnswer') {
+    return layer.isHighLayer
+      ? '8分以上表达与论证升级范文'
+      : '7分以上目标范文';
+  }
+  if (kind === 'report') {
+    return layer.isHighLayer
+      ? '8分以上表达与概括升级报告'
+      : '7分以上目标报告';
+  }
+  return layer.isHighLayer
+    ? '8分以上表达与思路升级答案'
+    : '7分以上目标答案';
 };
 
 export const capBand = (value: number, cap: number): number =>

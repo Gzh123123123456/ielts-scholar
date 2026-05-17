@@ -16,3 +16,4 @@ This project was prototyped in Google AI Studio. It is designed to be continued 
 3. Use `/knowledge/ielts` as rubric and behavior guidance; do not add RAG until it is explicitly scoped.
 4. Add full-stack or filesystem layers only if local browser storage is no longer enough.
 5. Use the Writing Task 2 wide workspace direction as the reference for future Writing modules. Adjust Speaking separately; do not blindly widen Speaking to match Writing.
+6. Future backlog item: **Question bank count + browse/random/select entry points**. Add low-noise counts and random/browse entry points from question data first; keep the full browse/select modal or panel as a separate UI task.
