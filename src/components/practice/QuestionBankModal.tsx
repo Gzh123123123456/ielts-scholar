@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { SerifButton } from '@/src/components/ui/SerifButton';
 import { getPracticeRecords, PracticeRecord } from '@/src/lib/practiceRecords';
 
 export interface QuestionBankItem {
   id?: string;
   title: string;
-  metadata?: string;
+  metadata?: string | string[];
   tags?: string[];
   questionText?: string;
   module: PracticeRecord['module'];
@@ -22,18 +22,24 @@ interface QuestionBankModalProps<T extends QuestionBankItem> {
   onSelect: (item: T) => void;
 }
 
+const normalizeLabelKey = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
 const uniqueLabels = (values: (string | undefined)[]) => {
   const seen = new Set<string>();
   return values
     .map(value => value?.trim())
     .filter((value): value is string => Boolean(value))
     .filter(value => {
-      const key = value.toLowerCase();
+      const key = normalizeLabelKey(value);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 };
+
+const metadataLabels = (metadata?: string | string[]) =>
+  uniqueLabels(Array.isArray(metadata) ? metadata : metadata ? metadata.split(/\s*[|/]\s*/) : []);
 
 const hasAnalyzedFeedback = (record: PracticeRecord) =>
   record.status === 'analyzed' && Boolean(record.feedback);
@@ -89,8 +95,8 @@ export function QuestionBankModal<T extends QuestionBankItem>({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-paper-ink/20 px-4 py-6">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex h-dvh w-screen items-center justify-center bg-paper-ink/25 px-4 py-6">
       <section
         role="dialog"
         aria-modal="true"
@@ -117,7 +123,7 @@ export function QuestionBankModal<T extends QuestionBankItem>({
         </div>
 
         <div className="border-b border-paper-ink/10 px-5 py-3">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {tags.map(tag => (
               <button
                 key={tag}
@@ -141,7 +147,7 @@ export function QuestionBankModal<T extends QuestionBankItem>({
               const practicedCount = records.filter(record => (
                 hasAnalyzedFeedback(record) && matchesBankItem(record, item)
               )).length;
-              const metadata = uniqueLabels([item.metadata, ...(item.tags || [])]).join(' · ');
+              const metadata = metadataLabels(item.metadata).join(' / ');
               return (
                 <button
                   key={item.id || item.title}
@@ -168,12 +174,8 @@ export function QuestionBankModal<T extends QuestionBankItem>({
           </div>
         </div>
 
-        <div className="flex justify-end border-t border-paper-ink/10 bg-paper-ink/[0.02] px-5 py-3">
-          <SerifButton variant="outline" onClick={onClose} className="text-xs">
-            Close
-          </SerifButton>
-        </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

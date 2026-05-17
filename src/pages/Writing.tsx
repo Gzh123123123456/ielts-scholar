@@ -14,7 +14,7 @@ export default function Writing() {
   const task1Items: QuestionBankItem[] = writingTask1Academic.map(prompt => ({
     id: prompt.id,
     title: prompt.instruction,
-    metadata: `${prompt.taskType} · ${prompt.topic}`,
+    metadata: [prompt.taskType, prompt.topic],
     tags: [prompt.taskType, prompt.topic, ...prompt.tags].filter(Boolean),
     questionText: prompt.instruction,
     module: 'writing_task1',
@@ -24,7 +24,7 @@ export default function Writing() {
   const task2Items: QuestionBankItem[] = writingTask2.map(question => ({
     id: question.id,
     title: question.question,
-    metadata: `${question.type}${question.topicCategory ? ` · ${question.topicCategory}` : ''}`,
+    metadata: [question.type, question.topicCategory],
     tags: [question.type, question.topicCategory, ...(question.tags || [])].filter((value): value is string => Boolean(value)),
     questionText: question.question,
     module: 'writing',
@@ -68,10 +68,20 @@ export default function Writing() {
                   <p className="text-sm text-paper-ink/65 leading-7">
                     Summarize text-based charts, tables, processes, and maps. 150+ words.
                   </p>
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
                     <span className="text-[10px] uppercase font-sans tracking-widest text-paper-ink/40">
                       Bank: {writingTask1Academic.length} prompts
                     </span>
+                    <SerifButton
+                      type="button"
+                      className="text-xs"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate('/writing/task1');
+                      }}
+                    >
+                      Start Practice
+                    </SerifButton>
                     <SerifButton
                       type="button"
                       variant="outline"
@@ -99,10 +109,20 @@ export default function Writing() {
                   <p className="text-sm text-paper-ink/65 mb-4 leading-7">
                     Discuss views, argue a point, or propose solutions. 250+ words.
                   </p>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <span className="text-[10px] uppercase font-sans tracking-widest text-paper-ink/40">
                       Bank: {writingTask2.length} prompts
                     </span>
+                    <SerifButton
+                      type="button"
+                      className="text-xs"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate('/writing/task2/practice');
+                      }}
+                    >
+                      Start Practice
+                    </SerifButton>
                     <SerifButton
                       type="button"
                       variant="outline"

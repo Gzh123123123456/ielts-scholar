@@ -13,6 +13,15 @@
 - **Explicitly unchanged**: no separate question-bank page, no search, no favorites/bookmarks, no mastery status, no wrong-question notebook, no Part 1 topic-thread practice, no Part 3 discussion-thread practice, no session-level Speaking analysis/export, no provider routing changes, no scoring changes, no AI feedback prompt changes.
 - **Data note**: Future bank updates should keep stable `id` values and populate topic/type/category/tags metadata so filters, counts, and practice-count matching remain accurate.
 
+## [2026-05-17] Question Bank Picker UI Polish
+- **Decision**: Keep the question-bank picker lightweight but make actions and modal behavior clearer.
+- **Implemented**:
+  - Speaking practice now shows only the current Part bank count near the action buttons.
+  - Writing module cards expose both **Start Practice** and **Browse Bank** actions.
+  - The bank modal is portaled to the document body with a full-viewport fixed backdrop; backdrop clicks are absorbed and do not close the modal.
+  - Modal row metadata is deduplicated and kept concise.
+- **Explicitly unchanged**: no browse page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, Part 3 discussion-thread practice, provider prompt changes, scoring changes, or History architecture changes.
+
 ## [2026-05-14] Writing Task 2 Phase 3 Annotation and Score Transparency
 - **Decision**: Treat visible Writing Task 2 scores as conservative training estimates with compact provenance, not official IELTS scoring.
 - **Implemented**:

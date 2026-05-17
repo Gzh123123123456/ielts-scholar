@@ -600,10 +600,11 @@ export default function SpeakingPractice() {
     2: speakingPart2.length,
     3: speakingPart3.length,
   };
+  const currentPartBankCount = speakingBankCounts[part];
   const speakingBankItems: QuestionBankItem[] = getBank(part).map(item => ({
     id: item.id,
     title: item.question,
-    metadata: item.topic,
+    metadata: [item.topic, item.topicCategory],
     tags: item.tags || [item.topicCategory, item.topic].filter((value): value is string => Boolean(value)),
     questionText: item.question,
     module: 'speaking',
@@ -724,8 +725,8 @@ export default function SpeakingPractice() {
                 </>
               )}
             </div>
-            <p className="mt-3 text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35">
-              Part 1: {speakingBankCounts[1]} · Part 2: {speakingBankCounts[2]} · Part 3: {speakingBankCounts[3]}
+            <p className="mt-4 text-sm font-sans text-paper-ink/55">
+              Bank: {currentPartBankCount} Part {part} {currentPartBankCount === 1 ? 'question' : 'questions'}
             </p>
           </PaperCard>
 
