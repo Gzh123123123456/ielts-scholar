@@ -1,5 +1,16 @@
 # Decision Log
 
+## [2026-05-18] Feedback Calibration and Target-Output Integrity
+- **Decision**: Score, feedback diagnosis, target answer labels, target answer content, markdown export, and saved records must agree as one integrity contract.
+- **Implemented**:
+  - Speaking provider prompts now require score consistency when pronunciation is null and V1 does not assess pronunciation.
+  - Writing Task 2 prompts now require a real blocker whenever any score dimension is below 7.0.
+  - Safety normalization records explicit markers such as `speakingScoreConsistency`, `writingScoreFeedbackConsistency`, and `targetLayerConsistency` when fallback repair is needed.
+  - Target outputs keep a safety margin: current below 7.0 targets Band 7.0-7.5; current 7.0-7.5 targets Band 8+; current around 8.0 stays Band 8+ examiner-friendly without fake Band 9 wording.
+  - Retesting target answers or rewriting the same question creates fresh attempt ids so previous analyzed records remain in history.
+- **Explicitly unchanged**: no provider routing changes, no ASR provider, no pronunciation scoring, no server/auth/database/RAG, no push.
+- **Future**: Task 1 still needs its own dedicated calibration pass; advanced ASR/audio transcription remains a separate future slice.
+
 ## [2026-05-17] Lightweight Question Bank Pickers
 - **Decision**: Add question-bank browsing as modal selection inside the existing practice flows, not as a separate browse page.
 - **Implemented**:

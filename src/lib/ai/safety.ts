@@ -138,6 +138,9 @@ const applySpeakingLengthCap = (score: number, words: number, part: SpeakingPart
   return floorToHalfBand(score);
 };
 
+const normalizeHalfBandScore = (score: number): number =>
+  Math.max(0, Math.min(9, roundToHalfBand(score)));
+
 const buildSpeakingLengthMustFix = (words: number, part: SpeakingPart): FatalError | null => {
   const minimum = speakingMinimumWords(part);
   if (words >= minimum) return null;
@@ -228,6 +231,19 @@ const normalizeStringArray = (
   asArray(value, path, errors)
     .map((item, index) => asString(item, FALLBACK_TEXT, `${path}[${index}]`, errors))
     .filter(Boolean);
+
+const optionalSafeString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  return safeLearningText(value) || undefined;
+};
+
+const optionalSafeStringArray = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const items = value
+    .map(item => optionalSafeString(item))
+    .filter((item): item is string => Boolean(item));
+  return items.length ? items : undefined;
+};
 
 const tryParseJson = (source: string): { parsedJson: unknown; parseError?: string } => {
   try {
@@ -394,6 +410,60 @@ const normalizeSpeakingFeedback = (
         'upgradedAnswer',
         validationErrors,
       );
+  const cappedHeadline = normalizeHalfBandScore(applySpeakingLengthCap(
+    asNumber(
+      source.bandEstimateExcludingPronunciation,
+      'bandEstimateExcludingPronunciation',
+      validationErrors,
+    ),
+    transcriptWords,
+    part,
+  ));
+  const visibleScores = {
+    fluencyCoherence: normalizeHalfBandScore(applySpeakingLengthCap(
+      asNumber(scores.fluencyCoherence, 'scores.fluencyCoherence', validationErrors),
+      transcriptWords,
+      part,
+    )),
+    lexicalResource: normalizeHalfBandScore(applySpeakingLengthCap(
+      asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors),
+      transcriptWords,
+      part,
+    )),
+    grammaticalRangeAccuracy: normalizeHalfBandScore(applySpeakingLengthCap(
+      asNumber(
+        scores.grammaticalRangeAccuracy,
+        'scores.grammaticalRangeAccuracy',
+        validationErrors,
+      ),
+      transcriptWords,
+      part,
+    )),
+  };
+  const sourceFatalErrors = Array.isArray(source.fatalErrors) ? source.fatalErrors : [];
+  const hasQualityCap = Boolean(lengthMustFix || limitTransformation || hasLowSignalSpeakingText(request.transcript || ''));
+  const hasProviderFatalIssue = sourceFatalErrors.length > 0;
+  const minimumVisibleScore = Math.min(
+    visibleScores.fluencyCoherence,
+    visibleScores.lexicalResource,
+    visibleScores.grammaticalRangeAccuracy,
+  );
+  const shouldNormalizeSpeakingScore =
+    cappedHeadline > 0 &&
+    minimumVisibleScore > 0 &&
+    cappedHeadline < minimumVisibleScore &&
+    !hasQualityCap &&
+    !hasProviderFatalIssue;
+  const normalizedHeadline = shouldNormalizeSpeakingScore ? minimumVisibleScore : cappedHeadline;
+  if (shouldNormalizeSpeakingScore) {
+    normalizedFields.push('speakingScoreConsistency');
+  }
+  const speakingTargetFloor = normalizedHeadline >= 7 ? 8 : 7;
+  const speakingTargetLayer = getTargetLabel(normalizedHeadline, 'answer');
+  const providerScoreConsistencyNote = optionalSafeString(source.scoreConsistencyNoteZh);
+  const scoreConsistencyNoteZh = shouldNormalizeSpeakingScore
+    ? `分数已按可见语言维度校准：发音未评估，且没有样本/跑题/严重质量上限时，总分不应低于三个可见维度的最低分 ${formatConservativeBandEstimate(minimumVisibleScore)}。`
+    : providerScoreConsistencyNote;
 
   const feedbackWithoutMarkdown: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -401,35 +471,18 @@ const normalizeSpeakingFeedback = (
     part,
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     transcript: asString(source.transcript, request.transcript || FALLBACK_TEXT, 'transcript', validationErrors),
-    bandEstimateExcludingPronunciation: applySpeakingLengthCap(
-      asNumber(
-        source.bandEstimateExcludingPronunciation,
-        'bandEstimateExcludingPronunciation',
-        validationErrors,
-      ),
-      transcriptWords,
-      part,
-    ),
+    bandEstimateExcludingPronunciation: normalizedHeadline,
+    estimateRationaleZh: optionalSafeString(source.estimateRationaleZh),
+    targetBandFloor: speakingTargetFloor,
+    targetLayer: optionalSafeString(source.targetLayer) || speakingTargetLayer,
+    targetValidationZh: optionalSafeString(source.targetValidationZh) ||
+      `目标答案需稳定达到 ${speakingTargetLayer}，不能只把原答案换成更正式的说法。`,
+    targetUpgradeFocusZh: optionalSafeString(source.targetUpgradeFocusZh),
+    scoreConsistencyNoteZh,
     scores: {
-      fluencyCoherence: applySpeakingLengthCap(
-        asNumber(scores.fluencyCoherence, 'scores.fluencyCoherence', validationErrors),
-        transcriptWords,
-        part,
-      ),
-      lexicalResource: applySpeakingLengthCap(
-        asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors),
-        transcriptWords,
-        part,
-      ),
-      grammaticalRangeAccuracy: applySpeakingLengthCap(
-        asNumber(
-          scores.grammaticalRangeAccuracy,
-          'scores.grammaticalRangeAccuracy',
-          validationErrors,
-        ),
-        transcriptWords,
-        part,
-      ),
+      fluencyCoherence: visibleScores.fluencyCoherence,
+      lexicalResource: visibleScores.lexicalResource,
+      grammaticalRangeAccuracy: visibleScores.grammaticalRangeAccuracy,
       pronunciation: null,
       pronunciationNote: asString(
         scores.pronunciationNote,
@@ -507,6 +560,13 @@ const normalizeSpeakingFeedback = (
           `preservedStyle[${index}].reasonZh`,
           validationErrors,
         ),
+        expansionZh: typeof record.expansionZh === 'string' ? record.expansionZh : undefined,
+        sampleNextStep: typeof record.sampleNextStep === 'string' ? record.sampleNextStep : undefined,
+        transferQuestions: Array.isArray(record.transferQuestions)
+          ? record.transferQuestions.filter((question): question is string => typeof question === 'string')
+          : undefined,
+        partUseZh: typeof record.partUseZh === 'string' ? record.partUseZh : undefined,
+        riskNoteZh: typeof record.riskNoteZh === 'string' ? record.riskNoteZh : undefined,
       };
     }),
     upgradedAnswer: calibrateSpeakingUpgradedAnswer(rawUpgradedAnswer, part, request.transcript || '', limitTransformation),
@@ -559,6 +619,11 @@ const normalizeSpeakingFeedback = (
       .map(item => ({
         text: safeLearningText(item.text),
         reasonZh: safeLearningText(item.reasonZh),
+        expansionZh: optionalSafeString(item.expansionZh),
+        sampleNextStep: optionalSafeString(item.sampleNextStep),
+        transferQuestions: optionalSafeStringArray(item.transferQuestions),
+        partUseZh: optionalSafeString(item.partUseZh),
+        riskNoteZh: optionalSafeString(item.riskNoteZh),
       }))
       .filter(item => item.text && item.reasonZh),
     upgradedAnswer: safeLearningText(feedbackWithoutMarkdown.upgradedAnswer),
@@ -1007,6 +1072,132 @@ const getWritingTargetLevel = (estimate: number): string => {
   return getTargetLabel(estimate, 'modelAnswer');
 };
 
+const dimensionBlockerConfigs = {
+  taskResponse: {
+    field: 'taskResponse',
+    issue: 'Task Response blocker: answer direction or development is not yet Band 7',
+    suggestionZh: '这个维度低于 7.0 时，反馈必须说明具体任务回应卡点：可能是题目某一部分没有处理、立场不够稳定、论证停留在判断句，或例子没有支撑结论。',
+    paragraphFixZh: '先回到题目关键词，补清楚立场、每个主体段的任务角色，以及至少一个能支撑判断的具体例子；如果原来的论点方向限制分数，应换成更能回应题目的方向。',
+    transferGuidanceZh: '下次写前先问自己：我有没有回应题目所有部分？每段是在证明一个明确判断，还是只在列观点？',
+    issueType: 'task_response',
+    dimension: 'TR' as const,
+  },
+  coherenceCohesion: {
+    field: 'coherenceCohesion',
+    issue: 'Coherence blocker: paragraph progression is not yet Band 7',
+    suggestionZh: '这个维度低于 7.0 时，需要指出段落功能或推进问题：例如段落只堆叠想法、转折关系不清，或例子没有把主题句往前推进。',
+    paragraphFixZh: '把每个主体段改成“主题句 -> 原因/机制 -> 例子 -> 回扣立场”的链条；删掉和段落任务无关的旁支。',
+    transferGuidanceZh: '下次每写完一段，检查读者能否看出这一段和总立场的关系。',
+    issueType: 'coherence',
+    dimension: 'CC' as const,
+  },
+  lexicalResource: {
+    field: 'lexicalResource',
+    issue: 'Lexical Resource blocker',
+    suggestionZh: '词汇低于 7.0 时，反馈需要说明真实卡点：可能是搭配不自然、话题词不够精确、重复基础词，或为了显得正式而使用不自然表达。',
+    paragraphFixZh: '优先替换会影响意思精度的短语，而不是堆高级词；每个主体段至少使用 2-3 个和题目直接相关的自然搭配。',
+    transferGuidanceZh: '下次检查 want / good / bad / thing / people 这类泛词，并换成更贴合话题的表达。',
+    issueType: 'lexical_precision',
+    dimension: 'LR' as const,
+  },
+  grammaticalRangeAccuracy: {
+    field: 'grammaticalRangeAccuracy',
+    issue: 'Grammar blocker',
+    suggestionZh: '语法低于 7.0 时，反馈需要说明句子控制问题：可能是从句逻辑、标点连接、主谓一致、冠词/复数，或复杂句一长就失控。',
+    paragraphFixZh: '先保证每个句子边界清楚，再使用原因、让步和结果从句；不要为了复杂而写失控长句。',
+    transferGuidanceZh: '下次修改时单独扫一遍句子边界、连接词、冠词、复数和从句主语。',
+    issueType: 'grammar_control',
+    dimension: 'GRA' as const,
+  },
+} as const;
+
+const hasWritingBlockerForDimension = (
+  dimension: keyof WritingFeedback['scores'],
+  frameworkFeedback: WritingFeedback['frameworkFeedback'],
+  sentenceFeedback: WritingFeedback['sentenceFeedback'],
+  vocabularyUpgrade: WritingFeedback['vocabularyUpgrade'],
+): boolean => {
+  const text = frameworkFeedback
+    .map(item => `${item.issue} ${item.issueType || ''} ${item.suggestionZh} ${item.paragraphFixZh || ''}`)
+    .join(' ')
+    .toLowerCase();
+  if (dimension === 'taskResponse') {
+    return /task_response|task response|task command|position|off.?task|development|support|example/.test(text)
+      || sentenceFeedback.some(item => item.dimension === 'TR');
+  }
+  if (dimension === 'coherenceCohesion') {
+    return /coherence|cohesion|paragraph|progression|structure|logical|transition/.test(text)
+      || sentenceFeedback.some(item => item.dimension === 'CC');
+  }
+  if (dimension === 'lexicalResource') {
+    return sentenceFeedback.some(item => item.dimension === 'LR')
+      || vocabularyUpgrade.expressionUpgrades.some(item => item.original || item.category === 'from_essay');
+  }
+  return sentenceFeedback.some(item => item.dimension === 'GRA');
+};
+
+const buildWritingDimensionBlockers = (
+  scores: WritingFeedback['scores'],
+  frameworkFeedback: WritingFeedback['frameworkFeedback'],
+  sentenceFeedback: WritingFeedback['sentenceFeedback'],
+  vocabularyUpgrade: WritingFeedback['vocabularyUpgrade'],
+  essay: string,
+): {
+  frameworkAdditions: WritingFeedback['frameworkFeedback'];
+  sentenceAdditions: WritingFeedback['sentenceFeedback'];
+  normalized: boolean;
+} => {
+  const frameworkAdditions: WritingFeedback['frameworkFeedback'] = [];
+  const sentenceAdditions: WritingFeedback['sentenceFeedback'] = [];
+  const sourceQuote = splitSentences(essay)[0] || essay.split(/\r?\n/).find(Boolean) || 'Essay excerpt';
+
+  (Object.keys(dimensionBlockerConfigs) as (keyof typeof dimensionBlockerConfigs)[]).forEach(key => {
+    const config = dimensionBlockerConfigs[key];
+    const dimension = config.field as keyof WritingFeedback['scores'];
+    if (scores[dimension] >= 7 || hasWritingBlockerForDimension(dimension, frameworkFeedback, sentenceFeedback, vocabularyUpgrade)) {
+      return;
+    }
+    if (dimension === 'taskResponse' || dimension === 'coherenceCohesion') {
+      frameworkAdditions.push({
+        issue: config.issue,
+        suggestionZh: config.suggestionZh,
+        severity: 'fatal',
+        location: 'Whole Essay',
+        issueType: config.issueType,
+        relatedCorrectionIds: [],
+        paragraphFixZh: config.paragraphFixZh,
+        exampleFrame: defaultExampleFrame(config.issue),
+        transferGuidanceZh: config.transferGuidanceZh,
+      });
+    } else {
+      const correctionNumber = sentenceFeedback.length + sentenceAdditions.length + 1;
+      sentenceAdditions.push({
+        id: `C${correctionNumber}`,
+        correctionNumber,
+        paragraph: 'Whole Essay',
+        sourceQuote,
+        issueType: config.issueType,
+        severity: 'medium',
+        primaryIssue: config.issue,
+        secondaryIssues: [],
+        microUpgrades: [],
+        transferGuidanceZh: config.transferGuidanceZh,
+        original: sourceQuote,
+        correction: sourceQuote,
+        dimension: config.dimension,
+        tag: config.issueType,
+        explanationZh: config.suggestionZh,
+      });
+    }
+  });
+
+  return {
+    frameworkAdditions,
+    sentenceAdditions,
+    normalized: Boolean(frameworkAdditions.length || sentenceAdditions.length),
+  };
+};
+
 const normalizeModelAnswerAnnotations = (
   value: unknown,
   modelAnswer: string,
@@ -1126,6 +1317,7 @@ const normalizeWritingFeedback = (
   value: unknown,
   request: WritingRequest,
   validationErrors: string[],
+  normalizedFields: string[],
 ): WritingFeedback => {
   const source = isRecord(value) ? value : {};
   if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
@@ -1240,8 +1432,32 @@ const normalizeWritingFeedback = (
       250,
     ),
   };
-  const targetLevel = getWritingTargetLevel(averageWritingScore(scoresNormalized));
   const vocabularyUpgrade = buildLocalVocabularyUpgrade(source, request, sentenceFeedback, validationErrors);
+  const consistencyBlockers = buildWritingDimensionBlockers(
+    scoresNormalized,
+    frameworkFeedback,
+    sentenceFeedback,
+    vocabularyUpgrade,
+    request.essay || '',
+  );
+  if (consistencyBlockers.normalized) {
+    normalizedFields.push('writingScoreFeedbackConsistency');
+  }
+  const finalFrameworkFeedback = [
+    ...frameworkFeedback,
+    ...consistencyBlockers.frameworkAdditions,
+  ];
+  const finalSentenceFeedback = [
+    ...sentenceFeedback,
+    ...consistencyBlockers.sentenceAdditions,
+  ];
+  const estimate = averageWritingScore(scoresNormalized);
+  const targetLevel = getWritingTargetLevel(estimate);
+  const providerTargetLevel = optionalSafeString(source.modelAnswerTargetLevel);
+  if (providerTargetLevel && providerTargetLevel !== targetLevel) {
+    normalizedFields.push('targetLayerConsistency');
+  }
+  const targetFloor = estimate >= 7 ? 8 : 7;
   const firstTopicExpression = vocabularyUpgrade.topicVocabulary[0]?.expression || 'topic-specific language';
   const firstExpressionUpgrade = vocabularyUpgrade.expressionUpgrades[0]?.better || 'a clearer argument frame';
   const normalizedModelAnswer = asString(
@@ -1258,17 +1474,26 @@ const normalizeWritingFeedback = (
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     essay: asString(source.essay, request.essay || FALLBACK_TEXT, 'essay', validationErrors),
     scores: scoresNormalized,
-    frameworkFeedback,
     essayLevelWarnings: [
       ...sourceWarnings,
       ...(lengthWarning ? [lengthWarning] : []),
     ],
-    sentenceFeedback,
+    frameworkFeedback: finalFrameworkFeedback,
+    sentenceFeedback: finalSentenceFeedback,
     vocabularyUpgrade,
     modelAnswer: normalizedModelAnswer,
     modelAnswerAnnotations: normalizeModelAnswerAnnotations(source.modelAnswerAnnotations, normalizedModelAnswer),
     modelAnswerPersonalized: source.modelAnswerPersonalized === true,
     modelAnswerTargetLevel: targetLevel,
+    estimateRationaleZh: optionalSafeString(source.estimateRationaleZh),
+    targetBandFloor: targetFloor,
+    targetLayer: targetLevel,
+    targetValidationZh: optionalSafeString(source.targetValidationZh) ||
+      `目标范文必须真实达到 ${targetLevel}：需要修复上方诊断的问题，而不是只把语言改得更正式。`,
+    targetUpgradeFocusZh: optionalSafeString(source.targetUpgradeFocusZh),
+    scoreConsistencyNoteZh: consistencyBlockers.normalized
+      ? '已补充低于 7.0 维度对应的真实卡点说明，避免分数和反馈内容不一致。'
+      : optionalSafeString(source.scoreConsistencyNoteZh),
     reusableArguments: asArray(source.reusableArguments, 'reusableArguments', validationErrors).map((item, index) => {
       const record = isRecord(item) ? item : {};
       if (!isRecord(item)) validationErrors.push(`reusableArguments[${index}] missing or invalid object`);
@@ -1649,6 +1874,7 @@ export const safeAnalyzeWriting = async (
   let parsedJson: unknown = null;
   let parseError: string | undefined;
   const validationErrors: string[] = [];
+  const normalizedFields: string[] = [];
 
   try {
     rawResponse = await provider.analyzeWriting(requestPayload);
@@ -1659,7 +1885,7 @@ export const safeAnalyzeWriting = async (
     parseError = error instanceof Error ? error.message : String(error);
   }
 
-  const feedback = normalizeWritingFeedback(parsedJson, requestPayload, validationErrors);
+  const feedback = normalizeWritingFeedback(parsedJson, requestPayload, validationErrors, normalizedFields);
   const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
   const failureKind = getFailureKind(parseError, validationErrors);
 
@@ -1676,6 +1902,7 @@ export const safeAnalyzeWriting = async (
       validationErrors,
       fallbackUsed,
       failureKind,
+      normalizedFields,
       timestamp: new Date().toISOString(),
     }),
   };

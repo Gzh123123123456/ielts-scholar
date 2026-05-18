@@ -580,7 +580,7 @@ const reviewCardTransferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianM
 const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. 起步目标答案';
   if (isSpeakingInsufficient(feedback)) return '## 4. 请先重录一个完整答案';
-  return `## 4. ${getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}｜${getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}`;
+  return `## 4. ${feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}｜${getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}`;
 };
 
 const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
@@ -643,38 +643,42 @@ const reviewCardExpressions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdow
     : '- 暂无稳定可复用表达。';
 };
 
+const speakingExpansionFallback = (part: SpeakingFeedback['part']) => {
+  if (part === 1) return 'Add one real detail and one short reason; keep it brief.';
+  if (part === 2) return 'Build it into a story spine with scene, action, change, feeling, and meaning.';
+  return 'Turn the personal material into a claim, contrast or condition, example, and consequence.';
+};
+
 const reviewCardIdeaExpansion = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
-  const route = feedback.part === 1
-    ? '怎么发散：补一个真实个人细节，再接一个简短原因。'
-    : feedback.part === 2
-      ? '怎么发散：补场景、动作、情绪变化和为什么重要。'
-      : '怎么发散：把素材继续推到原因、对比、例子或影响，避免只列事实。';
-  const strongerView = feedback.part === 3
-    ? '更建议的观点：不要只说发生了什么，要说明为什么发生以及这会带来什么影响。'
-    : feedback.part === 2
-      ? '更建议的观点：这个素材可以变成一条有起点、细节和个人反思的故事线。'
-      : '更建议的观点：短回答也要听起来像真实经历，而不是背诵句子。';
   const expressionItems = topicExpressionCandidates(feedback).slice(0, 3);
   const material = feedback.preservedStyle.length
     ? feedback.preservedStyle.slice(0, 3)
     : [{
         text: feedback.reusableExample?.example || limitWords(feedback.transcript, 14),
         reasonZh: feedback.part === 3
-          ? '这个素材可以继续发展成原因、例子和影响。'
-          : '这个素材可以保留，但需要补充更具体的细节。',
+          ? 'This material can develop into reason, example, and consequence.'
+          : 'This material is worth keeping, but it needs more concrete detail.',
+        expansionZh: speakingExpansionFallback(feedback.part),
       }];
 
   return material
     .filter(item => cleanLearningText(item.text))
-    .map((item, index) => `### ${index + 1}. 个人素材
-- 你的素材: ${cleanLearningText(item.text)}
-- 可以保留的原因: ${cleanLearningText(item.reasonZh) || '这个想法和题目相关，可以作为答案的内容基础。'}
-- ${route}
-- ${strongerView}
-- 可用表达: ${expressionItems.length ? expressionItems.join(' / ') : 'because of this / a good example would be / this probably leads to'}`)
-    .join('\n\n') || '- 暂无稳定个人素材；下一次先补一个真实细节，再做语言升级。';
+    .map((item, index) => {
+      const lines = [
+        `### ${index + 1}. Personal Material`,
+        `- 你的素材: ${cleanLearningText(item.text)}`,
+        `- 可以保留的原因: ${cleanLearningText(item.reasonZh) || 'This idea is relevant and can be used as answer material.'}`,
+        `- 怎么发散: ${cleanLearningText(item.expansionZh) || speakingExpansionFallback(feedback.part)}`,
+        cleanLearningText(item.partUseZh) && `- Part use: ${cleanLearningText(item.partUseZh)}`,
+        cleanLearningText(item.sampleNextStep) && `- Sample next step: ${cleanLearningText(item.sampleNextStep)}`,
+        item.transferQuestions?.length && `- Transfer questions: ${cleanLearningLines(item.transferQuestions).slice(0, 3).join(' / ')}`,
+        cleanLearningText(item.riskNoteZh) && `- Risk note: ${cleanLearningText(item.riskNoteZh)}`,
+        `- 可用表达: ${expressionItems.length ? expressionItems.join(' / ') : 'because of this / a good example would be / this probably leads to'}`,
+      ].filter(Boolean);
+      return lines.join('\n');
+    })
+    .join('\n\n') || '- No stable personal material yet. Next time, add one real detail before upgrading the language.';
 };
-
 export const buildSpeakingTrainingMarkdown = (
   feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
   timestamp?: string | Date,
@@ -685,6 +689,12 @@ export const buildSpeakingTrainingMarkdown = (
     .map(item => `| ${item.original} | ${item.correction} | ${item.note} |`)
     .join('\n');
   const estimateLine = `- 当前单题训练估计：${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右，不含发音；样本短或证据有限时按保守值处理。`;
+  const estimateNotes = cleanLines([
+    feedback.scoreConsistencyNoteZh && `- Score consistency: ${feedback.scoreConsistencyNoteZh}`,
+    feedback.estimateRationaleZh && `- Estimate rationale: ${feedback.estimateRationaleZh}`,
+    feedback.targetUpgradeFocusZh && `- Target focus: ${feedback.targetUpgradeFocusZh}`,
+    feedback.targetValidationZh && `- Target validation: ${feedback.targetValidationZh}`,
+  ]).join('\n');
   const transferTitle = feedback.part === 1
     ? '## 6. 可能追问｜Possible follow-ups'
     : '## 6. 可迁移题目';
@@ -696,6 +706,7 @@ export const buildSpeakingTrainingMarkdown = (
 
 ## 1. 本题要求
 ${estimateLine}
+${estimateNotes}
 ${reviewCardRequirements(feedback).map(item => `- ${item}`).join('\n')}${fillerNote}
 
 ## 2. 回答路线
@@ -821,7 +832,10 @@ ${feedback.essay}
 - 词汇资源｜Lexical Resource: ${formatConservativeBandEstimate(feedback.scores.lexicalResource)}
 - 语法多样性与准确性｜Grammatical Range & Accuracy: ${formatConservativeBandEstimate(feedback.scores.grammaticalRangeAccuracy)}
 - 综合训练估计｜Overall training estimate: ${formatConservativeBandEstimate(estimate)}
-- 目标层级｜Target layer: ${getTargetLabel(estimate, 'modelAnswer')} / ${getTargetLabelZh(estimate, 'modelAnswer')}
+- 目标层级｜Target layer: ${feedback.targetLayer || feedback.modelAnswerTargetLevel || getTargetLabel(estimate, 'modelAnswer')} / ${getTargetLabelZh(estimate, 'modelAnswer')}
+${feedback.scoreConsistencyNoteZh ? `- 分数一致性｜Score consistency: ${feedback.scoreConsistencyNoteZh}` : ''}
+${feedback.targetUpgradeFocusZh ? `- 范文修复重点｜Target focus: ${feedback.targetUpgradeFocusZh}` : ''}
+${feedback.targetValidationZh ? `- 目标校验｜Target validation: ${feedback.targetValidationZh}` : ''}
 
 ## 4. 任务回应与结构诊断｜TR / Logic Review
 ${logicItems.length ? logicItems.map((item, index) => `### ${index + 1}. ${item.issue}

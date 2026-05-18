@@ -55,6 +55,16 @@ export interface Band9Refinement {
   explanationZh: string;
 }
 
+export interface SpeakingPreservedStyleItem {
+  text: string;
+  reasonZh: string;
+  expansionZh?: string;
+  sampleNextStep?: string;
+  transferQuestions?: string[];
+  partUseZh?: string;
+  riskNoteZh?: string;
+}
+
 export interface SpeakingFeedback {
   mode: IELTSMode;
   module: 'speaking';
@@ -62,6 +72,12 @@ export interface SpeakingFeedback {
   question: string;
   transcript: string;
   bandEstimateExcludingPronunciation: number;
+  estimateRationaleZh?: string;
+  targetBandFloor?: number;
+  targetLayer?: string;
+  targetValidationZh?: string;
+  targetUpgradeFocusZh?: string;
+  scoreConsistencyNoteZh?: string;
   scores: {
     fluencyCoherence: number;
     lexicalResource: number;
@@ -72,7 +88,7 @@ export interface SpeakingFeedback {
   fatalErrors: FatalError[];
   naturalnessHints: NaturalnessHint[];
   band9Refinements: Band9Refinement[];
-  preservedStyle: { text: string; reasonZh: string }[];
+  preservedStyle: SpeakingPreservedStyleItem[];
   upgradedAnswer: string;
   reusableExample: {
     example: string;
@@ -161,6 +177,12 @@ export interface WritingFeedback {
   }[];
   modelAnswerPersonalized?: boolean;
   modelAnswerTargetLevel?: string;
+  estimateRationaleZh?: string;
+  targetBandFloor?: number;
+  targetLayer?: string;
+  targetValidationZh?: string;
+  targetUpgradeFocusZh?: string;
+  scoreConsistencyNoteZh?: string;
   reusableArguments: {
     argument: string;
     canBeReusedFor: string[];

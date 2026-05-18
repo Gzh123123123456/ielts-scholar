@@ -1,6 +1,6 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-17_
+_Last updated: 2026-05-18_
 
 ## Repo
 
@@ -23,6 +23,15 @@ Claude Code currently uses a DeepSeek Anthropic-compatible endpoint, mapped to `
 Codex may resume later. GitHub is the shared sync point between local Claude Code and Codex.
 
 ## Recent Events
+
+- **2026-05-18 feedback calibration slice**: Speaking and Writing Task 2 score/feedback/target integrity were repaired.
+  - Speaking prompts now forbid hidden pronunciation penalties and require headline scores to align with visible FC/LR/GRA criteria unless a real cap or compact rationale exists.
+  - Writing Task 2 prompts and safety fallback now require a real blocker for every sub-7 score dimension.
+  - Target answers must keep a safety margin: current <7 -> Band 7.0-7.5; current 7.0-7.5 -> Band 8+; current around 8.0 -> Band 8+ refinement, not fake Band 9.
+  - Safety diagnostics can surface `speakingScoreConsistency`, `writingScoreFeedbackConsistency`, and `targetLayerConsistency`.
+  - Retesting target answers / same-question rewrites creates fresh attempt ids so earlier analyzed records remain in history.
+  - Browser Web Speech API remains limited; advanced ASR/audio transcription and pronunciation scoring remain future separate slices.
+  - Task 1 stayed backward-compatible and still needs a later dedicated calibration pass.
 
 - **2026-05-17 closeout**: Local `main` was consolidated for daily closeout.
   - `main` now contains the question-bank picker commits (`3df306d`, `a7b2bef`) plus `f7b24f0 Consolidate completed IELTS Scholar slices`.

@@ -38,6 +38,7 @@ export default function Writing() {
         isOpen={openBank === 'task1'}
         title="Writing Task 1 Bank"
         items={task1Items}
+        itemLabel="prompt"
         onClose={() => setOpenBank(null)}
         onSelect={(item) => {
           setOpenBank(null);
@@ -48,6 +49,7 @@ export default function Writing() {
         isOpen={openBank === 'task2'}
         title="Writing Task 2 Bank"
         items={task2Items}
+        itemLabel="prompt"
         onClose={() => setOpenBank(null)}
         onSelect={(item) => {
           setOpenBank(null);
@@ -70,7 +72,7 @@ export default function Writing() {
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <span className="text-[10px] uppercase font-sans tracking-widest text-paper-ink/40">
-                      Bank: {writingTask1Academic.length} prompts
+                      Prompt Bank · {writingTask1Academic.length} Task 1 prompts
                     </span>
                     <SerifButton
                       type="button"
@@ -111,7 +113,7 @@ export default function Writing() {
                   </p>
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-[10px] uppercase font-sans tracking-widest text-paper-ink/40">
-                      Bank: {writingTask2.length} prompts
+                      Prompt Bank · {writingTask2.length} Task 2 prompts
                     </span>
                     <SerifButton
                       type="button"

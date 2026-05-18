@@ -79,11 +79,6 @@ const answerDevelopmentPlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
   return { questionReference, starter, items };
 };
 
-type TranscriptCleanupResult = {
-  transcript: string;
-  corrections: string[];
-};
-
 const starterPracticePlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
   const items = speakingPart === 1
     ? [
@@ -114,59 +109,9 @@ const starterPracticePlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
         : 'In my view, [direct position]. This is because [reason]. For example, [specific example]. So I think [balanced close].';
 
   return {
-    questionReference: prompt ? `当前题目：${prompt}` : '先围绕当前题目补出一个完整答案。',
+    questionReference: prompt ? `Current question: ${prompt}` : 'Build one complete answer for the current question first.',
     items,
     targetAnswer,
-  };
-};
-
-const replaceWithCleanup = (
-  text: string,
-  pattern: RegExp,
-  replacement: string,
-  corrections: string[],
-) => text.replace(pattern, match => {
-  corrections.push(`${match} → ${replacement}`);
-  return replacement;
-});
-
-const normalizeSpeakingTranscript = (
-  rawTranscript: string,
-  questionText: string,
-  speakingPart: 1 | 2 | 3,
-): TranscriptCleanupResult => {
-  let transcript = rawTranscript;
-  const corrections: string[] = [];
-  const context = `${questionText} ${rawTranscript}`.toLowerCase();
-  const placeContext = /\b(hometown|home town|travel|travelling|traveling|trip|city|place|from|live|lived|university|study|studied|japan|island)\b/.test(context)
-    || speakingPart === 2;
-  const xiamenContext = placeContext && /\b(from|in|near|around|live in|lived in|come from|city|university)\s+(salmon|shaman)\b|\b(salmon|shaman)\s+(city|university)\b/i.test(transcript);
-
-  if (xiamenContext) {
-    transcript = replaceWithCleanup(transcript, /\b(salmon|shaman)\b/gi, 'Xiamen', corrections);
-  }
-
-  if (/\b(xiamen|island|hometown|travel|trip)\b/i.test(`${context} ${transcript}`)) {
-    transcript = replaceWithCleanup(transcript, /\bgerman you\b/gi, 'Gulangyu', corrections);
-  }
-
-  if (/\b(work|company|travel|ticket|ota|office|job)\b/.test(context)) {
-    transcript = replaceWithCleanup(transcript, /\bsky tickets?\b/gi, 'skyticket', corrections);
-  }
-
-  if (/\b(university|study|studied|student|japan|japanese)\b/.test(context)) {
-    transcript = replaceWithCleanup(transcript, /\bq shoe\b/gi, 'Kyushu', corrections);
-    transcript = replaceWithCleanup(transcript, /\bcasual(?=\s+university\b)/gi, 'Kyushu', corrections);
-    transcript = transcript.replace(/\b(in|at|from)\s+casual\b/gi, match => {
-      const prefix = match.split(/\s+/)[0];
-      corrections.push('casual → Kyushu');
-      return `${prefix} Kyushu`;
-    });
-  }
-
-  return {
-    transcript,
-    corrections: Array.from(new Set(corrections)),
   };
 };
 
@@ -197,6 +142,12 @@ const isIncompleteSpeakingFeedback = (
   return failureKind === 'parse_or_schema' && (allScoresMissing || !hasCoreFeedback);
 };
 
+const materialExpansionFallback = (speakingPart: 1 | 2 | 3) => {
+  if (speakingPart === 1) return 'Add one real detail and one short reason; keep it brief.';
+  if (speakingPart === 2) return 'Build it into a story spine with scene, action, change, feeling, and meaning.';
+  return 'Turn the personal material into a claim, contrast or condition, example, and consequence.';
+};
+
 export default function SpeakingPractice() {
   const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
   const location = useLocation();
@@ -205,6 +156,7 @@ export default function SpeakingPractice() {
   const [question, setQuestion] = useState<SpeakingQuestion | null>(null);
   const [step, setStep] = useState<'idle' | 'recording' | 'editing' | 'analyzing' | 'results'>('idle');
   const [transcript, setTranscript] = useState('');
+  const [rawTranscript, setRawTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const [feedback, setFeedback] = useState<SpeakingFeedback | null>(null);
@@ -266,6 +218,7 @@ export default function SpeakingPractice() {
       updatedAt: timestamp,
       analyzedAt: status === 'analyzed' ? existing?.analyzedAt || timestamp : existing?.analyzedAt,
       transcript: transcriptOverride,
+      rawTranscript: rawTranscript || undefined,
       transcriptOrigin: transcriptOriginRef.current,
       feedback: status === 'provider_failed' ? undefined : feedbackOverride || undefined,
       obsidianMarkdown: status === 'provider_failed' ? undefined : feedbackOverride?.obsidianMarkdown,
@@ -356,6 +309,7 @@ export default function SpeakingPractice() {
       question: record.question,
     });
     setTranscript(record.transcript);
+    setRawTranscript(record.rawTranscript || '');
     transcriptOriginRef.current = record.transcriptOrigin;
     setFeedback(record.feedback || null);
     setFeedbackFallbackUsed(Boolean(record.providerDiagnostic?.fallbackUsed));
@@ -408,7 +362,7 @@ export default function SpeakingPractice() {
     }
     if (!question || step === 'recording' || step === 'analyzing') return;
     persistCurrentSpeakingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
-  }, [part, question, step, transcript, feedback, providerErrorMessage]);
+  }, [part, question, step, transcript, rawTranscript, feedback, providerErrorMessage]);
 
   const getQuestionTopicKey = (item: SpeakingQuestion) => item.topicCategory || item.topic;
 
@@ -427,6 +381,7 @@ export default function SpeakingPractice() {
     setPart(p);
     setStep('idle');
     setTranscript('');
+    setRawTranscript('');
     setFeedback(null);
     setFeedbackFallbackUsed(false);
     setTimer(0);
@@ -491,6 +446,7 @@ export default function SpeakingPractice() {
     if (!question) return;
     activeAttemptIdRef.current = createRecordId('sp');
     setTranscript('');
+    setRawTranscript('');
     setFeedback(null);
     setFeedbackFallbackUsed(false);
     setProviderDiagnostic(null);
@@ -521,6 +477,7 @@ export default function SpeakingPractice() {
     setQuestion(selected);
     setStep('idle');
     setTranscript('');
+    setRawTranscript('');
     setFeedback(null);
     setFeedbackFallbackUsed(false);
     setProviderDiagnostic(null);
@@ -555,6 +512,7 @@ export default function SpeakingPractice() {
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
+      recognitionRef.current.maxAlternatives = 3;
 
       recognitionRef.current.onstart = () => {
         setStatusMessage('Listening...');
@@ -578,6 +536,7 @@ export default function SpeakingPractice() {
           hasSpeechResultRef.current = true;
           transcriptOriginRef.current = 'speech';
           setTranscript(prev => (prev + ' ' + finalTranscript).trim());
+          setRawTranscript(prev => (prev + ' ' + finalTranscript).trim());
         }
       };
 
@@ -617,6 +576,7 @@ export default function SpeakingPractice() {
             retry.continuous = true;
             retry.interimResults = true;
             retry.lang = 'en-US';
+            retry.maxAlternatives = 3;
             retry.onstart = recognitionRef.current.onstart;
             retry.onresult = recognitionRef.current.onresult;
             retry.onerror = recognitionRef.current.onerror;
@@ -671,6 +631,7 @@ export default function SpeakingPractice() {
 
     // Clear state
     setTranscript('');
+    setRawTranscript('');
     setFeedback(null);
     setTimer(0);
     setIsRecording(false);
@@ -699,7 +660,12 @@ export default function SpeakingPractice() {
 
   const analyze = async () => {
     if (!transcript.trim()) return;
-    const cleanup = normalizeSpeakingTranscript(transcript, question?.question || '', part);
+    if (feedback) {
+      activeAttemptIdRef.current = createRecordId('sp');
+      setFeedback(null);
+      setFeedbackFallbackUsed(false);
+    }
+    const cleanup = { transcript: transcript.trim(), corrections: [] as string[] };
     const cleanedTranscript = cleanup.transcript;
     if (cleanup.corrections.length) {
       setTranscript(cleanedTranscript);
@@ -805,6 +771,7 @@ export default function SpeakingPractice() {
         mode: 'practice',
         question: question?.question,
         transcript: cleanedTranscript,
+        rawTranscript: rawTranscript || undefined,
         transcriptOrigin: transcriptOriginRef.current,
         feedback: result,
         providerDiagnostic: summarizeDiagnostic(diagnostic),
@@ -871,6 +838,7 @@ export default function SpeakingPractice() {
         isOpen={isBankOpen}
         title={`Speaking Part ${part} Bank`}
         items={speakingBankItems}
+        itemLabel="question"
         onClose={() => setIsBankOpen(false)}
         onSelect={(item) => {
           const selected = getBank(part).find(questionItem => questionItem.id === item.id);
@@ -979,7 +947,7 @@ export default function SpeakingPractice() {
               )}
             </div>
             <p className="mt-4 text-sm font-sans text-paper-ink/55">
-              Bank: {currentPartBankCount} Part {part} {currentPartBankCount === 1 ? 'question' : 'questions'}
+              Part {part} Bank · {currentPartBankCount} {currentPartBankCount === 1 ? 'question' : 'questions'}
             </p>
           </PaperCard>
 
@@ -1018,6 +986,12 @@ export default function SpeakingPractice() {
                 placeholder={statusMessage === 'Mic denied' || statusMessage === 'Transcription unavailable' ? "Type your answer manually here..." : "Recognition will appear here..."}
                 className="w-full min-h-[300px] xl:min-h-[420px] bg-transparent border border-transparent rounded-sm font-serif text-lg leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
               />
+              {step === 'editing' && (
+                <p className="mt-2 text-[11px] leading-5 text-paper-ink/45 font-sans">
+                  Review quick recognition mistakes before analysis. Analyze uses this edited transcript.
+                  {rawTranscript && rawTranscript !== transcript ? ' Raw browser text is preserved in the saved record.' : ''}
+                </p>
+              )}
               {transcriptCleanupNote && (
                 <p className="mt-2 text-[11px] leading-5 text-paper-ink/45 font-sans">
                   {transcriptCleanupNote}
@@ -1048,6 +1022,12 @@ export default function SpeakingPractice() {
                   </div>
                 </div>
                 
+                {(feedback.scoreConsistencyNoteZh || feedback.estimateRationaleZh) && (
+                  <p className="mb-5 text-sm leading-7 text-paper-ink/60">
+                    {feedback.scoreConsistencyNoteZh || feedback.estimateRationaleZh}
+                  </p>
+                )}
+
                 <div className="grid gap-3 md:grid-cols-3 mb-4">
                   {[
                     { label: 'Fluency & Coherence', score: feedback.scores.fluencyCoherence },
@@ -1166,12 +1146,25 @@ export default function SpeakingPractice() {
                         <div className="text-base leading-8 text-paper-ink/75">{style.reasonZh}</div>
                         <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">怎么发散</p>
                         <div className="text-base leading-8 text-paper-ink/75">
-                          {feedback.part === 3
-                            ? '把这个素材继续推到 cause / contrast / consequence，避免只列事实。'
-                            : feedback.part === 2
-                              ? '补场景、动作、情绪变化和为什么重要。'
-                              : '补一个真实细节，再说一个简短原因。'}
+                          {style.expansionZh || materialExpansionFallback(feedback.part)}
                         </div>
+                        {style.sampleNextStep && (
+                          <div className="mt-2 text-base leading-7 text-paper-ink border-l-2 border-l-paper-ink/15 pl-3">
+                            {style.sampleNextStep}
+                          </div>
+                        )}
+                        {style.transferQuestions?.length ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {style.transferQuestions.slice(0, 2).map(item => (
+                              <span key={item} className="rounded-sm border border-paper-ink/10 bg-paper-50 px-2 py-1 text-[10px] font-sans uppercase tracking-widest text-paper-ink/45">
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {style.riskNoteZh && (
+                          <p className="mt-2 text-sm leading-7 text-paper-ink/55">{style.riskNoteZh}</p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1183,10 +1176,15 @@ export default function SpeakingPractice() {
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
                     {shouldShowDevelopmentPlan
                       ? 'Band 7.0+ Starter Target'
-                      : getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}
+                      : feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}
                     {!shouldShowDevelopmentPlan && (
                       <span className="block mt-2 text-xs normal-case tracking-normal text-paper-ink/45">
                         {getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}
+                      </span>
+                    )}
+                    {!shouldShowDevelopmentPlan && (feedback.targetUpgradeFocusZh || feedback.targetValidationZh) && (
+                      <span className="block mt-2 text-sm normal-case tracking-normal leading-7 text-paper-ink/55">
+                        {feedback.targetUpgradeFocusZh || feedback.targetValidationZh}
                       </span>
                     )}
                   </h4>

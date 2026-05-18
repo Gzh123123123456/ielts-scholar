@@ -1,6 +1,17 @@
 # Project Backlog
 
-_Last updated: 2026-05-17_
+_Last updated: 2026-05-18_
+
+## Latest Slice - Feedback Calibration and Target Integrity
+
+- **Done 2026-05-18**: Repaired Speaking and Writing Task 2 feedback calibration so score, diagnosis, target layer, target output, UI rationale, markdown export, and saved records stay aligned.
+- Target answers must keep a safety margin:
+  - current answer below 7.0 -> stable Band 7.0-7.5 target;
+  - current answer 7.0-7.5 -> Band 8+ examiner-friendly target;
+  - current answer around 8.0 -> Band 8+ refinement, not fake Band 9.
+- Score contradictions must not be fixed only by changing display text. Provider prompts, mock fixtures, safety normalization, feedback blockers, target validation fields, and exports all participate.
+- Browser Web Speech API remains the current transcription limit. Advanced ASR/audio transcription providers and pronunciation scoring are future separate slices.
+- Task 1 remains backward-compatible here and still needs a later dedicated calibration pass.
 
 ## P0 — Provider Safety + API Readiness
 

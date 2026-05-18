@@ -22,5 +22,12 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "dist",
+    "node_modules",
+    "_debug-*",
+    "branch-audit-*.txt",
+    ".claude"
+  ]
 }

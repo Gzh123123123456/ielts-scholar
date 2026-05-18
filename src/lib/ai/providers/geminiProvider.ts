@@ -20,6 +20,12 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "question": "string",
   "transcript": "string",
   "bandEstimateExcludingPronunciation": 0,
+  "estimateRationaleZh": "string",
+  "targetBandFloor": 7,
+  "targetLayer": "Band 7.0+ Target Answer | Band 8+ Examiner-Friendly Answer",
+  "targetValidationZh": "string",
+  "targetUpgradeFocusZh": "string",
+  "scoreConsistencyNoteZh": "string",
   "scores": {
     "fluencyCoherence": 0,
     "lexicalResource": 0,
@@ -30,7 +36,15 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "fatalErrors": [{ "original": "string", "correction": "string", "tag": "string", "explanationZh": "string" }],
   "naturalnessHints": [{ "original": "string", "better": "string", "tag": "string", "explanationZh": "string" }],
   "band9Refinements": [{ "observation": "string", "refinement": "string", "explanationZh": "string" }],
-  "preservedStyle": [{ "text": "string", "reasonZh": "string" }],
+  "preservedStyle": [{
+    "text": "string",
+    "reasonZh": "string",
+    "expansionZh": "string",
+    "sampleNextStep": "string",
+    "transferQuestions": ["string"],
+    "partUseZh": "string",
+    "riskNoteZh": "string"
+  }],
   "upgradedAnswer": "string",
   "reusableExample": { "example": "string", "canBeReusedFor": ["string"], "explanationZh": "string" },
   "obsidianMarkdown": "string"
@@ -39,7 +53,14 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
 export const speakingPromptCalibration = `Speaking feedback must be spoken IELTS feedback, not writing-style feedback.
 Current estimate: this is a conservative single-question training estimate, excluding pronunciation. IELTS Speaking is scored across a complete test, so do not present one Part 1/2/3 answer as an official complete Speaking band. If evidence sits between two bands, prefer the lower visible estimate, e.g. 5.5-6.0 should be handled as 5.5.
 Global target policy: keep the current estimate honest and conservative. Target answers / improved answers / model answers must always move upward: if the current answer is below Band 7.0, generate a Band 7.0+ target; if the current answer is around Band 7.0 or above, generate a Band 8+ examiner-friendly upgraded answer. Do not inflate the current estimate to match the target. Do not label any learner-facing output as Band 9. Do not make Band 8+ mean more formal, more academic, or more essay-like by default; it means clearer logic, more precise language, stronger idea development, better examples, more natural flow, and examiner-friendly execution.
-Preserve the learner's usable idea where possible, but expand it into exam-ready material instead of only recording it. In preservedStyle, return idea-development material: text = learner material or short summary; reasonZh = why it is useful plus how to expand it for this part. Do not fabricate excessive personal details. Do not return "nothing to improve" unless the answer is genuinely excellent; even then, provide a concise refinement.
+Score consistency: pronunciation is not assessed and must never be treated as a hidden reason for lowering the headline estimate. If bandEstimateExcludingPronunciation is lower than all three visible criteria, either lower the relevant visible criterion or give a compact scoreConsistencyNoteZh explaining a real cap such as insufficient sample, off-task content, overlong Part 1, essay-like Part 3, or malformed answer. If all visible criteria are 7.0 and there is no cap/fatal issue, the headline estimate should not be 6.5.
+Target integrity: set targetBandFloor to 7 when the current estimate is below 7.0, and 8 when the current estimate is 7.0 or above. Set targetLayer to the matching learner-facing label. Before returning JSON, re-read upgradedAnswer using the same criteria; if it would probably fall below targetBandFloor, revise it. If the user's original content would cap the target layer, say so in targetUpgradeFocusZh or targetValidationZh and restructure the target answer instead of preserving weak material.
+Preserve the learner's usable idea where possible, but expand it into exam-ready material instead of only recording it. In preservedStyle, return idea-development material grounded in the reviewed transcript: text = learner material or short summary; reasonZh = why it is useful; expansionZh = how to expand this exact material for the current part; sampleNextStep = one compact English next sentence/frame when safe; transferQuestions = 1-3 IELTS questions where the same material can transfer; partUseZh = how this material should be used in this part; riskNoteZh = one risk such as memorized answer, overlong Part 1, thin detail, or weak abstraction. Do not fabricate life events. If the transcript lacks detail, say what kind of real detail the learner should add instead of inventing it.
+Part-specific preservedStyle expansion:
+- Part 1: Give one concrete personal detail, one short reason/feeling, and avoid turning it into a long story.
+- Part 2: Build a story spine: time/place, scene, action, difficulty/change, feeling, why it matters.
+- Part 3: Turn personal material into abstract discussion: claim, condition/contrast, example, consequence.
+Do not return "nothing to improve" unless the answer is genuinely excellent; even then, provide a concise refinement.
 Never put debug, fallback, parser, validation, provider_safety, or retry-panel messages into learning fields.
 
 Part 1 rules:
@@ -108,6 +129,12 @@ export const writingSchemaInstruction = `The JSON object must match this exact k
   "modelAnswerAnnotations": [{ "quote": "exact span from modelAnswer", "type": "topic_vocabulary | expression_upgrade | sentence_repair | logic_repair", "labelZh": "string" }],
   "modelAnswerPersonalized": true,
   "modelAnswerTargetLevel": "string",
+  "estimateRationaleZh": "string",
+  "targetBandFloor": 7,
+  "targetLayer": "Band 7.0+ Target Model Answer | Band 8+ Examiner-Friendly Model Answer",
+  "targetValidationZh": "string",
+  "targetUpgradeFocusZh": "string",
+  "scoreConsistencyNoteZh": "string",
   "reusableArguments": [{ "argument": "string", "canBeReusedFor": ["string"], "explanationZh": "string" }],
   "obsidianMarkdown": "string"
 }`;
@@ -288,8 +315,10 @@ Include relatedCorrectionIds when a sentence correction supports the same logic 
 Avoid duplicating full sentence correction text inside frameworkFeedback.
 Return vocabularyUpgrade as a two-part Language Bank. Infer the topic domain from the question and essay. topicVocabulary contains 5-8 topic-specific words/collocations/phrases with Chinese meaningZh and usageZh, covering both sides for advantages/disadvantages/outweigh/discuss-both/to-what-extent tasks where relevant. expressionUpgrades contains both category="from_essay" phrase upgrades and category="argument_frame" reusable Task 2 frames. Do not put writing-strategy advice in topicVocabulary.
 Current estimate must remain honest and conservative. Choose modelAnswerTargetLevel with the global two-layer policy only: if the current essay is below Band 7.0, use "Band 7.0+ Target Model Answer"; if the current essay is around Band 7.0 or above, use "Band 8+ Examiner-Friendly Model Answer". Do not use Target Band 7.5, Target Band 7.5-8.0, or Band 9.
+Score-feedback consistency is mandatory. If any score dimension is below 7.0, the feedback must name the real blocker for that dimension. Task Response blockers include missing task parts, weak position, shallow development, unsupported solution, or wrong focus. Coherence blockers include unclear paragraph role, weak progression, or over-stacked ideas. Lexical blockers include unnatural collocation, over-formality, repetition, or imprecise topic vocabulary. Grammar blockers include sentence control, punctuation, clause logic, accuracy, or range. Never call a dimension excellent while assigning 6.5 unless you clearly explain why it is close but not yet Band 7.0.
+Logic & Structure Review must be a revision roadmap: what the issue is, why it affects IELTS performance, and what to add, remove, or rewrite. If the learner's original argument direction would cap the band, say it is not recommended, explain why it limits Task Response or Coherence, and make the modelAnswer use a stronger direction.
 The modelAnswer field must be a complete personalized Task 2 target model answer, normally 280-350 words even when the learner's essay is under 250 words. Prefer concise completeness and avoid 400+ words. It must apply Task Response/task command fixes, concession or balance if relevant, paragraph-level logic advice, sentence correction lessons, Language Bank items, and the user's usable ideas where appropriate. It must not merely polish the original essay; if an original idea is weak or off-task, replace it with a more appropriate task-relevant idea and explain that in feedback.
-When modelAnswerTargetLevel is Band 8+ Examiner-Friendly Model Answer, the answer must show direct task response, a clear sustained position, well-developed paragraphs, precise topic vocabulary, flexible sentence structures, strong cohesion without mechanical linking, and no generic template padding. Before finalizing a Band 8+ modelAnswer, self-check whether it would still likely be judged only around Band 7; if yes, strengthen idea development, precision, organization, and naturalness.
+For Band 7.0+ modelAnswer, the answer must be clear, relevant, supported, and controlled. For Band 8+ modelAnswer, the answer must show direct task response, a clear sustained position, well-developed paragraphs, precise topic vocabulary, flexible sentence structures, strong cohesion without mechanical linking, and no generic template padding. Before finalizing modelAnswer, self-check whether it would still likely be judged below targetBandFloor; if yes, strengthen idea development, precision, organization, and naturalness. Do not fake an upgrade by making it more formal or template-like.
 For advantages/disadvantages or outweigh prompts, if the main issue is missing or weak disadvantage coverage, the modelAnswer must include a clear concession/disadvantage paragraph before defending the final position.
 Return modelAnswerAnnotations for meaningful exact spans in modelAnswer: several topic_vocabulary spans, at least two expression_upgrade spans when available, at least one sentence_repair span, and at least one logic_repair span. quote must exactly appear in modelAnswer. Do not over-highlight the whole essay.
 Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
@@ -344,6 +373,8 @@ ${JSON.stringify(params, null, 2)}`);
 You are a concise IELTS Writing Task 2 framework coach.
 Judge readiness with this checklist: task type answered, clear position, both required views covered, usable support/examples, and clear paragraph plan.
 Chinese-first. Use English only for useful IELTS phrases or topic-sentence drafts.
+Respond directly to the learner's latest note or follow-up question. If they ask "我指出来了吗？", answer in Chinese first: "你指出了原因的一部分，但还没有完成这道题要求。" Then explain what they already provided, what is still missing, why the prompt requires it, and what to add next.
+For two-part questions, explicitly identify both required task parts, for example "Why is this happening?" and "What can be done?" Do not answer with a generic checklist when the learner asks a direct follow-up.
 If not_ready: show main gaps and 2-3 specific next questions.
 If almost_ready: show only final small fixes and what to add before generating summary.
 If ready_to_write: stop asking questions, summarize why ready, and tell the learner to generate summary or start writing.

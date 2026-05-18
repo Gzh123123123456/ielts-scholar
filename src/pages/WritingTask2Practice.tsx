@@ -223,7 +223,7 @@ const averageWritingScore = (feedback: WritingFeedback) =>
 
 const getTargetModelLevel = (feedback: WritingFeedback) => {
   const estimate = averageWritingScore(feedback);
-  return getTargetLabel(estimate, 'modelAnswer');
+  return feedback.targetLayer || feedback.modelAnswerTargetLevel || getTargetLabel(estimate, 'modelAnswer');
 };
 
 const uniqueStrings = (items: (string | undefined)[]) => {
@@ -1098,28 +1098,49 @@ const readinessLabels: Record<WritingFrameworkReadiness, string> = {
   ready_to_write: 'Ready to write',
 };
 
-const checklistLabels: Record<keyof WritingFrameworkCoachFeedback['checklist'], string> = {
-  taskTypeAnswered: 'Task type answered',
-  clearPosition: 'Clear position',
-  bothViewsCovered: 'Both required views covered',
-  supportExists: 'Usable examples or support',
-  paragraphPlanClear: 'Paragraph plan is clear',
+const compactMissingFrameworkItems = (
+  questionText: string,
+  notesText: string,
+  feedback?: WritingFrameworkCoachFeedback | null,
+) => {
+  const questionLower = questionText.toLowerCase();
+  const notesLower = notesText.toLowerCase();
+  const items: string[] = [];
+  const add = (item: string) => {
+    if (!items.includes(item)) items.push(item);
+  };
+
+  if (/(why|reason|cause|happen|happening)/i.test(questionLower) && !/(why|reason|because|cause|原因|导致|为什么|发生)/i.test(notesLower)) {
+    add('原因');
+  }
+  if (/(what can be done|solution|solve|measure|address|tackle)/i.test(questionLower) && !/(solution|solve|measure|address|tackle|解决|措施|办法|应该|can be done)/i.test(notesLower)) {
+    add('解决方案');
+  }
+  if (feedback) {
+    if (!feedback.checklist.clearPosition) add('立场');
+    if (!feedback.checklist.bothViewsCovered) add('两个任务部分');
+    if (!feedback.checklist.supportExists) add('例子/支撑');
+    if (!feedback.checklist.paragraphPlanClear) add('段落结构');
+  }
+  if (!items.length && feedback?.mainGaps.length) {
+    add(feedback.mainGaps[0]);
+  }
+  return items.slice(0, 3);
 };
 
 const formatCoachFeedback = (feedback: WritingFrameworkCoachFeedback, isMock: boolean) => {
+  const missing = compactMissingFrameworkItems(feedback.question, feedback.sourceNotes, feedback);
   const lines = [
     `${readinessLabels[feedback.readiness]}${isMock ? ' (local mock)' : ''}`,
     feedback.message,
   ].filter(Boolean);
 
-  const checklist = Object.entries(feedback.checklist)
-    .map(([key, value]) => `${value ? 'OK' : 'Needs work'} - ${checklistLabels[key as keyof WritingFrameworkCoachFeedback['checklist']]}`)
-    .join('\n');
-
-  if (checklist) lines.push(`Checklist:\n${checklist}`);
-  if (feedback.mainGaps.length) lines.push(`Main gaps:\n${feedback.mainGaps.map(item => `- ${item}`).join('\n')}`);
-  if (feedback.finalFixes.length) lines.push(`Final small fixes:\n${feedback.finalFixes.map(item => `- ${item}`).join('\n')}`);
-  if (feedback.nextQuestions.length) lines.push(`Next questions:\n${feedback.nextQuestions.map(item => `- ${item}`).join('\n')}`);
+  if (missing.length && feedback.readiness !== 'ready_to_write') {
+    lines.push(`还差：${missing.join(' + ')}`);
+  }
+  if (feedback.mainGaps.length) lines.push(`关键缺口：${feedback.mainGaps.slice(0, 2).map(item => `- ${item}`).join('\n')}`);
+  if (feedback.finalFixes.length) lines.push(`最后补充：${feedback.finalFixes.slice(0, 2).map(item => `- ${item}`).join('\n')}`);
+  if (feedback.nextQuestions.length) lines.push(`下一步：${feedback.nextQuestions.slice(0, 2).map(item => `- ${item}`).join('\n')}`);
   if (feedback.readiness === 'ready_to_write' && feedback.readySummary) {
     lines.push(`Ready reason:\n${feedback.readySummary}`);
   }
@@ -1612,6 +1633,14 @@ export default function WritingTask2Practice() {
     const submittedQuestion = question;
     const submittedFrameworkNotes = buildFrameworkNotes();
     const submittedFinalFrameworkSummary = finalFrameworkSummary;
+    const startsFromAnalyzedAttempt = Boolean(feedback || restoredRecordRef.current?.feedback);
+    if (startsFromAnalyzedAttempt) {
+      activeAttemptIdRef.current = createRecordId('wt2');
+      restoredRecordRef.current = null;
+      setFeedback(null);
+      setFeedbackDiagnostic(null);
+      setFeedbackFallbackUsed(false);
+    }
     const runId = analysisRunIdRef.current + 1;
     analysisRunIdRef.current = runId;
     cancelledAnalysisRunRef.current = null;
@@ -1875,6 +1904,9 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
   const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
   const isPersonalizedModelAnswer = Boolean(feedback?.modelAnswerPersonalized);
   const hasCoachFeedback = frameworkChat.some((msg, index) => msg.role === 'ai' && index > 0);
+  const frameworkMissingItems = frameworkReadiness === 'ready_to_write'
+    ? []
+    : compactMissingFrameworkItems(question?.question || '', buildFrameworkNotes(), latestFrameworkCoach);
   const essayWarnings = feedback ? getEssayWarnings(feedback, isInsufficientSample, resultWordCount) : [];
   const logicFeedback = feedback ? getLogicFeedback(feedback) : [];
   const logicGroups = feedback ? groupedLogicFeedback(logicFeedback) : [];
@@ -2074,7 +2106,9 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   </SerifButton>
                 ) : (
                   <p className="text-xs font-sans text-paper-ink/55 bg-paper-ink/5 border border-paper-ink/10 rounded-sm px-3 py-2">
-                    Keep discussing with Coach before generating summary.
+                    {frameworkMissingItems.length
+                      ? `还差：${frameworkMissingItems.join(' + ')}。补完后可以生成 summary.`
+                      : 'Keep discussing with Coach before generating summary.'}
                   </p>
                 )}
                 {!frameworkSummaryGenerated && frameworkReadiness === 'ready_to_write' && (
@@ -2378,6 +2412,11 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               {hasSubstantialModelAnswer && isPersonalizedModelAnswer && (
                 <p className="text-sm leading-7 text-paper-ink/60 mb-3">
                   This answer preserves your position and demonstrates selected repairs from the workspace above.
+                </p>
+              )}
+              {(feedback.targetUpgradeFocusZh || feedback.targetValidationZh || feedback.scoreConsistencyNoteZh) && (
+                <p className="text-sm leading-7 text-paper-ink/60 mb-3">
+                  {feedback.targetUpgradeFocusZh || feedback.targetValidationZh || feedback.scoreConsistencyNoteZh}
                 </p>
               )}
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">

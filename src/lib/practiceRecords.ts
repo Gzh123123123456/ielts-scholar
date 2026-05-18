@@ -44,6 +44,7 @@ export interface SpeakingPracticeRecord extends PracticeRecordBase {
   part: 1 | 2 | 3;
   questionData?: SpeakingQuestion;
   transcript: string;
+  rawTranscript?: string;
   transcriptOrigin: 'speech' | 'manual';
   feedback?: SpeakingFeedback;
 }
@@ -146,6 +147,19 @@ const asStringArray = (value: unknown) =>
 
 const asRequiredStringArray = (value: unknown) => asStringArray(value) || [];
 
+const sanitizeSpeakingPreservedStyle = (value: unknown): SpeakingFeedback['preservedStyle'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      text: asString(item.text),
+      reasonZh: asString(item.reasonZh),
+      expansionZh: asOptionalString(item.expansionZh),
+      sampleNextStep: asOptionalString(item.sampleNextStep),
+      transferQuestions: asStringArray(item.transferQuestions),
+      partUseZh: asOptionalString(item.partUseZh),
+      riskNoteZh: asOptionalString(item.riskNoteZh),
+    })).filter(item => item.text && item.reasonZh)
+    : [];
+
 const asModelAnswerAnnotationType = (
   value: unknown,
 ): NonNullable<WritingFeedback['modelAnswerAnnotations']>[number]['type'] =>
@@ -235,6 +249,12 @@ const sanitizeWritingTask2Feedback = (value: unknown): WritingFeedback | undefin
       lexicalResource: typeof scores.lexicalResource === 'number' ? scores.lexicalResource : 0,
       grammaticalRangeAccuracy: typeof scores.grammaticalRangeAccuracy === 'number' ? scores.grammaticalRangeAccuracy : 0,
     },
+    estimateRationaleZh: asOptionalString(value.estimateRationaleZh),
+    targetBandFloor: typeof value.targetBandFloor === 'number' ? value.targetBandFloor : undefined,
+    targetLayer: asOptionalString(value.targetLayer),
+    targetValidationZh: asOptionalString(value.targetValidationZh),
+    targetUpgradeFocusZh: asOptionalString(value.targetUpgradeFocusZh),
+    scoreConsistencyNoteZh: asOptionalString(value.scoreConsistencyNoteZh),
     frameworkFeedback: Array.isArray(value.frameworkFeedback) ? value.frameworkFeedback as WritingFeedback['frameworkFeedback'] : [],
     essayLevelWarnings: Array.isArray(value.essayLevelWarnings) ? value.essayLevelWarnings as WritingFeedback['essayLevelWarnings'] : [],
     sentenceFeedback: Array.isArray(value.sentenceFeedback)
@@ -312,6 +332,12 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     bandEstimateExcludingPronunciation: typeof value.bandEstimateExcludingPronunciation === 'number'
       ? value.bandEstimateExcludingPronunciation
       : 0,
+    estimateRationaleZh: asOptionalString(value.estimateRationaleZh),
+    targetBandFloor: typeof value.targetBandFloor === 'number' ? value.targetBandFloor : undefined,
+    targetLayer: asOptionalString(value.targetLayer),
+    targetValidationZh: asOptionalString(value.targetValidationZh),
+    targetUpgradeFocusZh: asOptionalString(value.targetUpgradeFocusZh),
+    scoreConsistencyNoteZh: asOptionalString(value.scoreConsistencyNoteZh),
     scores: {
       fluencyCoherence: typeof scores.fluencyCoherence === 'number' ? scores.fluencyCoherence : 0,
       lexicalResource: typeof scores.lexicalResource === 'number' ? scores.lexicalResource : 0,
@@ -322,7 +348,7 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     fatalErrors: Array.isArray(value.fatalErrors) ? value.fatalErrors as SpeakingFeedback['fatalErrors'] : [],
     naturalnessHints: Array.isArray(value.naturalnessHints) ? value.naturalnessHints as SpeakingFeedback['naturalnessHints'] : [],
     band9Refinements: Array.isArray(value.band9Refinements) ? value.band9Refinements as SpeakingFeedback['band9Refinements'] : [],
-    preservedStyle: Array.isArray(value.preservedStyle) ? value.preservedStyle as SpeakingFeedback['preservedStyle'] : [],
+    preservedStyle: sanitizeSpeakingPreservedStyle(value.preservedStyle),
     upgradedAnswer: asString(value.upgradedAnswer),
     reusableExample,
     obsidianMarkdown: asString(value.obsidianMarkdown),
@@ -351,6 +377,7 @@ const sanitizeSpeakingRecord = (value: unknown): SpeakingPracticeRecord | null =
     updatedAt: timestamp,
     analyzedAt: asOptionalString(value.analyzedAt),
     transcript: asString(value.transcript),
+    rawTranscript: asOptionalString(value.rawTranscript),
     transcriptOrigin: value.transcriptOrigin === 'speech' ? 'speech' : 'manual',
     feedback: sanitizeSpeakingFeedback(value.feedback),
     obsidianMarkdown: asOptionalString(value.obsidianMarkdown),
@@ -493,7 +520,8 @@ const removeJson = (key: string) => {
   localStorage.removeItem(key);
 };
 
-export const createRecordId = (prefix: string) => `${prefix}_${Date.now()}`;
+export const createRecordId = (prefix: string) =>
+  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 export const summarizeDiagnostic = (diagnostic: ProviderDiagnostic): ProviderDiagnosticSummary => ({
   operation: diagnostic.operation,

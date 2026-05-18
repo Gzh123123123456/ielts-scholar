@@ -51,6 +51,20 @@ export class MockProvider implements AIProvider {
       question: params.question,
       transcript: params.transcript,
       bandEstimateExcludingPronunciation: conservativeEstimate,
+      estimateRationaleZh: conservativeEstimate >= 7
+        ? '可见语言维度已经接近 7.0：有清楚延展、例子或因果关系；发音未评估。'
+        : '当前回答仍按单题训练样本保守估计：内容延展、自然口语节奏或 Part 适配还不稳定；发音未评估。',
+      targetBandFloor: conservativeEstimate >= 7 ? 8 : 7,
+      targetLayer: conservativeEstimate >= 7 ? 'Band 8+ Examiner-Friendly Answer' : 'Band 7.0+ Target Answer',
+      targetValidationZh: conservativeEstimate >= 7
+        ? '升级答案需要明显加强逻辑、例子和自然口语表达，而不是只换高级词。'
+        : '目标答案需要稳定达到 7.0-7.5 层级，不能只是轻微润色。',
+      targetUpgradeFocusZh: params.part === 1
+        ? 'Part 1: compact, natural, specific.'
+        : params.part === 2
+          ? 'Part 2: story spine with setting, scene, action, change, feeling, and meaning.'
+          : 'Part 3: claim, contrast or condition, example, and consequence in spoken style.',
+      scoreConsistencyNoteZh: '',
       scores: {
         fluencyCoherence: conservativeEstimate,
         lexicalResource: Math.min(conservativeEstimate + 0.5, 7.0),
@@ -86,6 +100,29 @@ export class MockProvider implements AIProvider {
       preservedStyle: [
         {
           text: 'I used to be a shy boy',
+          expansionZh: params.part === 1
+            ? 'Add one real classroom or social detail, then one short feeling/reason. Keep it to 2-3 sentences.'
+            : params.part === 2
+              ? 'Build it into a story spine: when this happened, what you did, what changed, how you felt, and why it mattered.'
+              : 'Turn the personal change into an abstract point: confidence depends on context, support, and repeated practice.',
+          sampleNextStep: params.part === 3
+            ? 'For example, shy people may become more confident when the environment feels supportive.'
+            : 'For example, I used to avoid speaking in class, but now I feel more comfortable sharing small opinions.',
+          transferQuestions: params.part === 1
+            ? ['Were you confident when you were a child?', 'Do you like meeting new people?']
+            : params.part === 2
+              ? ['Describe a time when you changed.', 'Describe a person who helped you.']
+              : ['Why do some people become more confident with age?', 'How can schools help shy students?'],
+          partUseZh: params.part === 1
+            ? 'Part 1: keep it short and personal.'
+            : params.part === 2
+              ? 'Part 2: stretch it into a believable story with scene and feeling.'
+              : 'Part 3: use it as an example, then explain the wider reason or consequence.',
+          riskNoteZh: params.part === 1
+            ? 'Risk: do not turn this into a long Part 2 story.'
+            : params.part === 2
+              ? 'Risk: do not only say you changed; show the scene and the turning point.'
+              : 'Risk: do not stay at personal story level; generalize the point.',
           reasonZh: '保留了个人成长故事，这在 Part 1 中很真实。',
         },
       ],
@@ -160,6 +197,23 @@ export class MockProvider implements AIProvider {
       question: params.question,
       essay: params.essay,
       scores,
+      estimateRationaleZh: isUnderLength
+        ? '文章长度不足，当前估计按训练保守值处理。'
+        : '当前估计主要受任务回应深度、段落推进、词汇精确度和句子控制限制。',
+      targetBandFloor: ((scores.taskResponse + scores.coherenceCohesion + scores.lexicalResource + scores.grammaticalRangeAccuracy) / 4) >= 7 ? 8 : 7,
+      targetLayer: getTargetLabel((
+        scores.taskResponse +
+        scores.coherenceCohesion +
+        scores.lexicalResource +
+        scores.grammaticalRangeAccuracy
+      ) / 4, 'modelAnswer'),
+      targetValidationZh: isUnderLength
+        ? '目标范文会补足完整任务回应和段落发展；原文长度不足的材料不会被机械保留。'
+        : '目标范文必须直接修复 Logic Review 和句子反馈指出的问题，不能只是更正式。',
+      targetUpgradeFocusZh: isRemoteWorkPrompt
+        ? '补足让步段，解释缺点为什么存在、如何缓解、为什么不压过优点。'
+        : '把兴趣与职业现实连接起来，增强任务回应和段落功能。',
+      scoreConsistencyNoteZh: 'Mock feedback includes a blocker for every sub-7 dimension so the visible score and diagnosis agree.',
       essayLevelWarnings: isUnderLength
         ? [{
             title: 'Essay development warning',
@@ -618,6 +672,8 @@ Reusable language for this essay
       : passed >= 3
         ? 'almost_ready'
         : 'not_ready';
+    const asksIfCovered = /我指出来了吗|指出来了吗|我说到了吗|did i mention|have i covered/i.test(notes);
+    const isTwoPartProblemSolution = /(why|happen|happening|cause|reason).*(what can be done|solution|solve|measure)|为什么.*(解决|措施|怎么办)/i.test(params.question);
     const mainGaps = [
       !checklist.clearPosition ? '先明确最终立场：完全同意、不同意，还是部分同意。' : '',
       !checklist.bothViewsCovered ? '如果题目要求讨论双方，请补上另一方观点以及你的取舍。' : '',
@@ -637,11 +693,16 @@ Reusable language for this essay
     const readySummary = readiness === 'ready_to_write'
       ? '本地 mock 判断：立场、双方覆盖、支撑和段落计划已经够用，可以生成总结或直接开始写。'
       : '';
-    const message = readiness === 'ready_to_write'
-      ? readySummary
-      : readiness === 'almost_ready'
-        ? '本地 mock coach：框架接近可写，只需要补上最后的小缺口。'
-        : '本地 mock coach：现在还不够写完整作文，先回答下面几个关键问题。';
+    const directCoverageAnswer = isTwoPartProblemSolution
+      ? '你指出了原因的一部分，但还没有完成这道题要求：这类题通常要同时回答 Why is this happening? 和 What can be done? 现在还需要补清楚解决方案和段落安排。'
+      : '你已经指出了一部分想法，但还需要补清楚立场、支撑例子和段落结构，才能生成稳定的 framework summary。';
+    const message = asksIfCovered
+      ? directCoverageAnswer
+      : readiness === 'ready_to_write'
+        ? readySummary
+        : readiness === 'almost_ready'
+          ? '本地 mock coach：框架接近可写，只需要补上最后的小缺口。'
+          : '本地 mock coach：现在还不够写完整作文，先回答下面几个关键问题。';
 
     return {
       mode: 'mock',

@@ -18,6 +18,7 @@ interface QuestionBankModalProps<T extends QuestionBankItem> {
   isOpen: boolean;
   title: string;
   items: T[];
+  itemLabel?: string;
   onClose: () => void;
   onSelect: (item: T) => void;
 }
@@ -64,6 +65,7 @@ export function QuestionBankModal<T extends QuestionBankItem>({
   isOpen,
   title,
   items,
+  itemLabel = 'question',
   onClose,
   onSelect,
 }: QuestionBankModalProps<T>) {
@@ -94,6 +96,7 @@ export function QuestionBankModal<T extends QuestionBankItem>({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+  const countLabel = items.length === 1 ? itemLabel : `${itemLabel}s`;
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex h-dvh w-screen items-center justify-center bg-paper-ink/25 px-4 py-6">
@@ -106,7 +109,7 @@ export function QuestionBankModal<T extends QuestionBankItem>({
         <div className="flex items-start justify-between gap-4 border-b border-paper-ink/10 bg-paper-ink/[0.025] px-5 py-4">
           <div>
             <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta mb-1">
-              {items.length} {items.length === 1 ? 'question' : 'questions'}
+              {items.length} {countLabel}
             </p>
             <h2 id="question-bank-title" className="text-2xl leading-tight text-paper-ink">
               {title}
