@@ -1,5 +1,16 @@
 # Decision Log
 
+## [2026-05-19] Target-Answer Scoring Loop Closed
+- **Decision**: A generated target answer/model is not allowed to claim its target layer unless it self-checks against the same visible scoring layer.
+- **Implemented**:
+  - Speaking and Writing Task 2 feedback now carry target-answer floor, layer, status, self-scores, rationale, repair focus, high-band stability guidance, and next-step guidance as backward-compatible optional fields.
+  - Provider prompts require a two-pass flow: score the learner answer, choose the target floor, generate the target, self-score it, revise if needed, and downgrade to borderline/failed when it still does not meet the floor.
+  - Safety normalization records `targetAnswerIntegrity` / `targetLayerConsistency` repairs and prevents Band 8+ claims when returned self-scores are missing or below the target floor.
+  - High-band answers now move into stability: naturalness, timing, transferability, clarity, and consistency instead of default Band 9-style advice.
+  - Task 2 framework summaries adapt labels to task type, so causes-solutions prompts use Cause Analysis / Solution Plan rather than View A / View B.
+- **Explicitly unchanged**: no provider routing changes, no ASR/audio provider, no pronunciation scoring, no Task 1 recalibration, no server/auth/database/RAG, no push.
+- **Future**: Task 1 target-answer calibration still needs a dedicated pass with real Task 1 debug samples; advanced ASR remains future work.
+
 ## [2026-05-18] Feedback Calibration and Target-Output Integrity
 - **Decision**: Score, feedback diagnosis, target answer labels, target answer content, markdown export, and saved records must agree as one integrity contract.
 - **Implemented**:

@@ -1,6 +1,6 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-18_
+_Last updated: 2026-05-19_
 
 ## Repo
 
@@ -23,6 +23,15 @@ Claude Code currently uses a DeepSeek Anthropic-compatible endpoint, mapped to `
 Codex may resume later. GitHub is the shared sync point between local Claude Code and Codex.
 
 ## Recent Events
+
+- **2026-05-19 target-answer scoring loop slice**: Speaking and Writing Task 2 target generation now requires same-layer self-check before claiming the target.
+  - Feedback schemas gained optional target-answer integrity fields: floor, layer, status, self-scores, rationale, repair focus, high-band stability guidance, and next step.
+  - Gemini / DeepSeek prompts now require two-pass target generation: score current answer, generate target, self-score target with the same visible criteria, revise if needed, and downgrade to borderline/failed if the target still does not meet the floor.
+  - Safety normalization prevents Band 8+ target claims when self-scores are missing or below floor, and records `targetAnswerIntegrity` / `targetLayerConsistency` markers.
+  - Current 8.0+ answers move into high-band stability: naturalness, timing, transferability, clarity, and consistency. No default Band 9 / 冲9 advice.
+  - Writing Task 2 framework summaries now adapt labels by task type; causes-solutions prompts use Cause Analysis / Solution Plan, not View A / View B.
+  - Task 2 Phase 1 missing-item messaging uses cumulative notes so earlier causes/solutions are not re-listed after later follow-ups.
+  - Advanced ASR/audio transcription and pronunciation scoring remain future separate slices. Task 1 target calibration remains a dedicated follow-up with real samples.
 
 - **2026-05-18 feedback calibration slice**: Speaking and Writing Task 2 score/feedback/target integrity were repaired.
   - Speaking prompts now forbid hidden pronunciation penalties and require headline scores to align with visible FC/LR/GRA criteria unless a real cap or compact rationale exists.

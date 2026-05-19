@@ -1,8 +1,16 @@
 # Project Backlog
 
-_Last updated: 2026-05-18_
+_Last updated: 2026-05-19_
 
 ## Latest Slice - Feedback Calibration and Target Integrity
+
+- **Done 2026-05-19 follow-up**: Closed the Speaking / Writing Task 2 target-answer scoring loop.
+  - Generated target answers/models now require self-scores against the same visible scoring layer before they can claim the target.
+  - 7.0-7.5 answers must generate real Band 8+ targets with self-scores at 8.0+, or the target is marked borderline/failed instead of relabeled.
+  - Validation/status is a safeguard; the primary fix is stronger target content plus same-rubric self-check.
+  - High-band answers switch to stability, timed delivery, transfer, review, or a new question rather than default Band 9 advice.
+  - Writing Task 2 framework summaries adapt section labels to prompt type; causes-solutions prompts use Cause Analysis / Solution Plan.
+  - Task 1 target-answer calibration remains future work and needs a dedicated pass with real Task 1 debug samples.
 
 - **Done 2026-05-18**: Repaired Speaking and Writing Task 2 feedback calibration so score, diagnosis, target layer, target output, UI rationale, markdown export, and saved records stay aligned.
 - Target answers must keep a safety margin:

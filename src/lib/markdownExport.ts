@@ -168,6 +168,20 @@ const isSpeakingInsufficient = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdo
 const isMeaningfulShortAnswer = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
   countWords(feedback.transcript) > 0 && !hasLowSignalText(feedback.transcript);
 
+const isHighBandSpeakingStable = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
+  feedback.targetAnswerStatus === 'meets_target' &&
+  (feedback.targetAnswerLayer === 'high_band_stability' || feedback.bandEstimateExcludingPronunciation >= 8);
+
+const hasUnstableSpeakingTarget = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
+  feedback.targetAnswerStatus === 'borderline' || feedback.targetAnswerStatus === 'failed';
+
+const isHighBandWritingStable = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>) =>
+  feedback.targetAnswerStatus === 'meets_target' &&
+  (feedback.targetAnswerLayer === 'high_band_stability' || averageWritingScore(feedback.scores) >= 8);
+
+const hasUnstableWritingTarget = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>) =>
+  feedback.targetAnswerStatus === 'borderline' || feedback.targetAnswerStatus === 'failed';
+
 const phraseChunk = (value?: string, maxWords = 7) => {
   const cleaned = cleanLearningText(value)
     .replace(/["`]/g, '')
@@ -329,7 +343,7 @@ const diagnosisRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => 
   const rows = [
     ...feedback.fatalErrors.map(item => ({ priority: 1, category: '优先修复', issue: `${item.original} -> ${item.correction}`, fix: item.explanationZh })),
     ...feedback.naturalnessHints.map(item => ({ priority: 2, category: '自然表达', issue: `${item.original} -> ${item.better}`, fix: item.explanationZh })),
-    ...feedback.band9Refinements.map(item => ({ priority: 3, category: '高分打磨', issue: item.observation, fix: item.refinement })),
+    ...feedback.band9Refinements.map(item => ({ priority: 3, category: '高分稳定', issue: item.observation, fix: item.refinement })),
   ].sort((a, b) => a.priority - b.priority).slice(0, 5);
 
   return rows.length ? rows : [{
@@ -444,7 +458,7 @@ const reviewCardRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
     if (/discourse marker|opening phrase|cohesion|transition|connector/.test(normalized)) return '开头 / 衔接';
     if (/filler|hesitation|you know|um|uh|like/.test(normalized)) return '填充词';
     if (/reason|effect|impact|consequence|develop|logic|explain|why|so what|展开|逻辑|影响|原因/.test(normalized)) return '展开 / 逻辑';
-    if (/high band|高分|refinement|band9/.test(normalized)) return '高分打磨';
+    if (/high band|高分|refinement|band9/.test(normalized)) return '高分稳定';
     if (/insufficient|sample|short/.test(normalized)) return '展开';
     return '表达';
   };
@@ -461,7 +475,7 @@ const reviewCardRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
     if (/填充词/.test(type)) return '重复填充词会削弱流利度和连贯性。';
     if (/开头|衔接/.test(type)) return '开头和衔接要帮助考官马上听清逻辑。';
     if (/语法/.test(type)) return '基础语法错误会影响句子清晰度。';
-    if (/高分打磨/.test(type)) return '这不是硬错误，但可以让答案更像高分口语。';
+    if (/高分稳定/.test(type)) return '这不是硬错误；重点是保持自然、清晰和可迁移。';
     if (/展开|逻辑/.test(type) || /why|so what|consequence|effect|reason/.test(source)) {
       return 'Part 3 需要说明原因或影响，而不是只列变化。';
     }
@@ -514,7 +528,7 @@ const reviewCardRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
       priority: 3,
       original: item.observation,
       correction: item.refinement,
-      type: '高分打磨',
+      type: '高分稳定',
       explanationZh: item.explanationZh,
     })),
     ...(part3NeedsMacroReasoningRow() ? [{
@@ -580,11 +594,17 @@ const reviewCardTransferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianM
 const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. 起步目标答案';
   if (isSpeakingInsufficient(feedback)) return '## 4. 请先重录一个完整答案';
+  if (isHighBandSpeakingStable(feedback)) return '## 4. Validated Band 8+ Answer｜高分稳定检查';
+  if (hasUnstableSpeakingTarget(feedback)) return '## 4. Target Answer Still Needs Work｜目标答案待加强';
   return `## 4. ${feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}｜${getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}`;
 };
 
 const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
-  const targetLabel = feedback.bandEstimateExcludingPronunciation >= 7
+  const targetLabel = isHighBandSpeakingStable(feedback)
+    ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
+    : hasUnstableSpeakingTarget(feedback)
+      ? '这版目标答案还没有稳定达到目标层级，需要继续强化。'
+      : feedback.bandEstimateExcludingPronunciation >= 7
     ? '目标训练方向：Band 8+ Examiner-Friendly Answer，表达更自然、逻辑更清楚，但不要写成作文。'
     : '目标训练方向：Band 7.0+ Target Answer，保持自然口语，不写成作文。';
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) {
@@ -593,7 +613,11 @@ const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown
   if (isSpeakingInsufficient(feedback)) {
     return '当前录音/转写不足以生成可靠目标答案。请先重录一个可理解的完整答案。';
   }
-  return `${targetLabel}\n\n${cleanLearningText(feedback.upgradedAnswer) || '请先重录一个完整答案。'}`;
+  return cleanLines([
+    targetLabel,
+    feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetAnswerRationaleZh,
+    cleanLearningText(feedback.upgradedAnswer) || '请先重录一个完整答案。',
+  ]).join('\n\n');
 };
 
 const speakingExpressionMeaning = (expression: string) => {
@@ -814,6 +838,16 @@ export const buildWritingTask2TrainingMarkdown = (
   const annotations = feedback.modelAnswerAnnotations?.length
     ? `\n\n### 范文标注｜Key Labels\n${feedback.modelAnswerAnnotations.slice(0, 5).map(item => `- ${phraseChunk(item.quote, 8)}: ${item.labelZh}`).join('\n')}`
     : '';
+  const targetLayerLabel = isHighBandWritingStable(feedback)
+    ? 'High-band Stability Check / Validated Band 8+ Essay'
+    : hasUnstableWritingTarget(feedback)
+      ? 'Target model answer still needs another pass'
+      : feedback.targetLayer || feedback.modelAnswerTargetLevel || getTargetLabel(estimate, 'modelAnswer');
+  const targetStatusNote = cleanLines([
+    hasUnstableWritingTarget(feedback) && '这版目标答案还没有稳定达到目标层级，需要进一步强化逻辑或表达。',
+    isHighBandWritingStable(feedback) && (feedback.nextStepZh || '目标层级已达到。下一步重点是限时稳定、复盘表达和迁移到新题。'),
+    feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetAnswerRationaleZh,
+  ]).join('\n');
 
   return `# IELTS Writing Task 2 训练笔记 - ${topicKeywords(feedback.question, undefined, 4).replace(/-/g, ' ')} - ${formatExportDate(timestamp)}
 
@@ -832,10 +866,11 @@ ${feedback.essay}
 - 词汇资源｜Lexical Resource: ${formatConservativeBandEstimate(feedback.scores.lexicalResource)}
 - 语法多样性与准确性｜Grammatical Range & Accuracy: ${formatConservativeBandEstimate(feedback.scores.grammaticalRangeAccuracy)}
 - 综合训练估计｜Overall training estimate: ${formatConservativeBandEstimate(estimate)}
-- 目标层级｜Target layer: ${feedback.targetLayer || feedback.modelAnswerTargetLevel || getTargetLabel(estimate, 'modelAnswer')} / ${getTargetLabelZh(estimate, 'modelAnswer')}
+- 目标层级｜Target layer: ${targetLayerLabel} / ${isHighBandWritingStable(feedback) ? '高分稳定检查' : getTargetLabelZh(estimate, 'modelAnswer')}
 ${feedback.scoreConsistencyNoteZh ? `- 分数一致性｜Score consistency: ${feedback.scoreConsistencyNoteZh}` : ''}
 ${feedback.targetUpgradeFocusZh ? `- 范文修复重点｜Target focus: ${feedback.targetUpgradeFocusZh}` : ''}
 ${feedback.targetValidationZh ? `- 目标校验｜Target validation: ${feedback.targetValidationZh}` : ''}
+${targetStatusNote ? `- 目标状态｜Target status: ${targetStatusNote}` : ''}
 
 ## 4. 任务回应与结构诊断｜TR / Logic Review
 ${logicItems.length ? logicItems.map((item, index) => `### ${index + 1}. ${item.issue}
@@ -859,7 +894,7 @@ ${fromEssay.length ? fromEssay.map(item => `- ${item.original ? `${item.original
 ### Argument Frames
 ${frames.length ? frames.map(item => `- ${item.better}${item.note ? `\n  - ${item.note}` : ''}`).join('\n') : '- While [drawback] is a valid concern, it does not outweigh [main benefit].'}
 
-## 7. ${getTargetLabel(estimate, 'modelAnswer')}｜${getTargetLabelZh(estimate, 'modelAnswer')}
+## 7. ${targetLayerLabel}｜${isHighBandWritingStable(feedback) ? '高分稳定检查' : getTargetLabelZh(estimate, 'modelAnswer')}
 ${feedback.modelAnswer || 'No reliable target model answer for this attempt.'}${annotations}
 
 ## 8. 下次写作前检查｜Next Attempt Checklist

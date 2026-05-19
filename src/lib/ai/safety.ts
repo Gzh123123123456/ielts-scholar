@@ -11,10 +11,14 @@ import {
   FatalError,
   SpeakingFeedback,
   SpeakingPart,
+  SpeakingTargetAnswerSelfScores,
+  TargetAnswerLayer,
+  TargetAnswerStatus,
   WritingFeedback,
   WritingFrameworkCoachFeedback,
   WritingFrameworkReadiness,
   WritingFrameworkSummary,
+  WritingTargetAnswerSelfScores,
   WritingTask1Feedback,
   WritingTask,
 } from './schemas';
@@ -245,6 +249,116 @@ const optionalSafeStringArray = (value: unknown): string[] | undefined => {
   return items.length ? items : undefined;
 };
 
+const asOptionalHalfBand = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
+  return normalizeHalfBandScore(value);
+};
+
+const normalizeTargetAnswerLayer = (value: unknown): TargetAnswerLayer | undefined => {
+  if (value === 'band_7_to_7_5' || value === 'band_8_plus' || value === 'high_band_stability') return value;
+  return undefined;
+};
+
+const normalizeTargetAnswerStatus = (value: unknown): TargetAnswerStatus | undefined => {
+  if (
+    value === 'meets_target' ||
+    value === 'borderline' ||
+    value === 'failed' ||
+    value === 'not_generated' ||
+    value === 'not_applicable'
+  ) {
+    return value;
+  }
+  return undefined;
+};
+
+const speakingTargetLayerForEstimate = (estimate: number): TargetAnswerLayer =>
+  estimate >= 8 ? 'high_band_stability' : estimate >= 7 ? 'band_8_plus' : 'band_7_to_7_5';
+
+const writingTargetLayerForEstimate = (estimate: number): TargetAnswerLayer =>
+  estimate >= 8 ? 'high_band_stability' : estimate >= 7 ? 'band_8_plus' : 'band_7_to_7_5';
+
+const targetFloorForLayer = (layer: TargetAnswerLayer): number =>
+  layer === 'band_7_to_7_5' ? 7 : 8;
+
+const normalizeSpeakingTargetSelfScores = (value: unknown): SpeakingTargetAnswerSelfScores | undefined => {
+  if (!isRecord(value)) return undefined;
+  const normalized: SpeakingTargetAnswerSelfScores = {
+    fluencyCoherence: asOptionalHalfBand(value.fluencyCoherence),
+    lexicalResource: asOptionalHalfBand(value.lexicalResource),
+    grammaticalRangeAccuracy: asOptionalHalfBand(value.grammaticalRangeAccuracy),
+    pronunciation: null,
+  };
+  return normalized.fluencyCoherence || normalized.lexicalResource || normalized.grammaticalRangeAccuracy
+    ? normalized
+    : undefined;
+};
+
+const normalizeWritingTargetSelfScores = (value: unknown): WritingTargetAnswerSelfScores | undefined => {
+  if (!isRecord(value)) return undefined;
+  const normalized: WritingTargetAnswerSelfScores = {
+    taskResponse: asOptionalHalfBand(value.taskResponse),
+    coherenceCohesion: asOptionalHalfBand(value.coherenceCohesion),
+    lexicalResource: asOptionalHalfBand(value.lexicalResource),
+    grammaticalRangeAccuracy: asOptionalHalfBand(value.grammaticalRangeAccuracy),
+  };
+  return normalized.taskResponse ||
+    normalized.coherenceCohesion ||
+    normalized.lexicalResource ||
+    normalized.grammaticalRangeAccuracy
+    ? normalized
+    : undefined;
+};
+
+const speakingTargetScoresMeetFloor = (
+  scores: SpeakingTargetAnswerSelfScores | undefined,
+  floor: number,
+) =>
+  Boolean(
+    scores?.fluencyCoherence &&
+    scores.lexicalResource &&
+    scores.grammaticalRangeAccuracy &&
+    scores.fluencyCoherence >= floor &&
+    scores.lexicalResource >= floor &&
+    scores.grammaticalRangeAccuracy >= floor,
+  );
+
+const writingTargetScoresMeetFloor = (
+  scores: WritingTargetAnswerSelfScores | undefined,
+  floor: number,
+) =>
+  Boolean(
+    scores?.taskResponse &&
+    scores.coherenceCohesion &&
+    scores.lexicalResource &&
+    scores.grammaticalRangeAccuracy &&
+    scores.taskResponse >= floor &&
+    scores.coherenceCohesion >= floor &&
+    scores.lexicalResource >= floor &&
+    scores.grammaticalRangeAccuracy >= floor,
+  );
+
+const speakingTargetScoresBelowFloor = (
+  scores: SpeakingTargetAnswerSelfScores | undefined,
+  floor: number,
+) =>
+  Boolean(scores && [
+    scores.fluencyCoherence,
+    scores.lexicalResource,
+    scores.grammaticalRangeAccuracy,
+  ].some(score => typeof score === 'number' && score < floor));
+
+const writingTargetScoresBelowFloor = (
+  scores: WritingTargetAnswerSelfScores | undefined,
+  floor: number,
+) =>
+  Boolean(scores && [
+    scores.taskResponse,
+    scores.coherenceCohesion,
+    scores.lexicalResource,
+    scores.grammaticalRangeAccuracy,
+  ].some(score => typeof score === 'number' && score < floor));
+
 const tryParseJson = (source: string): { parsedJson: unknown; parseError?: string } => {
   try {
     return { parsedJson: JSON.parse(source) };
@@ -458,12 +572,49 @@ const normalizeSpeakingFeedback = (
   if (shouldNormalizeSpeakingScore) {
     normalizedFields.push('speakingScoreConsistency');
   }
-  const speakingTargetFloor = normalizedHeadline >= 7 ? 8 : 7;
+  const expectedSpeakingTargetLayer = speakingTargetLayerForEstimate(normalizedHeadline);
+  const providerSpeakingTargetLayer = normalizeTargetAnswerLayer(source.targetAnswerLayer);
+  const speakingTargetAnswerLayer = expectedSpeakingTargetLayer;
+  if (providerSpeakingTargetLayer && providerSpeakingTargetLayer !== expectedSpeakingTargetLayer) {
+    normalizedFields.push('targetLayerConsistency');
+  }
+  const speakingTargetFloor = targetFloorForLayer(speakingTargetAnswerLayer);
   const speakingTargetLayer = getTargetLabel(normalizedHeadline, 'answer');
+  const targetAnswerSelfScores = normalizeSpeakingTargetSelfScores(source.targetAnswerSelfScores);
+  const providerTargetAnswerStatus = normalizeTargetAnswerStatus(source.targetAnswerStatus);
+  const hasTargetAnswer = Boolean(rawUpgradedAnswer.trim()) && !isProviderIncompleteSpeakingAnswer(rawUpgradedAnswer);
+  const currentAnswerIsHighBand = normalizedHeadline >= 8 && !hasQualityCap && !hasProviderFatalIssue;
+  const targetAnswerStatus: TargetAnswerStatus = (() => {
+    if (currentAnswerIsHighBand) return 'meets_target';
+    if (!hasTargetAnswer || limitTransformation) return 'not_generated';
+    if (speakingTargetScoresMeetFloor(targetAnswerSelfScores, speakingTargetFloor)) return 'meets_target';
+    if (speakingTargetScoresBelowFloor(targetAnswerSelfScores, speakingTargetFloor)) {
+      return providerTargetAnswerStatus === 'failed' ? 'failed' : 'borderline';
+    }
+    if (providerTargetAnswerStatus === 'failed' || providerTargetAnswerStatus === 'borderline') {
+      return providerTargetAnswerStatus;
+    }
+    return 'borderline';
+  })();
+  if (
+    providerTargetAnswerStatus !== targetAnswerStatus ||
+    (speakingTargetAnswerLayer !== 'high_band_stability' && !targetAnswerSelfScores) ||
+    speakingTargetScoresBelowFloor(targetAnswerSelfScores, speakingTargetFloor)
+  ) {
+    normalizedFields.push('targetAnswerIntegrity');
+  }
   const providerScoreConsistencyNote = optionalSafeString(source.scoreConsistencyNoteZh);
   const scoreConsistencyNoteZh = shouldNormalizeSpeakingScore
     ? `分数已按可见语言维度校准：发音未评估，且没有样本/跑题/严重质量上限时，总分不应低于三个可见维度的最低分 ${formatConservativeBandEstimate(minimumVisibleScore)}。`
     : providerScoreConsistencyNote;
+
+  const defaultTargetValidationZh = currentAnswerIsHighBand
+    ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
+    : targetAnswerStatus === 'meets_target'
+      ? `目标答案自检已达到 ${speakingTargetLayer} 的可见文本标准。`
+      : targetAnswerStatus === 'not_generated'
+        ? '当前样本不足，暂时不能生成可靠的目标答案。'
+        : '这版目标答案还没有稳定达到目标层级，需要继续强化。';
 
   const feedbackWithoutMarkdown: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -474,10 +625,30 @@ const normalizeSpeakingFeedback = (
     bandEstimateExcludingPronunciation: normalizedHeadline,
     estimateRationaleZh: optionalSafeString(source.estimateRationaleZh),
     targetBandFloor: speakingTargetFloor,
-    targetLayer: optionalSafeString(source.targetLayer) || speakingTargetLayer,
-    targetValidationZh: optionalSafeString(source.targetValidationZh) ||
-      `目标答案需稳定达到 ${speakingTargetLayer}，不能只把原答案换成更正式的说法。`,
+    targetLayer: currentAnswerIsHighBand
+      ? 'High-band Stability Check'
+      : optionalSafeString(source.targetLayer) || speakingTargetLayer,
+    targetValidationZh: targetAnswerStatus === 'meets_target'
+      ? optionalSafeString(source.targetValidationZh) || defaultTargetValidationZh
+      : defaultTargetValidationZh,
     targetUpgradeFocusZh: optionalSafeString(source.targetUpgradeFocusZh),
+    targetAnswerFloor: speakingTargetFloor,
+    targetAnswerLayer: speakingTargetAnswerLayer,
+    targetAnswerStatus,
+    targetAnswerSelfScores,
+    targetAnswerRationaleZh: optionalSafeString(source.targetAnswerRationaleZh),
+    targetAnswerRepairFocusZh: optionalSafeString(source.targetAnswerRepairFocusZh) ||
+      (targetAnswerStatus === 'borderline' || targetAnswerStatus === 'failed'
+        ? '继续加强答案的内容推进、具体例子、自然口语组织和语法稳定度；不要只替换高级词。'
+        : undefined),
+    highBandStabilityZh: optionalSafeString(source.highBandStabilityZh) ||
+      (currentAnswerIsHighBand
+        ? '本次已经进入高分稳定层，重点是保持自然、清晰、限时输出和跨题迁移。'
+        : undefined),
+    nextStepZh: optionalSafeString(source.nextStepZh) ||
+      (currentAnswerIsHighBand
+        ? '用同一素材换一道相近题再说一遍，检查是否还能自然稳定输出。'
+        : undefined),
     scoreConsistencyNoteZh,
     scores: {
       fluencyCoherence: visibleScores.fluencyCoherence,
@@ -1452,12 +1623,20 @@ const normalizeWritingFeedback = (
     ...consistencyBlockers.sentenceAdditions,
   ];
   const estimate = averageWritingScore(scoresNormalized);
-  const targetLevel = getWritingTargetLevel(estimate);
-  const providerTargetLevel = optionalSafeString(source.modelAnswerTargetLevel);
-  if (providerTargetLevel && providerTargetLevel !== targetLevel) {
+  const expectedWritingTargetLayer = writingTargetLayerForEstimate(estimate);
+  const providerWritingTargetLayer = normalizeTargetAnswerLayer(source.targetAnswerLayer);
+  const writingTargetAnswerLayer = expectedWritingTargetLayer;
+  if (providerWritingTargetLayer && providerWritingTargetLayer !== expectedWritingTargetLayer) {
     normalizedFields.push('targetLayerConsistency');
   }
-  const targetFloor = estimate >= 7 ? 8 : 7;
+  const targetLevel = expectedWritingTargetLayer === 'high_band_stability'
+    ? 'High-band Stability Check'
+    : getWritingTargetLevel(estimate);
+  const providerTargetLevel = optionalSafeString(source.modelAnswerTargetLevel);
+  if (providerTargetLevel && expectedWritingTargetLayer !== 'high_band_stability' && providerTargetLevel !== targetLevel) {
+    normalizedFields.push('targetLayerConsistency');
+  }
+  const targetFloor = targetFloorForLayer(writingTargetAnswerLayer);
   const firstTopicExpression = vocabularyUpgrade.topicVocabulary[0]?.expression || 'topic-specific language';
   const firstExpressionUpgrade = vocabularyUpgrade.expressionUpgrades[0]?.better || 'a clearer argument frame';
   const normalizedModelAnswer = asString(
@@ -1466,6 +1645,39 @@ const normalizeWritingFeedback = (
     'modelAnswer',
     validationErrors,
   );
+  const targetAnswerSelfScores = normalizeWritingTargetSelfScores(source.targetAnswerSelfScores);
+  const providerTargetAnswerStatus = normalizeTargetAnswerStatus(source.targetAnswerStatus);
+  const hasTargetAnswer = typeof source.modelAnswer === 'string' && Boolean(source.modelAnswer.trim());
+  const hasFatalWritingCap = Boolean(lengthWarning) ||
+    finalFrameworkFeedback.some(item => item.severity === 'fatal') ||
+    finalSentenceFeedback.some(item => item.severity === 'major');
+  const currentEssayIsHighBand = estimate >= 8 && !hasFatalWritingCap;
+  const targetAnswerStatus: TargetAnswerStatus = (() => {
+    if (currentEssayIsHighBand) return 'meets_target';
+    if (!hasTargetAnswer) return 'not_generated';
+    if (writingTargetScoresMeetFloor(targetAnswerSelfScores, targetFloor)) return 'meets_target';
+    if (writingTargetScoresBelowFloor(targetAnswerSelfScores, targetFloor)) {
+      return providerTargetAnswerStatus === 'failed' ? 'failed' : 'borderline';
+    }
+    if (providerTargetAnswerStatus === 'failed' || providerTargetAnswerStatus === 'borderline') {
+      return providerTargetAnswerStatus;
+    }
+    return 'borderline';
+  })();
+  if (
+    providerTargetAnswerStatus !== targetAnswerStatus ||
+    (writingTargetAnswerLayer !== 'high_band_stability' && !targetAnswerSelfScores) ||
+    writingTargetScoresBelowFloor(targetAnswerSelfScores, targetFloor)
+  ) {
+    normalizedFields.push('targetAnswerIntegrity');
+  }
+  const defaultTargetValidationZh = currentEssayIsHighBand
+    ? '目标层级已达到。下一步重点是限时稳定、复盘表达和迁移到新题。'
+    : targetAnswerStatus === 'meets_target'
+      ? `目标范文自检已达到 ${targetLevel} 的四项标准。`
+      : targetAnswerStatus === 'not_generated'
+        ? '当前样本不足或模型答案缺失，暂时不能证明目标范文层级。'
+        : '这版目标答案还没有稳定达到目标层级，需要进一步强化逻辑或表达。';
 
   const feedbackWithoutMarkdown: Omit<WritingFeedback, 'obsidianMarkdown'> = {
     mode: source.mode === 'mock' ? 'mock' : 'practice',
@@ -1488,9 +1700,27 @@ const normalizeWritingFeedback = (
     estimateRationaleZh: optionalSafeString(source.estimateRationaleZh),
     targetBandFloor: targetFloor,
     targetLayer: targetLevel,
-    targetValidationZh: optionalSafeString(source.targetValidationZh) ||
-      `目标范文必须真实达到 ${targetLevel}：需要修复上方诊断的问题，而不是只把语言改得更正式。`,
+    targetValidationZh: targetAnswerStatus === 'meets_target'
+      ? optionalSafeString(source.targetValidationZh) || defaultTargetValidationZh
+      : defaultTargetValidationZh,
     targetUpgradeFocusZh: optionalSafeString(source.targetUpgradeFocusZh),
+    targetAnswerFloor: targetFloor,
+    targetAnswerLayer: writingTargetAnswerLayer,
+    targetAnswerStatus,
+    targetAnswerSelfScores,
+    targetAnswerRationaleZh: optionalSafeString(source.targetAnswerRationaleZh),
+    targetAnswerRepairFocusZh: optionalSafeString(source.targetAnswerRepairFocusZh) ||
+      (targetAnswerStatus === 'borderline' || targetAnswerStatus === 'failed'
+        ? '继续加强任务回应深度、段落推进、例子具体性和自然准确表达；不要只把措辞改得更正式。'
+        : undefined),
+    highBandStabilityZh: optionalSafeString(source.highBandStabilityZh) ||
+      (currentEssayIsHighBand
+        ? '本篇已经进入高分稳定层，重点是保持清晰立场、段落功能、限时完成和新题迁移。'
+        : undefined),
+    nextStepZh: optionalSafeString(source.nextStepZh) ||
+      (currentEssayIsHighBand
+        ? '保存这版结构，限时重写一次或换一道同类型题迁移。'
+        : undefined),
     scoreConsistencyNoteZh: consistencyBlockers.normalized
       ? '已补充低于 7.0 维度对应的真实卡点说明，避免分数和反馈内容不一致。'
       : optionalSafeString(source.scoreConsistencyNoteZh),
@@ -1674,8 +1904,45 @@ const normalizeWritingTask1Feedback = (
   };
 };
 
-const buildEditableFrameworkSummary = (summary: Omit<WritingFrameworkSummary, 'editableSummary'>): string =>
-  `Position:\n${summary.position}\n\nView A:\n${summary.viewA}\n\nView B:\n${summary.viewB}\n\nMy opinion:\n${summary.myOpinion}\n\nParagraph plan:\n${summary.paragraphPlan}\n\nPossible example:\n${summary.possibleExample}`;
+type Task2FrameworkType =
+  | 'causes-solutions'
+  | 'discuss-both'
+  | 'agree-disagree'
+  | 'advantages-disadvantages'
+  | 'general';
+
+const detectTask2FrameworkType = (question: string): Task2FrameworkType => {
+  const lower = question.toLowerCase();
+  if (/(why|cause|reason|happen|happening).*(what can be done|solution|solve|measure|address|tackle)|problem.*solution|cause.*solution|causes.*solutions/.test(lower)) {
+    return 'causes-solutions';
+  }
+  if (/discuss both|both views|discuss the two views/.test(lower)) return 'discuss-both';
+  if (/agree or disagree|to what extent do you agree|do you agree/.test(lower)) return 'agree-disagree';
+  if (/advantages and disadvantages|benefits and drawbacks|outweigh/.test(lower)) return 'advantages-disadvantages';
+  return 'general';
+};
+
+const normalizeTask2ParagraphPlanLabel = (text: string): string =>
+  text.replace(/\boverview\b/gi, 'thesis / position');
+
+const buildEditableFrameworkSummary = (summary: Omit<WritingFrameworkSummary, 'editableSummary'>): string => {
+  const paragraphPlan = normalizeTask2ParagraphPlanLabel(summary.paragraphPlan);
+  const taskType = detectTask2FrameworkType(summary.question);
+
+  if (taskType === 'causes-solutions') {
+    return `Position:\n${summary.position}\n\nCause Analysis:\n${summary.viewA}\n\nSolution Plan:\n${summary.viewB}\n\nMy Position:\n${summary.myOpinion}\n\nParagraph Plan:\n${paragraphPlan}\n\nTopic-specific argument frames:\n${summary.possibleExample}`;
+  }
+
+  if (taskType === 'agree-disagree') {
+    return `Core Position:\n${summary.position || summary.myOpinion}\n\nSupporting Reason 1:\n${summary.viewA}\n\nSupporting Reason 2:\n${summary.viewB}\n\nCounterpoint / Limit:\n${summary.myOpinion}\n\nParagraph Plan:\n${paragraphPlan}\n\nTopic-specific argument frames:\n${summary.possibleExample}`;
+  }
+
+  if (taskType === 'advantages-disadvantages') {
+    return `Position:\n${summary.position}\n\nAdvantage Analysis:\n${summary.viewA}\n\nDisadvantage Analysis:\n${summary.viewB}\n\nMy Judgement:\n${summary.myOpinion}\n\nParagraph Plan:\n${paragraphPlan}\n\nTopic-specific argument frames:\n${summary.possibleExample}`;
+  }
+
+  return `Position:\n${summary.position}\n\nView A:\n${summary.viewA}\n\nView B:\n${summary.viewB}\n\nMy opinion:\n${summary.myOpinion}\n\nParagraph plan:\n${paragraphPlan}\n\nPossible example:\n${summary.possibleExample}`;
+};
 
 const normalizeWritingFrameworkSummary = (
   value: unknown,
@@ -1731,12 +1998,14 @@ const normalizeWritingFrameworkSummary = (
 
   return {
     ...normalizedWithoutEditable,
-    editableSummary: asString(
-      source.editableSummary,
-      buildEditableFrameworkSummary(normalizedWithoutEditable),
-      'editableSummary',
-      validationErrors,
-    ),
+    editableSummary: (() => {
+      const taskType = detectTask2FrameworkType(normalizedWithoutEditable.question);
+      const providerEditable = optionalSafeString(source.editableSummary);
+      if (providerEditable && taskType === 'discuss-both') {
+        return normalizeTask2ParagraphPlanLabel(providerEditable);
+      }
+      return buildEditableFrameworkSummary(normalizedWithoutEditable);
+    })(),
   };
 };
 

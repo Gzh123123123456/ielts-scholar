@@ -35,15 +35,29 @@ export class MockProvider implements AIProvider {
   }): Promise<SpeakingFeedback> {
     await new Promise(r => setTimeout(r, 1500));
     const transcriptWords = params.transcript.trim().split(/\s+/).filter(Boolean).length;
+    const looksHighBand = transcriptWords >= (params.part === 2 ? 170 : params.part === 3 ? 95 : 45)
+      && /\b(because|although|for example|for instance|which means|as a result|on the other hand|it depends|what matters is|the reason is)\b/i.test(params.transcript);
     const looksStrong = transcriptWords >= (params.part === 2 ? 140 : params.part === 3 ? 75 : 35)
       && /\b(because|although|for example|for instance|which means|as a result|on the other hand)\b/i.test(params.transcript);
-    const conservativeEstimate = looksStrong
+    const conservativeEstimate = looksHighBand
+      ? 8.0
+      : looksStrong
       ? 7.0
       : params.part === 3
         ? 5.5
         : transcriptWords < 20
           ? 5.0
           : 6.0;
+    const targetFloor = conservativeEstimate >= 7 ? 8 : 7;
+    const targetAnswerLayer = conservativeEstimate >= 8
+      ? 'high_band_stability'
+      : conservativeEstimate >= 7
+        ? 'band_8_plus'
+        : 'band_7_to_7_5';
+    const demoBorderlineTarget = conservativeEstimate >= 7 && conservativeEstimate < 8 && params.part === 3;
+    const targetAnswerStatus = demoBorderlineTarget ? 'borderline' : 'meets_target';
+    const targetSelfScore = demoBorderlineTarget ? 7.5 : conservativeEstimate >= 7 ? 8.0 : 7.0;
+    const hasGrammarDemoError = /\bI likes\b/i.test(params.transcript);
     return {
       mode: 'practice',
       module: 'speaking',
@@ -54,9 +68,15 @@ export class MockProvider implements AIProvider {
       estimateRationaleZh: conservativeEstimate >= 7
         ? '可见语言维度已经接近 7.0：有清楚延展、例子或因果关系；发音未评估。'
         : '当前回答仍按单题训练样本保守估计：内容延展、自然口语节奏或 Part 适配还不稳定；发音未评估。',
-      targetBandFloor: conservativeEstimate >= 7 ? 8 : 7,
-      targetLayer: conservativeEstimate >= 7 ? 'Band 8+ Examiner-Friendly Answer' : 'Band 7.0+ Target Answer',
-      targetValidationZh: conservativeEstimate >= 7
+      targetBandFloor: targetFloor,
+      targetLayer: conservativeEstimate >= 8
+        ? 'High-band Stability Check'
+        : conservativeEstimate >= 7 ? 'Band 8+ Examiner-Friendly Answer' : 'Band 7.0+ Target Answer',
+      targetValidationZh: demoBorderlineTarget
+        ? '这版目标答案还没有稳定达到目标层级，需要继续强化推理链和例子。'
+        : conservativeEstimate >= 8
+        ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
+        : conservativeEstimate >= 7
         ? '升级答案需要明显加强逻辑、例子和自然口语表达，而不是只换高级词。'
         : '目标答案需要稳定达到 7.0-7.5 层级，不能只是轻微润色。',
       targetUpgradeFocusZh: params.part === 1
@@ -64,6 +84,29 @@ export class MockProvider implements AIProvider {
         : params.part === 2
           ? 'Part 2: story spine with setting, scene, action, change, feeling, and meaning.'
           : 'Part 3: claim, contrast or condition, example, and consequence in spoken style.',
+      targetAnswerFloor: targetFloor,
+      targetAnswerLayer,
+      targetAnswerStatus,
+      targetAnswerSelfScores: {
+        fluencyCoherence: targetSelfScore,
+        lexicalResource: targetSelfScore,
+        grammaticalRangeAccuracy: targetSelfScore,
+        pronunciation: null,
+      },
+      targetAnswerRationaleZh: demoBorderlineTarget
+        ? 'Mock demo: this Part 3 target is intentionally marked borderline because its reasoning depth is still closer to 7.5 than 8.0.'
+        : conservativeEstimate >= 8
+        ? '当前答案本身已经达到高分层；mock 不再制造更高替换答案。'
+        : 'Mock target answer includes a self-check score at or above the target floor.',
+      targetAnswerRepairFocusZh: demoBorderlineTarget
+        ? 'Part 3 需要更清楚的 condition/contrast、例子和 consequence，不能只补一句泛泛影响。'
+        : '',
+      highBandStabilityZh: conservativeEstimate >= 8
+        ? '保持自然、清晰和限时稳定；不要为了显得更高级而拉长或书面化。'
+        : '',
+      nextStepZh: conservativeEstimate >= 8
+        ? '换一道相近题复述同一素材，检查是否还能稳定输出。'
+        : '重新朗读目标答案，再用自己的细节替换其中的示例。',
       scoreConsistencyNoteZh: '',
       scores: {
         fluencyCoherence: conservativeEstimate,
@@ -72,15 +115,15 @@ export class MockProvider implements AIProvider {
         pronunciation: null,
         pronunciationNote: 'Not formally assessed in V1; this is a single-question training estimate only.',
       },
-      fatalErrors: [
+      fatalErrors: hasGrammarDemoError ? [
         {
           original: 'I likes to play football',
           correction: 'I like to play football',
           tag: 'grammar',
           explanationZh: '主谓一致错误。I 是第一人称，动词不需要加 -s。',
         },
-      ],
-      naturalnessHints: [
+      ] : [],
+      naturalnessHints: conservativeEstimate >= 8 ? [] : [
         {
           original: 'It is very good',
           better: "It's absolutely fantastic",
@@ -88,7 +131,13 @@ export class MockProvider implements AIProvider {
           explanationZh: '可以使用更自然的副词和形容词搭配，让口语表达更生动。',
         },
       ],
-      band9Refinements: [
+      band9Refinements: conservativeEstimate >= 8 ? [
+        {
+          observation: 'The answer is already strong enough for the target layer.',
+          refinement: 'Keep the same natural rhythm and practise transferring it to a nearby question.',
+          explanationZh: '这不是错误修改；只是高分稳定练习，重点是自然、限时和迁移。',
+        },
+      ] : [
         {
           observation: 'The answer is clear, but it could sound more spontaneous.',
           refinement: conservativeEstimate >= 7
@@ -126,7 +175,9 @@ export class MockProvider implements AIProvider {
           reasonZh: '保留了个人成长故事，这在 Part 1 中很真实。',
         },
       ],
-      upgradedAnswer: conservativeEstimate >= 7
+      upgradedAnswer: conservativeEstimate >= 8
+        ? params.transcript
+        : conservativeEstimate >= 7
         ? (params.part === 1
             ? "Yes, definitely. I tend to read short essays or fiction when I want to slow down a bit, especially after a busy day. It is not a huge hobby, but it gives me a quiet way to reset."
             : params.part === 2
@@ -161,6 +212,10 @@ export class MockProvider implements AIProvider {
     const words = countWords(params.essay);
     const isExtremelyShort = words <= 20;
     const isUnderLength = words < 250;
+    const looksTask2HighBand = words >= 320 &&
+      /\b(however|although|provided that|for example|for instance|therefore|as a result)\b/i.test(params.essay);
+    const looksTask2Band7 = words >= 260 &&
+      /\b(however|although|for example|for instance|because|therefore)\b/i.test(params.essay);
     const scores = isExtremelyShort
       ? {
         taskResponse: 3.0,
@@ -175,12 +230,34 @@ export class MockProvider implements AIProvider {
           lexicalResource: 5.0,
           grammaticalRangeAccuracy: 5.0,
         }
-        : {
-          taskResponse: 6.5,
-          coherenceCohesion: 6.5,
-          lexicalResource: 6.5,
-          grammaticalRangeAccuracy: 6.5,
-        };
+        : looksTask2HighBand
+          ? {
+            taskResponse: 8.0,
+            coherenceCohesion: 8.0,
+            lexicalResource: 8.0,
+            grammaticalRangeAccuracy: 8.0,
+          }
+          : looksTask2Band7
+            ? {
+              taskResponse: 7.0,
+              coherenceCohesion: 7.0,
+              lexicalResource: 7.0,
+              grammaticalRangeAccuracy: 7.0,
+            }
+            : {
+              taskResponse: 6.5,
+              coherenceCohesion: 6.5,
+              lexicalResource: 6.5,
+              grammaticalRangeAccuracy: 6.5,
+            };
+    const averageScore = (scores.taskResponse + scores.coherenceCohesion + scores.lexicalResource + scores.grammaticalRangeAccuracy) / 4;
+    const targetFloor = averageScore >= 7 ? 8 : 7;
+    const targetAnswerLayer = averageScore >= 8
+      ? 'high_band_stability'
+      : averageScore >= 7
+        ? 'band_8_plus'
+        : 'band_7_to_7_5';
+    const targetSelfScore = averageScore >= 7 ? 8.0 : 7.0;
     const lengthNote = isExtremelyShort
       ? '样本太短，无法形成可靠 Task 2 估计。先扩展到完整四段结构，再看论证和语言问题。'
       : isUnderLength
@@ -200,19 +277,35 @@ export class MockProvider implements AIProvider {
       estimateRationaleZh: isUnderLength
         ? '文章长度不足，当前估计按训练保守值处理。'
         : '当前估计主要受任务回应深度、段落推进、词汇精确度和句子控制限制。',
-      targetBandFloor: ((scores.taskResponse + scores.coherenceCohesion + scores.lexicalResource + scores.grammaticalRangeAccuracy) / 4) >= 7 ? 8 : 7,
-      targetLayer: getTargetLabel((
-        scores.taskResponse +
-        scores.coherenceCohesion +
-        scores.lexicalResource +
-        scores.grammaticalRangeAccuracy
-      ) / 4, 'modelAnswer'),
-      targetValidationZh: isUnderLength
+      targetBandFloor: targetFloor,
+      targetLayer: averageScore >= 8 ? 'High-band Stability Check' : getTargetLabel(averageScore, 'modelAnswer'),
+      targetValidationZh: averageScore >= 8
+        ? '目标层级已达到。下一步重点是限时稳定、复盘表达和迁移到新题。'
+        : isUnderLength
         ? '目标范文会补足完整任务回应和段落发展；原文长度不足的材料不会被机械保留。'
         : '目标范文必须直接修复 Logic Review 和句子反馈指出的问题，不能只是更正式。',
       targetUpgradeFocusZh: isRemoteWorkPrompt
         ? '补足让步段，解释缺点为什么存在、如何缓解、为什么不压过优点。'
         : '把兴趣与职业现实连接起来，增强任务回应和段落功能。',
+      targetAnswerFloor: targetFloor,
+      targetAnswerLayer,
+      targetAnswerStatus: 'meets_target',
+      targetAnswerSelfScores: {
+        taskResponse: targetSelfScore,
+        coherenceCohesion: targetSelfScore,
+        lexicalResource: targetSelfScore,
+        grammaticalRangeAccuracy: targetSelfScore,
+      },
+      targetAnswerRationaleZh: averageScore >= 8
+        ? '当前作文本身已经进入高分稳定层；mock 不再制造更高替换范文。'
+        : 'Mock model answer is self-checked at or above the target floor.',
+      targetAnswerRepairFocusZh: '',
+      highBandStabilityZh: averageScore >= 8
+        ? '保持立场清晰、段落功能稳定、限时完成和新题迁移。'
+        : '',
+      nextStepZh: averageScore >= 8
+        ? '保存这版结构，换一道同类型题限时迁移。'
+        : '对照目标范文重写一次，重点检查段落推进和例子具体性。',
       scoreConsistencyNoteZh: 'Mock feedback includes a blocker for every sub-7 dimension so the visible score and diagnosis agree.',
       essayLevelWarnings: isUnderLength
         ? [{
@@ -440,12 +533,7 @@ Overall, students should not be forced into subjects chosen only by adults, beca
             { quote: 'connect personal interests with realistic career pathways', type: 'logic_repair', labelZh: '逻辑修复' },
           ],
       modelAnswerPersonalized: Boolean(params.finalFrameworkSummary || params.frameworkNotes || params.essay.trim()),
-      modelAnswerTargetLevel: getTargetLabel((
-        scores.taskResponse +
-        scores.coherenceCohesion +
-        scores.lexicalResource +
-        scores.grammaticalRangeAccuracy
-      ) / 4, 'modelAnswer'),
+      modelAnswerTargetLevel: averageScore >= 8 ? 'High-band Stability Check' : getTargetLabel(averageScore, 'modelAnswer'),
       reusableArguments: [
         {
           argument: 'Personal interest leads to better academic performance',
@@ -595,6 +683,7 @@ ${patterns.map(item => `- ${item}`).join('\n')}`,
     const source = params.notes.trim();
     const anchor = firstNonEmptyLine(source, 'Use the strongest idea from the Phase 1 notes.');
     const conciseAnchor = shorten(anchor);
+    const isCauseSolution = /(why|cause|reason|happen|happening).*(what can be done|solution|solve|measure|address|tackle)|problem.*solution|cause.*solution/i.test(params.question);
 
     const notDecided = 'Not decided yet / 需要继续补充';
     const summary = {
@@ -613,7 +702,35 @@ ${patterns.map(item => `- ${item}`).join('\n')}`,
 
     return {
       ...summary,
-      editableSummary: `Position
+      editableSummary: isCauseSolution ? `Position
+- 中文逻辑: ${summary.position}
+- English thesis draft: 需要继续补充 / Not decided yet
+
+Cause Analysis
+- 中文逻辑: ${summary.viewA}
+- English topic sentence draft: 需要继续补充 / Not decided yet
+- Support points: ${summary.possibleExample}
+
+Solution Plan
+- 中文逻辑: ${summary.viewB}
+- English topic sentence draft: 需要继续补充 / Not decided yet
+- Practical measures: 需要继续补充 / Not decided yet
+
+My Position
+- 中文逻辑: ${summary.myOpinion}
+- English position sentence: 需要继续补充 / Not decided yet
+
+Paragraph Plan
+1. Introduction / thesis: ${summary.paragraphPlan}
+2. Body 1 cause analysis: 需要继续补充 / Not decided yet
+3. Body 2 solution plan: 需要继续补充 / Not decided yet
+4. Conclusion: 需要继续补充 / Not decided yet
+
+Topic-specific argument frames
+- One reason this happens is...
+- A practical response would be...
+- This would reduce the problem because...`
+        : `Position
 - 中文逻辑: ${summary.position}
 - English thesis draft: 需要继续补充 / Not decided yet
 
@@ -659,10 +776,19 @@ Reusable language for this essay
     const firstLine = firstNonEmptyLine(notes, '');
     const focus = firstLine ? shorten(firstLine, 120) : 'your position';
     const lower = notes.toLowerCase();
+    const isDiscussBoth = /discuss both|both views|two views|both opinions/i.test(params.question);
+    const isAdvantageQuestion = /advantages and disadvantages|benefits and drawbacks|outweigh/i.test(params.question);
+    const hasCause = /(why|reason|because|cause|lead to|result from|原因|导致|为什么|发生|造成)/i.test(lower);
+    const hasSolution = /(solution|solve|measure|address|tackle|can be done|policy|government|school|family|解决|措施|办法|应该|可以|需要)/i.test(lower);
+    const isTwoPartProblemSolution = /(why|happen|happening|cause|reason).*(what can be done|solution|solve|measure)|为什么.*(解决|措施|怎么办)/i.test(params.question);
     const checklist = {
       taskTypeAnswered: notes.length > 40,
       clearPosition: /i think|my opinion|position|agree|disagree|partly|我认为|立场|同意|不同意/.test(lower),
-      bothViewsCovered: /view a|view b|both|opposing|另一方|双方|反方|正方/.test(lower),
+      bothViewsCovered: isTwoPartProblemSolution
+        ? hasCause && hasSolution
+        : isDiscussBoth || isAdvantageQuestion
+          ? /view a|view b|both|opposing|advantage|disadvantage|drawback|另一方|双方|反方|正方|优点|缺点/.test(lower)
+          : true,
       supportExists: /example|for example|support|because|原因|例子|案例/.test(lower),
       paragraphPlanClear: /body|paragraph|para|introduction|conclusion|主体|段落|开头|结尾/.test(lower),
     };
@@ -673,10 +799,11 @@ Reusable language for this essay
         ? 'almost_ready'
         : 'not_ready';
     const asksIfCovered = /我指出来了吗|指出来了吗|我说到了吗|did i mention|have i covered/i.test(notes);
-    const isTwoPartProblemSolution = /(why|happen|happening|cause|reason).*(what can be done|solution|solve|measure)|为什么.*(解决|措施|怎么办)/i.test(params.question);
     const mainGaps = [
       !checklist.clearPosition ? '先明确最终立场：完全同意、不同意，还是部分同意。' : '',
-      !checklist.bothViewsCovered ? '如果题目要求讨论双方，请补上另一方观点以及你的取舍。' : '',
+      !checklist.bothViewsCovered && isTwoPartProblemSolution ? '这道题需要同时回答原因和解决措施；不要按双方观点来组织。' : '',
+      !checklist.bothViewsCovered && isDiscussBoth ? '如果题目要求讨论双方，请补上另一方观点以及你的取舍。' : '',
+      !checklist.bothViewsCovered && isAdvantageQuestion ? '请同时覆盖优点和缺点，再给出你的判断。' : '',
       !checklist.supportExists ? '补一个来自你自己经验或常识的例子，不要只写抽象理由。' : '',
       !checklist.paragraphPlanClear ? '把两个主体段分别要写什么说清楚。' : '',
     ].filter(Boolean);

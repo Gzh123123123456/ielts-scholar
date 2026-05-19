@@ -55,6 +55,23 @@ export interface Band9Refinement {
   explanationZh: string;
 }
 
+export type TargetAnswerLayer = 'band_7_to_7_5' | 'band_8_plus' | 'high_band_stability';
+export type TargetAnswerStatus = 'meets_target' | 'borderline' | 'failed' | 'not_generated' | 'not_applicable';
+
+export interface SpeakingTargetAnswerSelfScores {
+  fluencyCoherence?: number;
+  lexicalResource?: number;
+  grammaticalRangeAccuracy?: number;
+  pronunciation?: null;
+}
+
+export interface WritingTargetAnswerSelfScores {
+  taskResponse?: number;
+  coherenceCohesion?: number;
+  lexicalResource?: number;
+  grammaticalRangeAccuracy?: number;
+}
+
 export interface SpeakingPreservedStyleItem {
   text: string;
   reasonZh: string;
@@ -77,6 +94,14 @@ export interface SpeakingFeedback {
   targetLayer?: string;
   targetValidationZh?: string;
   targetUpgradeFocusZh?: string;
+  targetAnswerFloor?: number;
+  targetAnswerLayer?: TargetAnswerLayer;
+  targetAnswerStatus?: TargetAnswerStatus;
+  targetAnswerSelfScores?: SpeakingTargetAnswerSelfScores;
+  targetAnswerRationaleZh?: string;
+  targetAnswerRepairFocusZh?: string;
+  highBandStabilityZh?: string;
+  nextStepZh?: string;
   scoreConsistencyNoteZh?: string;
   scores: {
     fluencyCoherence: number;
@@ -182,6 +207,14 @@ export interface WritingFeedback {
   targetLayer?: string;
   targetValidationZh?: string;
   targetUpgradeFocusZh?: string;
+  targetAnswerFloor?: number;
+  targetAnswerLayer?: TargetAnswerLayer;
+  targetAnswerStatus?: TargetAnswerStatus;
+  targetAnswerSelfScores?: WritingTargetAnswerSelfScores;
+  targetAnswerRationaleZh?: string;
+  targetAnswerRepairFocusZh?: string;
+  highBandStabilityZh?: string;
+  nextStepZh?: string;
   scoreConsistencyNoteZh?: string;
   reusableArguments: {
     argument: string;

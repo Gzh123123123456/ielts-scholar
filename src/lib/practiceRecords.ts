@@ -122,6 +122,23 @@ const asString = (value: unknown, fallback = '') =>
 const asOptionalString = (value: unknown) =>
   typeof value === 'string' ? value : undefined;
 
+const asOptionalNumber = (value: unknown) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const asTargetAnswerLayer = (value: unknown) =>
+  value === 'band_7_to_7_5' || value === 'band_8_plus' || value === 'high_band_stability'
+    ? value
+    : undefined;
+
+const asTargetAnswerStatus = (value: unknown) =>
+  value === 'meets_target' ||
+  value === 'borderline' ||
+  value === 'failed' ||
+  value === 'not_generated' ||
+  value === 'not_applicable'
+    ? value
+    : undefined;
+
 const asStatus = (value: unknown): PracticeRecordStatus =>
   value === 'analyzed' || value === 'provider_failed' || value === 'draft' ? value : 'draft';
 
@@ -254,6 +271,21 @@ const sanitizeWritingTask2Feedback = (value: unknown): WritingFeedback | undefin
     targetLayer: asOptionalString(value.targetLayer),
     targetValidationZh: asOptionalString(value.targetValidationZh),
     targetUpgradeFocusZh: asOptionalString(value.targetUpgradeFocusZh),
+    targetAnswerFloor: asOptionalNumber(value.targetAnswerFloor),
+    targetAnswerLayer: asTargetAnswerLayer(value.targetAnswerLayer),
+    targetAnswerStatus: asTargetAnswerStatus(value.targetAnswerStatus),
+    targetAnswerSelfScores: isObject(value.targetAnswerSelfScores)
+      ? {
+        taskResponse: asOptionalNumber(value.targetAnswerSelfScores.taskResponse),
+        coherenceCohesion: asOptionalNumber(value.targetAnswerSelfScores.coherenceCohesion),
+        lexicalResource: asOptionalNumber(value.targetAnswerSelfScores.lexicalResource),
+        grammaticalRangeAccuracy: asOptionalNumber(value.targetAnswerSelfScores.grammaticalRangeAccuracy),
+      }
+      : undefined,
+    targetAnswerRationaleZh: asOptionalString(value.targetAnswerRationaleZh),
+    targetAnswerRepairFocusZh: asOptionalString(value.targetAnswerRepairFocusZh),
+    highBandStabilityZh: asOptionalString(value.highBandStabilityZh),
+    nextStepZh: asOptionalString(value.nextStepZh),
     scoreConsistencyNoteZh: asOptionalString(value.scoreConsistencyNoteZh),
     frameworkFeedback: Array.isArray(value.frameworkFeedback) ? value.frameworkFeedback as WritingFeedback['frameworkFeedback'] : [],
     essayLevelWarnings: Array.isArray(value.essayLevelWarnings) ? value.essayLevelWarnings as WritingFeedback['essayLevelWarnings'] : [],
@@ -337,6 +369,21 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     targetLayer: asOptionalString(value.targetLayer),
     targetValidationZh: asOptionalString(value.targetValidationZh),
     targetUpgradeFocusZh: asOptionalString(value.targetUpgradeFocusZh),
+    targetAnswerFloor: asOptionalNumber(value.targetAnswerFloor),
+    targetAnswerLayer: asTargetAnswerLayer(value.targetAnswerLayer),
+    targetAnswerStatus: asTargetAnswerStatus(value.targetAnswerStatus),
+    targetAnswerSelfScores: isObject(value.targetAnswerSelfScores)
+      ? {
+        fluencyCoherence: asOptionalNumber(value.targetAnswerSelfScores.fluencyCoherence),
+        lexicalResource: asOptionalNumber(value.targetAnswerSelfScores.lexicalResource),
+        grammaticalRangeAccuracy: asOptionalNumber(value.targetAnswerSelfScores.grammaticalRangeAccuracy),
+        pronunciation: null,
+      }
+      : undefined,
+    targetAnswerRationaleZh: asOptionalString(value.targetAnswerRationaleZh),
+    targetAnswerRepairFocusZh: asOptionalString(value.targetAnswerRepairFocusZh),
+    highBandStabilityZh: asOptionalString(value.highBandStabilityZh),
+    nextStepZh: asOptionalString(value.nextStepZh),
     scoreConsistencyNoteZh: asOptionalString(value.scoreConsistencyNoteZh),
     scores: {
       fluencyCoherence: typeof scores.fluencyCoherence === 'number' ? scores.fluencyCoherence : 0,

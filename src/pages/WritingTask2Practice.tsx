@@ -223,8 +223,27 @@ const averageWritingScore = (feedback: WritingFeedback) =>
 
 const getTargetModelLevel = (feedback: WritingFeedback) => {
   const estimate = averageWritingScore(feedback);
+  if (
+    feedback.targetAnswerStatus === 'meets_target' &&
+    (feedback.targetAnswerLayer === 'high_band_stability' || estimate >= 8)
+  ) {
+    return 'High-band Stability Check';
+  }
+  if (feedback.targetAnswerStatus === 'borderline' || feedback.targetAnswerStatus === 'failed') {
+    return 'Target Model Still Needs Work';
+  }
   return feedback.targetLayer || feedback.modelAnswerTargetLevel || getTargetLabel(estimate, 'modelAnswer');
 };
+
+const isHighBandWritingStable = (feedback?: WritingFeedback | null) =>
+  Boolean(
+    feedback &&
+    feedback.targetAnswerStatus === 'meets_target' &&
+    (feedback.targetAnswerLayer === 'high_band_stability' || averageWritingScore(feedback) >= 8),
+  );
+
+const hasUnstableWritingTarget = (feedback?: WritingFeedback | null) =>
+  feedback?.targetAnswerStatus === 'borderline' || feedback?.targetAnswerStatus === 'failed';
 
 const uniqueStrings = (items: (string | undefined)[]) => {
   const seen = new Set<string>();
@@ -1105,20 +1124,26 @@ const compactMissingFrameworkItems = (
 ) => {
   const questionLower = questionText.toLowerCase();
   const notesLower = notesText.toLowerCase();
+  const isCauseSolution = /(why|reason|cause|happen|happening).*(what can be done|solution|solve|measure|address|tackle)|problem.*solution|cause.*solution/i.test(questionLower);
+  const isDiscussBoth = /discuss both|both views|two views|both opinions/i.test(questionLower);
+  const isAdvantages = /advantages and disadvantages|benefits and drawbacks|outweigh/i.test(questionLower);
+  const hasCause = /(why|reason|because|cause|lead to|result from|原因|导致|为什么|发生|造成)/i.test(notesLower);
+  const hasSolution = /(solution|solve|measure|address|tackle|can be done|policy|government|school|family|解决|措施|办法|应该|可以|需要)/i.test(notesLower);
   const items: string[] = [];
   const add = (item: string) => {
     if (!items.includes(item)) items.push(item);
   };
 
-  if (/(why|reason|cause|happen|happening)/i.test(questionLower) && !/(why|reason|because|cause|原因|导致|为什么|发生)/i.test(notesLower)) {
+  if (isCauseSolution && !hasCause) {
     add('原因');
   }
-  if (/(what can be done|solution|solve|measure|address|tackle)/i.test(questionLower) && !/(solution|solve|measure|address|tackle|解决|措施|办法|应该|can be done)/i.test(notesLower)) {
+  if (isCauseSolution && !hasSolution) {
     add('解决方案');
   }
   if (feedback) {
     if (!feedback.checklist.clearPosition) add('立场');
-    if (!feedback.checklist.bothViewsCovered) add('两个任务部分');
+    if (!feedback.checklist.bothViewsCovered && isDiscussBoth) add('两个观点');
+    if (!feedback.checklist.bothViewsCovered && isAdvantages) add('优缺点覆盖');
     if (!feedback.checklist.supportExists) add('例子/支撑');
     if (!feedback.checklist.paragraphPlanClear) add('段落结构');
   }
@@ -1128,11 +1153,20 @@ const compactMissingFrameworkItems = (
   return items.slice(0, 3);
 };
 
-const formatCoachFeedback = (feedback: WritingFrameworkCoachFeedback, isMock: boolean) => {
-  const missing = compactMissingFrameworkItems(feedback.question, feedback.sourceNotes, feedback);
+const formatCoachFeedback = (feedback: WritingFrameworkCoachFeedback, isMock: boolean, cumulativeNotes = feedback.sourceNotes) => {
+  const missing = compactMissingFrameworkItems(feedback.question, cumulativeNotes, feedback);
+  const isCauseSolution = /(why|reason|cause|happen|happening).*(what can be done|solution|solve|measure|address|tackle)|problem.*solution|cause.*solution/i.test(feedback.question.toLowerCase());
+  const notesLower = cumulativeNotes.toLowerCase();
+  const alreadyCovered = isCauseSolution
+    ? [
+      /(why|reason|because|cause|lead to|result from|原因|导致|为什么|发生|造成)/i.test(notesLower) ? '你已经给出原因' : '',
+      /(solution|solve|measure|address|tackle|can be done|policy|government|school|family|解决|措施|办法|应该|可以|需要)/i.test(notesLower) ? '你已经补充措施' : '',
+    ].filter(Boolean)
+    : [];
   const lines = [
     `${readinessLabels[feedback.readiness]}${isMock ? ' (local mock)' : ''}`,
     feedback.message,
+    alreadyCovered.join('；'),
   ].filter(Boolean);
 
   if (missing.length && feedback.readiness !== 'ready_to_write') {
@@ -1497,7 +1531,7 @@ export default function WritingTask2Practice() {
       setFrameworkReadiness(coachFeedback.readiness);
       setFrameworkChat(prev => [...prev, {
         role: 'ai',
-        text: formatCoachFeedback(coachFeedback, route.providerName === 'mock'),
+        text: formatCoachFeedback(coachFeedback, route.providerName === 'mock', notes),
       }]);
       addDebugLog(diagnostic.fallbackUsed ? 'Provider fallback used for framework coach.' : 'Framework coach feedback complete.');
     } catch (error) {
@@ -1897,6 +1931,8 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
 
   const writingWorkspaceClass = 'practice-workspace';
   const modelAnswerText = feedback?.modelAnswer?.trim() || '';
+  const isHighBandStable = isHighBandWritingStable(feedback);
+  const targetNeedsRepair = hasUnstableWritingTarget(feedback);
   const resultEssay = feedback?.essay || analyzedEssaySnapshot || essay;
   const resultWordCount = countWords(resultEssay);
   const isUnderTask2WordMinimum = resultWordCount > 0 && resultWordCount < 250;
@@ -2405,18 +2441,27 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                     Training estimate {formatConservativeBandEstimate(averageWritingScore(feedback))}
                   </span>
                   <span className="border border-accent-terracotta/20 bg-accent-terracotta/5 px-2 py-1 rounded-sm text-accent-terracotta">
-                    {getTargetLabelZh(averageWritingScore(feedback), 'modelAnswer')}
+                    {isHighBandStable
+                      ? '高分稳定检查'
+                      : targetNeedsRepair
+                        ? '目标层级待加强'
+                        : getTargetLabelZh(averageWritingScore(feedback), 'modelAnswer')}
                   </span>
                 </div>
               </div>
-              {hasSubstantialModelAnswer && isPersonalizedModelAnswer && (
+              {isHighBandStable && (
+                <p className="text-sm leading-7 text-paper-ink/60 mb-3">
+                  {feedback.nextStepZh || '目标层级已达到。下一步重点是限时稳定、复盘表达和迁移到新题。'}
+                </p>
+              )}
+              {hasSubstantialModelAnswer && isPersonalizedModelAnswer && !isHighBandStable && (
                 <p className="text-sm leading-7 text-paper-ink/60 mb-3">
                   This answer preserves your position and demonstrates selected repairs from the workspace above.
                 </p>
               )}
-              {(feedback.targetUpgradeFocusZh || feedback.targetValidationZh || feedback.scoreConsistencyNoteZh) && (
+              {(feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh || feedback.scoreConsistencyNoteZh) && (
                 <p className="text-sm leading-7 text-paper-ink/60 mb-3">
-                  {feedback.targetUpgradeFocusZh || feedback.targetValidationZh || feedback.scoreConsistencyNoteZh}
+                  {feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh || feedback.scoreConsistencyNoteZh}
                 </p>
               )}
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">

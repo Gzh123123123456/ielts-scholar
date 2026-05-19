@@ -25,6 +25,19 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "targetLayer": "Band 7.0+ Target Answer | Band 8+ Examiner-Friendly Answer",
   "targetValidationZh": "string",
   "targetUpgradeFocusZh": "string",
+  "targetAnswerFloor": 7,
+  "targetAnswerLayer": "band_7_to_7_5 | band_8_plus | high_band_stability",
+  "targetAnswerStatus": "meets_target | borderline | failed | not_generated | not_applicable",
+  "targetAnswerSelfScores": {
+    "fluencyCoherence": 0,
+    "lexicalResource": 0,
+    "grammaticalRangeAccuracy": 0,
+    "pronunciation": null
+  },
+  "targetAnswerRationaleZh": "string",
+  "targetAnswerRepairFocusZh": "string",
+  "highBandStabilityZh": "string",
+  "nextStepZh": "string",
   "scoreConsistencyNoteZh": "string",
   "scores": {
     "fluencyCoherence": 0,
@@ -52,9 +65,9 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
 
 export const speakingPromptCalibration = `Speaking feedback must be spoken IELTS feedback, not writing-style feedback.
 Current estimate: this is a conservative single-question training estimate, excluding pronunciation. IELTS Speaking is scored across a complete test, so do not present one Part 1/2/3 answer as an official complete Speaking band. If evidence sits between two bands, prefer the lower visible estimate, e.g. 5.5-6.0 should be handled as 5.5.
-Global target policy: keep the current estimate honest and conservative. Target answers / improved answers / model answers must always move upward: if the current answer is below Band 7.0, generate a Band 7.0+ target; if the current answer is around Band 7.0 or above, generate a Band 8+ examiner-friendly upgraded answer. Do not inflate the current estimate to match the target. Do not label any learner-facing output as Band 9. Do not make Band 8+ mean more formal, more academic, or more essay-like by default; it means clearer logic, more precise language, stronger idea development, better examples, more natural flow, and examiner-friendly execution.
+Global target policy: keep the current estimate honest and conservative. Target answers / improved answers / model answers must always move upward: if the current answer is below Band 7.0, generate a stable Band 7.0-7.5 target; if the current answer is 7.0-7.5, generate a genuinely Band 8+ examiner-friendly upgraded answer with a safety margin above 7.5; if the current answer is already 8.0+, do not keep generating fake higher answers, switch to high-band stability. Do not inflate the current estimate to match the target. Do not label any learner-facing output as Band 9. Do not make Band 8+ mean more formal, more academic, or more essay-like by default; it means clearer logic, more precise language, stronger idea development, better examples, more natural flow, and examiner-friendly execution.
 Score consistency: pronunciation is not assessed and must never be treated as a hidden reason for lowering the headline estimate. If bandEstimateExcludingPronunciation is lower than all three visible criteria, either lower the relevant visible criterion or give a compact scoreConsistencyNoteZh explaining a real cap such as insufficient sample, off-task content, overlong Part 1, essay-like Part 3, or malformed answer. If all visible criteria are 7.0 and there is no cap/fatal issue, the headline estimate should not be 6.5.
-Target integrity: set targetBandFloor to 7 when the current estimate is below 7.0, and 8 when the current estimate is 7.0 or above. Set targetLayer to the matching learner-facing label. Before returning JSON, re-read upgradedAnswer using the same criteria; if it would probably fall below targetBandFloor, revise it. If the user's original content would cap the target layer, say so in targetUpgradeFocusZh or targetValidationZh and restructure the target answer instead of preserving weak material.
+Target integrity two-pass process: first score the user's current answer. Then choose targetAnswerFloor and targetAnswerLayer: current <7.0 => floor 7 and layer band_7_to_7_5; current 7.0-7.5 => floor 8 and layer band_8_plus; current >=8.0 => high_band_stability and no full replacement pressure. Generate upgradedAnswer only when a target answer is needed. Self-score upgradedAnswer using the same visible criteria (fluencyCoherence, lexicalResource, grammaticalRangeAccuracy; pronunciation null). If any required self-score is below targetAnswerFloor, revise upgradedAnswer before returning. If it still cannot meet the floor while preserving the user's material, set targetAnswerStatus to borderline or failed, do not claim Band 8+, and explain the repair focus in targetAnswerRepairFocusZh. targetAnswerStatus may be meets_target only when all required self-scores meet the floor or when the current answer itself is already high-band stable. Return concise rationale fields, not hidden reasoning.
 Preserve the learner's usable idea where possible, but expand it into exam-ready material instead of only recording it. In preservedStyle, return idea-development material grounded in the reviewed transcript: text = learner material or short summary; reasonZh = why it is useful; expansionZh = how to expand this exact material for the current part; sampleNextStep = one compact English next sentence/frame when safe; transferQuestions = 1-3 IELTS questions where the same material can transfer; partUseZh = how this material should be used in this part; riskNoteZh = one risk such as memorized answer, overlong Part 1, thin detail, or weak abstraction. Do not fabricate life events. If the transcript lacks detail, say what kind of real detail the learner should add instead of inventing it.
 Part-specific preservedStyle expansion:
 - Part 1: Give one concrete personal detail, one short reason/feeling, and avoid turning it into a long story.
@@ -68,6 +81,7 @@ Part 1 rules:
 - upgradedAnswer should normally be 2-4 natural spoken sentences, about 15-30 seconds.
 - Band 8+ Part 1 is still short: effortless, specific, natural, and not more academic.
 - Structure: direct answer + one specific detail + light reason/feeling.
+- A Band 8+ Part 1 target normally stays 2-4 sentences. Do not add academic words, a long explanation, or a mini essay.
 - Do not overload advanced vocabulary or write polished paragraphs.
 - If the transcript is very short but meaningful, do not invent a full personal answer. Give starter development guidance or a bracketed starter such as: "Yes, I do. I usually read [type of books] when I want to relax. It helps me [personal reason]."
 - If you add example details not provided by the user, label them as a starter example or use brackets.
@@ -78,6 +92,7 @@ Part 2 rules:
 - Target time: 1.5-2 minutes.
 - upgradedAnswer should follow a story spine: who/what/where -> specific scene -> key details -> feeling change -> why it matters.
 - Band 7.0+ Part 2 has a clear story spine, specific details, feeling, and why-it-matters. Band 8+ Part 2 is more vivid but believable, smoother, and more reflective, not literary.
+- A Band 8+ Part 2 target must show setting, a specific scene, concrete action, challenge/change, feeling shift, and why it matters. Do not merely add vocabulary.
 - Do not treat the cue card as a checklist. Concrete details and personal reflection matter more than fancy vocabulary.
 
 Part 3 rules:
@@ -85,6 +100,7 @@ Part 3 rules:
 - upgradedAnswer should normally be 4-6 spoken sentences, about 35-60 seconds.
 - Use natural spoken discussion logic: direct position -> reason/contrast/condition -> example -> consequence/wider meaning.
 - Band 7.0+ Part 3 has a clear position, reason/contrast, example, and consequence. Band 8+ Part 3 has stronger cause/effect, more nuanced contrast, better examples, and more natural spoken transitions.
+- A Band 8+ Part 3 target must have spoken reasoning depth: claim, condition or contrast, example or observation, consequence, and natural discussion rhythm. Do not make it sound like Writing Task 2.
 - Prefer spoken bridges such as "I'd say...", "I think...", "It really depends...", "One major change is...", and "A good example would be..."
 - Avoid writing-style connectors and essay phrases such as "Furthermore", "Moreover", "Consequently", "It is universally acknowledged that", and "In contemporary society".
 - If the original answer already has a position and example, do not give generic advice like "add an example"; identify the real issue, such as grammar, word form, pronunciation-transcript error, weak cause/effect, weak consequence, unclear comparison, or spoken clarity.
@@ -134,6 +150,19 @@ export const writingSchemaInstruction = `The JSON object must match this exact k
   "targetLayer": "Band 7.0+ Target Model Answer | Band 8+ Examiner-Friendly Model Answer",
   "targetValidationZh": "string",
   "targetUpgradeFocusZh": "string",
+  "targetAnswerFloor": 7,
+  "targetAnswerLayer": "band_7_to_7_5 | band_8_plus | high_band_stability",
+  "targetAnswerStatus": "meets_target | borderline | failed | not_generated | not_applicable",
+  "targetAnswerSelfScores": {
+    "taskResponse": 0,
+    "coherenceCohesion": 0,
+    "lexicalResource": 0,
+    "grammaticalRangeAccuracy": 0
+  },
+  "targetAnswerRationaleZh": "string",
+  "targetAnswerRepairFocusZh": "string",
+  "highBandStabilityZh": "string",
+  "nextStepZh": "string",
   "scoreConsistencyNoteZh": "string",
   "reusableArguments": [{ "argument": "string", "canBeReusedFor": ["string"], "explanationZh": "string" }],
   "obsidianMarkdown": "string"
@@ -180,36 +209,14 @@ export const frameworkSchemaInstruction = `The JSON object must match this exact
   "editableSummary": "string"
 }
 
-editableSummary must be clear sections, not one dense block:
-Position
-- 中文逻辑:
-- English thesis draft:
-
-View A / Concession side
-- 中文逻辑:
-- English topic sentence draft:
-- Support points:
-- Useful sentence frame:
-
-View B / Main argument side
-- 中文逻辑:
-- English topic sentence draft:
-- Support points:
-- Useful sentence frame:
-
-My opinion
-- 中文逻辑:
-- English position sentence:
-- Concession pattern:
-
-Paragraph plan
-1. Introduction:
-2. Body 1:
-3. Body 2:
-4. Conclusion:
-
-Reusable language for this essay
-- Include 3-5 varied sentence frames or transitions.`;
+editableSummary must be clear sections, not one dense block. Adapt labels to task type:
+- Discuss both views: Position, View A, View B, My opinion, Paragraph plan, Possible example.
+- Causes / problem-solution / "Why does this happen, and what can be done?": Position, Cause Analysis, Solution Plan, My Position, Paragraph Plan, Topic-specific argument frames. Do not use View A / View B.
+- Agree/disagree: Core Position, Supporting Reason 1, Supporting Reason 2, Counterpoint / Limit if useful, Paragraph Plan.
+- Advantages/disadvantages/outweigh: Advantage Analysis, Disadvantage Analysis, My Judgement if required, Paragraph Plan.
+- Do not use "overview" as a Task 2 paragraph instruction; use thesis, position, or introduction.
+Each major section should include Chinese logic plus useful English thesis/topic sentence drafts when the learner supplied enough information.
+Reusable language for this essay should include 3-5 varied sentence frames or transitions.`;
 
 export const frameworkCoachSchemaInstruction = `The JSON object must match this exact key structure:
 {
@@ -314,11 +321,11 @@ For frameworkFeedback, keep three Chinese roles distinct: suggestionZh = why thi
 Include relatedCorrectionIds when a sentence correction supports the same logic issue; otherwise leave it empty and give paragraph-level guidance.
 Avoid duplicating full sentence correction text inside frameworkFeedback.
 Return vocabularyUpgrade as a two-part Language Bank. Infer the topic domain from the question and essay. topicVocabulary contains 5-8 topic-specific words/collocations/phrases with Chinese meaningZh and usageZh, covering both sides for advantages/disadvantages/outweigh/discuss-both/to-what-extent tasks where relevant. expressionUpgrades contains both category="from_essay" phrase upgrades and category="argument_frame" reusable Task 2 frames. Do not put writing-strategy advice in topicVocabulary.
-Current estimate must remain honest and conservative. Choose modelAnswerTargetLevel with the global two-layer policy only: if the current essay is below Band 7.0, use "Band 7.0+ Target Model Answer"; if the current essay is around Band 7.0 or above, use "Band 8+ Examiner-Friendly Model Answer". Do not use Target Band 7.5, Target Band 7.5-8.0, or Band 9.
+Current estimate must remain honest and conservative. Choose the target with the global policy only: if the current essay is below Band 7.0, use a stable Band 7.0-7.5 target model; if the current essay is 7.0-7.5, use a genuinely Band 8+ examiner-friendly model with a safety margin above 7.5; if the current essay is already 8.0+, switch to high-band stability rather than generating a fake higher replacement essay. Do not use Target Band 7.5, Target Band 7.5-8.0, or Band 9.
 Score-feedback consistency is mandatory. If any score dimension is below 7.0, the feedback must name the real blocker for that dimension. Task Response blockers include missing task parts, weak position, shallow development, unsupported solution, or wrong focus. Coherence blockers include unclear paragraph role, weak progression, or over-stacked ideas. Lexical blockers include unnatural collocation, over-formality, repetition, or imprecise topic vocabulary. Grammar blockers include sentence control, punctuation, clause logic, accuracy, or range. Never call a dimension excellent while assigning 6.5 unless you clearly explain why it is close but not yet Band 7.0.
 Logic & Structure Review must be a revision roadmap: what the issue is, why it affects IELTS performance, and what to add, remove, or rewrite. If the learner's original argument direction would cap the band, say it is not recommended, explain why it limits Task Response or Coherence, and make the modelAnswer use a stronger direction.
 The modelAnswer field must be a complete personalized Task 2 target model answer, normally 280-350 words even when the learner's essay is under 250 words. Prefer concise completeness and avoid 400+ words. It must apply Task Response/task command fixes, concession or balance if relevant, paragraph-level logic advice, sentence correction lessons, Language Bank items, and the user's usable ideas where appropriate. It must not merely polish the original essay; if an original idea is weak or off-task, replace it with a more appropriate task-relevant idea and explain that in feedback.
-For Band 7.0+ modelAnswer, the answer must be clear, relevant, supported, and controlled. For Band 8+ modelAnswer, the answer must show direct task response, a clear sustained position, well-developed paragraphs, precise topic vocabulary, flexible sentence structures, strong cohesion without mechanical linking, and no generic template padding. Before finalizing modelAnswer, self-check whether it would still likely be judged below targetBandFloor; if yes, strengthen idea development, precision, organization, and naturalness. Do not fake an upgrade by making it more formal or template-like.
+For Band 7.0+ modelAnswer, the answer must be clear, relevant, supported, and controlled. For Band 8+ modelAnswer, the answer must show direct task response, a clear sustained position, well-developed paragraphs, precise topic vocabulary, flexible sentence structures, strong cohesion without mechanical linking, and no generic template padding. Two-pass target integrity is mandatory: after generating modelAnswer, self-score it using the same Task Response, Coherence & Cohesion, Lexical Resource, and Grammar criteria. If any self-score is below targetAnswerFloor, revise the modelAnswer before returning. If it still cannot meet the floor, set targetAnswerStatus to borderline or failed, do not label it Band 8+, and explain targetAnswerRepairFocusZh. Do not fake an upgrade by making it more formal, longer, or template-like. Avoid relying on "pervasive issue", "delve into", "multifaceted approach", or "it is imperative that" as the upgrade.
 For advantages/disadvantages or outweigh prompts, if the main issue is missing or weak disadvantage coverage, the modelAnswer must include a clear concession/disadvantage paragraph before defending the final position.
 Return modelAnswerAnnotations for meaningful exact spans in modelAnswer: several topic_vocabulary spans, at least two expression_upgrade spans when available, at least one sentence_repair span, and at least one logic_repair span. quote must exactly appear in modelAnswer. Do not over-highlight the whole essay.
 Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
@@ -395,13 +402,13 @@ ${JSON.stringify(params, null, 2)}`);
     return this.generateJson(`${strictJsonInstruction}
 
 You extract a final IELTS Writing Task 2 framework from the learner's Phase 1 coach discussion notes.
-Ground the summary in learner notes, coach discussion, and any unsent draft notes. Use a bilingual editableSummary with Position, View A, View B, My opinion, and Paragraph plan sections. Each major section should include Chinese logic plus useful English thesis/topic sentence drafts where the learner has supplied enough information. Mark missing decisions as Not decided yet / 需要继续补充. Mark AI-suggested examples as Suggested example, please confirm. Do not turn the summary into a full model answer.
+Ground the summary in learner notes, coach discussion, and any unsent draft notes. Use task-appropriate bilingual editableSummary labels. Use View A / View B only for discuss-both-views prompts. For causes-solutions prompts, use Cause Analysis and Solution Plan. Each major section should include Chinese logic plus useful English thesis/topic sentence drafts where the learner has supplied enough information. Mark missing decisions as Not decided yet / 需要继续补充. Mark AI-suggested examples as Suggested example, please confirm. Do not turn the summary into a full model answer.
 Include reusable argument frames such as concession, contrast, not only...but also, not to mention, or this is not to suggest that, but vary them instead of repeating the same frames every time.
 Do not write the essay. Consolidate only the learner's notes and coach discussion into the requested fields.
 Do not invent a complete high-band essay plan from the prompt alone.
 If a decision is missing, write "Not decided yet / 需要继续补充" in that field.
 Possible examples must come from the learner notes. If you suggest an example because the notes imply a direction but do not name one, prefix it with "Suggested example, please confirm:".
-The editableSummary field must be a readable text block with these labels: Position, View A, View B, My opinion, Paragraph plan, Possible example.
+The editableSummary field must be a readable text block with task-appropriate labels. Do not use "overview" for Task 2 introduction planning.
 
 ${frameworkSchemaInstruction}
 

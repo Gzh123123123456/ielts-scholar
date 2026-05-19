@@ -49,6 +49,25 @@ const isInsufficientSpeakingSample = (
   return words < 35;
 };
 
+const isHighBandSpeakingStable = (feedback?: SpeakingFeedback | null) =>
+  Boolean(
+    feedback &&
+    feedback.targetAnswerStatus === 'meets_target' &&
+    (feedback.targetAnswerLayer === 'high_band_stability' || feedback.bandEstimateExcludingPronunciation >= 8),
+  );
+
+const hasUnstableSpeakingTarget = (feedback?: SpeakingFeedback | null) =>
+  feedback?.targetAnswerStatus === 'borderline' || feedback?.targetAnswerStatus === 'failed';
+
+const speakingTargetHeading = (feedback: SpeakingFeedback) => {
+  if (isHighBandSpeakingStable(feedback)) return 'High-band Stability Check';
+  if (hasUnstableSpeakingTarget(feedback)) return 'Target Answer Still Needs Work';
+  if (feedback.targetAnswerStatus === 'meets_target' && feedback.targetAnswerLayer === 'band_8_plus') {
+    return 'Band 8+ Examiner-Friendly Target';
+  }
+  return feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer');
+};
+
 const answerDevelopmentPlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
   const questionReference = prompt ? `这道题是：“${prompt}”` : '先围绕当前题目补充内容。';
   const starter = speakingPart === 1
@@ -814,6 +833,12 @@ export default function SpeakingPractice() {
 
   const isMock = getAIProviderName() !== 'gemini';
   const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
+  const isHighBandStable = isHighBandSpeakingStable(feedback);
+  const targetNeedsRepair = hasUnstableSpeakingTarget(feedback);
+  const criticalErrors = feedback && isHighBandStable ? [] : feedback?.fatalErrors || [];
+  const optionalPolish = feedback && isHighBandStable
+    ? feedback.naturalnessHints.slice(0, 2)
+    : feedback?.naturalnessHints || [];
   const starterPlan = starterPracticePlan(part, question?.question);
   const speakingBankCounts = {
     1: speakingPart1.length,
@@ -1051,17 +1076,19 @@ export default function SpeakingPractice() {
               <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
                 <div className="space-y-3">
                   <h4 className="text-sm font-bold uppercase tracking-widest text-red-800 ml-1">Must Fix</h4>
-                  {feedback.fatalErrors.length === 0 ? (
+                  {criticalErrors.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-green-700/50">
                       <p className="text-lg leading-8 text-paper-ink/85 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">
                         {shouldShowDevelopmentPlan
                           ? 'Starter development needed: give a complete answer first, then review language accuracy.'
-                          : 'No critical correction needed for this attempt. Focus on making the answer more fluent and specific.'}
+                          : isHighBandStable
+                            ? '本次没有必须修改的问题。'
+                            : 'No critical correction needed for this attempt. Focus on making the answer more fluent and specific.'}
                       </p>
                     </PaperCard>
                   ) : (
                     <div className="space-y-4">
-                      {feedback.fatalErrors.map((err, i) => (
+                      {criticalErrors.map((err, i) => (
                         <PaperCard key={i} className="p-5 border-l-2 border-l-red-800">
                           <div className="text-base line-through text-paper-ink/60 mb-2 leading-7">{err.original}</div>
                           <div className="text-xl font-bold text-red-800 mb-3 leading-8">{err.correction}</div>
@@ -1074,13 +1101,15 @@ export default function SpeakingPractice() {
 
                 <div className="space-y-3">
                   <h4 className="text-sm font-bold uppercase tracking-widest text-[#a64d32] ml-1">Optional Polish</h4>
-                  {feedback.naturalnessHints.length === 0 ? (
+                  {optionalPolish.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-paper-ink/20">
-                      <p className="text-lg leading-8 text-paper-ink/75 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">No optional polish item was returned for this attempt.</p>
+                      <p className="text-lg leading-8 text-paper-ink/75 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">
+                        {isHighBandStable ? 'No meaningful optional polish is needed this time.' : 'No optional polish item was returned for this attempt.'}
+                      </p>
                     </PaperCard>
                   ) : (
                     <div className="space-y-4">
-                      {feedback.naturalnessHints.map((hint, i) => (
+                      {optionalPolish.map((hint, i) => (
                         <PaperCard key={i} className="p-5 border-l-2 border-l-[#a64d32]/40">
                           <div className="text-base text-paper-ink/65 mb-2 leading-7">"{hint.original}" </div>
                           <div className="text-xl font-bold text-[#a64d32] mb-3 leading-8">Better: {hint.better}</div>
@@ -1176,15 +1205,19 @@ export default function SpeakingPractice() {
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
                     {shouldShowDevelopmentPlan
                       ? 'Band 7.0+ Starter Target'
-                      : feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}
+                      : speakingTargetHeading(feedback)}
                     {!shouldShowDevelopmentPlan && (
                       <span className="block mt-2 text-xs normal-case tracking-normal text-paper-ink/45">
-                        {getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}
+                        {isHighBandStable
+                          ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
+                          : targetNeedsRepair
+                            ? '这版目标答案还没有稳定达到目标层级，需要继续强化。'
+                            : getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}
                       </span>
                     )}
-                    {!shouldShowDevelopmentPlan && (feedback.targetUpgradeFocusZh || feedback.targetValidationZh) && (
+                    {!shouldShowDevelopmentPlan && (feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh) && (
                       <span className="block mt-2 text-sm normal-case tracking-normal leading-7 text-paper-ink/55">
-                        {feedback.targetUpgradeFocusZh || feedback.targetValidationZh}
+                        {feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh}
                       </span>
                     )}
                   </h4>
@@ -1211,9 +1244,16 @@ export default function SpeakingPractice() {
                       </div>
                     </div>
                   ) : (
-                    <p className="max-w-5xl text-xl md:text-2xl leading-10 text-paper-ink font-serif">
-                      "{feedback.upgradedAnswer}"
-                    </p>
+                    <div className="max-w-5xl space-y-4">
+                      {isHighBandStable && (
+                        <p className="text-lg leading-8 text-paper-ink/75">
+                          {feedback.nextStepZh || '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'}
+                        </p>
+                      )}
+                      <p className="text-xl md:text-2xl leading-10 text-paper-ink font-serif">
+                        "{feedback.upgradedAnswer}"
+                      </p>
+                    </div>
                   )}
                 </div>
                 <div className="mt-8 flex justify-start border-t border-paper-ink/10 pt-6">
