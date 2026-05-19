@@ -75,7 +75,7 @@ export class MockProvider implements AIProvider {
         : '当前回答仍按单题训练样本保守估计：内容延展、自然口语节奏或 Part 适配还不稳定；发音未评估。',
       targetBandFloor: targetFloor,
       targetLayer: conservativeEstimate >= 8
-        ? 'High-band Stability Check'
+        ? '高分稳定检查'
         : conservativeEstimate >= 7 ? 'Band 8+ Examiner-Friendly Answer' : 'Band 7.0+ Target Answer',
       targetValidationZh: demoBorderlineTarget
         ? '这版目标答案还没有稳定达到目标层级，需要继续强化推理链和例子。'
@@ -326,7 +326,7 @@ export class MockProvider implements AIProvider {
         ? '文章长度不足，当前估计按训练保守值处理。'
         : '当前估计主要受任务回应深度、段落推进、词汇精确度和句子控制限制。',
       targetBandFloor: targetFloor,
-      targetLayer: averageScore >= 8 ? 'High-band Stability Check' : getTargetLabel(averageScore, 'modelAnswer'),
+      targetLayer: averageScore >= 8 ? '高分稳定检查' : getTargetLabel(averageScore, 'modelAnswer'),
       targetValidationZh: averageScore >= 8
         ? '目标层级已达到。下一步重点是限时稳定、复盘表达和迁移到新题。'
         : isUnderLength
@@ -589,7 +589,7 @@ Overall, students should not be forced into subjects chosen only by adults, beca
             { quote: 'connect personal interests with realistic career pathways', type: 'logic_repair', labelZh: '逻辑修复' },
           ],
       modelAnswerPersonalized: Boolean(params.finalFrameworkSummary || params.frameworkNotes || params.essay.trim()),
-      modelAnswerTargetLevel: averageScore >= 8 ? 'High-band Stability Check' : getTargetLabel(averageScore, 'modelAnswer'),
+      modelAnswerTargetLevel: averageScore >= 8 ? '高分稳定检查' : getTargetLabel(averageScore, 'modelAnswer'),
       reusableArguments: [
         {
           argument: 'Personal interest leads to better academic performance',

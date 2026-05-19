@@ -5,11 +5,55 @@ import { SerifButton } from './SerifButton';
 import { X, ChevronDown, ChevronUp, Bug } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { getAIProviderName } from '@/src/lib/ai';
+import type { ProviderDiagnostic } from '@/src/lib/ai/schemas';
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const scoreLine = (diagnostic: ProviderDiagnostic) => {
+  const parsed = isRecord(diagnostic.parsedJson) ? diagnostic.parsedJson : {};
+  const scores = isRecord(parsed.scores) ? parsed.scores : {};
+  if (diagnostic.operation === 'speaking_analysis') {
+    return typeof parsed.bandEstimateExcludingPronunciation === 'number'
+      ? `score ${parsed.bandEstimateExcludingPronunciation.toFixed(1)}`
+      : 'score n/a';
+  }
+  if (diagnostic.operation === 'writing_analysis') {
+    const values = [
+      scores.taskResponse,
+      scores.coherenceCohesion,
+      scores.lexicalResource,
+      scores.grammaticalRangeAccuracy,
+    ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    if (values.length === 4) {
+      return `score ${(values.reduce((sum, value) => sum + value, 0) / 4).toFixed(1)}`;
+    }
+    return 'score n/a';
+  }
+  const validationScores = Object.entries(scores)
+    .filter(([, value]) => typeof value === 'number')
+    .map(([key, value]) => `${key}:${Number(value).toFixed(1)}`);
+  return validationScores.length ? validationScores.join(' ') : 'score n/a';
+};
+
+const targetLine = (diagnostic: ProviderDiagnostic) => {
+  const parsed = isRecord(diagnostic.parsedJson) ? diagnostic.parsedJson : {};
+  const request = isRecord(diagnostic.requestPayload) ? diagnostic.requestPayload : {};
+  const parts = [
+    typeof parsed.targetAnswerLayer === 'string' && `layer ${parsed.targetAnswerLayer}`,
+    typeof parsed.targetAnswerStatus === 'string' && `target ${parsed.targetAnswerStatus}`,
+    typeof parsed.status === 'string' && `status ${parsed.status}`,
+    typeof request.targetAttempt === 'number' && `attempt ${request.targetAttempt}`,
+    typeof request.targetRepairFocus === 'string' && request.targetRepairFocus.trim() && `repair ${request.targetRepairFocus.trim()}`,
+    typeof parsed.repairFocusZh === 'string' && parsed.repairFocusZh.trim() && `repair ${parsed.repairFocusZh.trim()}`,
+  ].filter(Boolean);
+  return parts.join(' | ');
+};
 
 export const DebugPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isProviderOpen, setIsProviderOpen] = useState(true);
-  const { debugLogs, sessions, profile, capabilities, providerDiagnostic } = useApp();
+  const { debugLogs, sessions, profile, capabilities, providerDiagnostic, providerDiagnostics } = useApp();
   const location = useLocation();
 
   const exportState = () => {
@@ -20,6 +64,7 @@ export const DebugPanel: React.FC = () => {
       capabilities,
       provider: getAIProviderName(),
       providerDiagnostic,
+      providerDiagnostics,
       timestamp: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -102,6 +147,25 @@ export const DebugPanel: React.FC = () => {
                   )}
                   {providerDiagnostic.normalizedFields && providerDiagnostic.normalizedFields.length > 0 && (
                     <p><span className="opacity-50">Normalized Fields:</span> {providerDiagnostic.normalizedFields.join(', ')}</p>
+                  )}
+                  {providerDiagnostics.length > 0 && (
+                    <div>
+                      <p className="font-bold text-paper-ink/50">Target Pipeline</p>
+                      <ol className="mt-1 space-y-1">
+                        {[...providerDiagnostics].reverse().map((item, index) => (
+                          <li key={`${item.timestamp}-${item.operation}-${index}`} className="border border-paper-ink/10 bg-paper-50 p-2 rounded">
+                            <p>
+                              <span className="opacity-50">#{index + 1}</span> {item.operation} | {scoreLine(item)}
+                            </p>
+                            <p className={item.fallbackUsed ? 'text-red-800 font-bold' : 'text-green-800 font-bold'}>
+                              {item.providerName}{item.modelName ? ` / ${item.modelName}` : ''} | fallback {item.fallbackUsed ? 'YES' : 'NO'}
+                            </p>
+                            {targetLine(item) && <p className="text-paper-ink/60 break-words">{targetLine(item)}</p>}
+                            {item.failureKind && <p className="text-red-800">failure {item.failureKind}</p>}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
                   )}
                   {providerDiagnostic.parseError && (
                     <div>

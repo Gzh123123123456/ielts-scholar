@@ -24,7 +24,7 @@ export default function App() {
   return (
     <AppProvider>
       <Router>
-        <div className="min-h-screen bg-paper-100 selection:bg-accent-terracotta/20 notranslate" translate="no">
+        <div className="min-h-screen bg-paper-100 selection:bg-accent-terracotta/20">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/speaking" element={<Speaking />} />

@@ -25,6 +25,7 @@ interface AppContextType {
   addDebugLog: (log: string) => void;
   providerDiagnostic: ProviderDiagnostic | null;
   setProviderDiagnostic: (diagnostic: ProviderDiagnostic | null) => void;
+  providerDiagnostics: ProviderDiagnostic[];
   capabilities: BrowserCapabilities;
   setCapabilities: (caps: Partial<BrowserCapabilities>) => void;
 }
@@ -79,6 +80,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [providerDiagnostic, setProviderDiagnostic] = useState<ProviderDiagnostic | null>(null);
+  const [providerDiagnostics, setProviderDiagnostics] = useState<ProviderDiagnostic[]>([]);
   const [capabilities, setCapabilitiesState] = useState<BrowserCapabilities>({
     speechRecognition: false,
     webkitSpeechRecognition: false,
@@ -93,6 +95,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addDebugLog = (log: string) => {
     setDebugLogs(prev => [new Date().toISOString() + ': ' + log, ...prev].slice(0, 50));
+  };
+
+  const recordProviderDiagnostic = (diagnostic: ProviderDiagnostic | null) => {
+    setProviderDiagnostic(diagnostic);
+    setProviderDiagnostics(prev => diagnostic ? [diagnostic, ...prev].slice(0, 12) : []);
   };
 
   useEffect(() => {
@@ -146,7 +153,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       debugLogs,
       addDebugLog,
       providerDiagnostic,
-      setProviderDiagnostic,
+      setProviderDiagnostic: recordProviderDiagnostic,
+      providerDiagnostics,
       capabilities,
       setCapabilities,
     }}>

@@ -97,13 +97,14 @@ const shouldValidateWritingTarget = (feedback: WritingFeedback) =>
 export const validateSpeakingTargetLoop = async (
   initialFeedback: SpeakingFeedback,
   insufficientSample = false,
-): Promise<{ feedback: SpeakingFeedback; diagnostic?: ProviderDiagnostic }> => {
+): Promise<{ feedback: SpeakingFeedback; diagnostic?: ProviderDiagnostic; diagnostics: ProviderDiagnostic[] }> => {
   if (!shouldValidateSpeakingTarget(initialFeedback)) {
-    return { feedback: initialFeedback };
+    return { feedback: initialFeedback, diagnostics: [] };
   }
 
   let current = initialFeedback;
   let lastDiagnostic: ProviderDiagnostic | undefined;
+  const diagnostics: ProviderDiagnostic[] = [];
   let repairFocus = '';
 
   for (let attempt = 1; attempt <= MAX_TARGET_GENERATION_ATTEMPTS; attempt += 1) {
@@ -116,10 +117,11 @@ export const validateSpeakingTargetLoop = async (
       targetLayer: current.targetAnswerLayer,
     });
     lastDiagnostic = validationResult.diagnostic;
+    diagnostics.push(validationResult.diagnostic);
     const validated = applySpeakingValidation(current, validationResult.feedback);
 
     if (validationResult.feedback.status === 'meets_target' || attempt >= MAX_TARGET_GENERATION_ATTEMPTS) {
-      return { feedback: validated, diagnostic: lastDiagnostic };
+      return { feedback: validated, diagnostic: lastDiagnostic, diagnostics };
     }
 
     repairFocus = validationResult.feedback.repairFocusZh || TARGET_NOT_STABLE_ZH;
@@ -132,10 +134,11 @@ export const validateSpeakingTargetLoop = async (
       priorTargetAnswer: current.upgradedAnswer,
     }, insufficientSample);
     lastDiagnostic = regenerated.diagnostic;
+    diagnostics.push(regenerated.diagnostic);
     current = regenerated.feedback;
   }
 
-  return { feedback: current, diagnostic: lastDiagnostic };
+  return { feedback: current, diagnostic: lastDiagnostic, diagnostics };
 };
 
 export const validateWritingTargetLoop = async (
@@ -143,13 +146,14 @@ export const validateWritingTargetLoop = async (
   insufficientSample = false,
   frameworkNotes?: string,
   finalFrameworkSummary?: string,
-): Promise<{ feedback: WritingFeedback; diagnostic?: ProviderDiagnostic }> => {
+): Promise<{ feedback: WritingFeedback; diagnostic?: ProviderDiagnostic; diagnostics: ProviderDiagnostic[] }> => {
   if (!shouldValidateWritingTarget(initialFeedback)) {
-    return { feedback: initialFeedback };
+    return { feedback: initialFeedback, diagnostics: [] };
   }
 
   let current = initialFeedback;
   let lastDiagnostic: ProviderDiagnostic | undefined;
+  const diagnostics: ProviderDiagnostic[] = [];
   let repairFocus = '';
 
   for (let attempt = 1; attempt <= MAX_TARGET_GENERATION_ATTEMPTS; attempt += 1) {
@@ -162,10 +166,11 @@ export const validateWritingTargetLoop = async (
       targetLayer: current.targetAnswerLayer,
     });
     lastDiagnostic = validationResult.diagnostic;
+    diagnostics.push(validationResult.diagnostic);
     const validated = applyWritingValidation(current, validationResult.feedback);
 
     if (validationResult.feedback.status === 'meets_target' || attempt >= MAX_TARGET_GENERATION_ATTEMPTS) {
-      return { feedback: validated, diagnostic: lastDiagnostic };
+      return { feedback: validated, diagnostic: lastDiagnostic, diagnostics };
     }
 
     repairFocus = validationResult.feedback.repairFocusZh || TARGET_NOT_STABLE_ZH;
@@ -180,8 +185,9 @@ export const validateWritingTargetLoop = async (
       priorTargetAnswer: current.modelAnswer,
     }, insufficientSample);
     lastDiagnostic = regenerated.diagnostic;
+    diagnostics.push(regenerated.diagnostic);
     current = regenerated.feedback;
   }
 
-  return { feedback: current, diagnostic: lastDiagnostic };
+  return { feedback: current, diagnostic: lastDiagnostic, diagnostics };
 };

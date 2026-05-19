@@ -228,11 +228,12 @@ const getTargetModelLevel = (feedback: WritingFeedback) => {
     feedback.targetAnswerStatus === 'meets_target' &&
     (feedback.targetAnswerLayer === 'high_band_stability' || estimate >= 8)
   ) {
-    return 'High-band Stability Check';
+    return '高分稳定检查';
   }
   if (feedback.targetAnswerStatus === 'borderline' || feedback.targetAnswerStatus === 'failed') {
-    return 'Target Model Still Needs Work';
+    return '目标范文仍需加强';
   }
+  if (feedback.targetAnswerStatus !== 'meets_target') return '目标范文尚未完成校验';
   return feedback.targetLayer || feedback.modelAnswerTargetLevel || getTargetLabel(estimate, 'modelAnswer');
 };
 
@@ -1682,6 +1683,7 @@ export default function WritingTask2Practice() {
     setIsAnalyzing(true);
     setProviderErrorMessage('');
     setApiStatusMessage('');
+    setProviderDiagnostic(null);
     setAnalyzedEssaySnapshot(submittedEssay);
     persistWritingAttempt('draft', {
       question: submittedQuestion,
@@ -1742,7 +1744,7 @@ export default function WritingTask2Practice() {
         essay: resultEssay,
       };
       const validation = isInsufficientTask2Sample(resultEssay)
-        ? { feedback: normalizedInitialFeedback, diagnostic: undefined }
+        ? { feedback: normalizedInitialFeedback, diagnostic: undefined, diagnostics: [] }
         : await validateWritingTargetLoop(
           normalizedInitialFeedback,
           false,
@@ -1752,7 +1754,8 @@ export default function WritingTask2Practice() {
       const resultFeedback = validation.feedback;
       const finalDiagnostic = validation.diagnostic || diagnostic;
       const finalDiagnosticSummary = summarizeDiagnostic(finalDiagnostic);
-      setProviderDiagnostic(finalDiagnostic);
+      validation.diagnostics.forEach(item => setProviderDiagnostic(item));
+      if (!validation.diagnostics.length && finalDiagnostic !== diagnostic) setProviderDiagnostic(finalDiagnostic);
       setFeedbackFallbackUsed(diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed);
       setFeedbackDiagnostic(finalDiagnosticSummary);
       setFeedback(resultFeedback);
@@ -1950,7 +1953,15 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
   const resultWordCount = countWords(resultEssay);
   const isUnderTask2WordMinimum = resultWordCount > 0 && resultWordCount < 250;
   const isInsufficientSample = isInsufficientTask2Sample(resultEssay);
-  const hasSubstantialModelAnswer = modelAnswerText.length > 24 && !isPlaceholderModelAnswer(modelAnswerText) && !isInsufficientSample;
+  const hasSubstantialModelAnswer = Boolean(
+    feedback &&
+    feedback.targetAnswerStatus === 'meets_target' &&
+    !isHighBandStable &&
+    !targetNeedsRepair &&
+    modelAnswerText.length > 24 &&
+    !isPlaceholderModelAnswer(modelAnswerText) &&
+    !isInsufficientSample,
+  );
   const isPersonalizedModelAnswer = Boolean(feedback?.modelAnswerPersonalized);
   const hasCoachFeedback = frameworkChat.some((msg, index) => msg.role === 'ai' && index > 0);
   const frameworkMissingItems = frameworkReadiness === 'ready_to_write'
@@ -2070,7 +2081,6 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               </div>
               <form onSubmit={handleFrameworkSubmit} className="p-6 border-t border-paper-ink/10 space-y-3 shrink-0">
                 <textarea
-                  translate="no"
                   value={frameworkInput}
                   onChange={(e) => setFrameworkInput(e.target.value)}
                   onKeyDown={handleFrameworkInputKeyDown}
@@ -2083,7 +2093,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   placeholder="Planning notes (Chinese or English): thesis, two main arguments, and counter-view structure..."
                   rows={6}
                   autoFocus
-                  className="w-full min-h-[180px] xl:min-h-[160px] bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] notranslate"
+                  className="w-full min-h-[180px] xl:min-h-[160px] bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
                 />
                 <p className="text-xs font-sans text-paper-ink/45">
                   Enter = newline. Ctrl+Enter / Cmd+Enter = Send to Coach.
@@ -2133,7 +2143,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                 onChange={(e) => setFinalFrameworkSummary(e.target.value)}
                 placeholder="Final Framework Summary (Chinese or English)..."
                 rows={12}
-                className="w-full min-h-[420px] md:min-h-[520px] xl:min-h-[640px] xl:h-[68vh] xl:max-h-[calc(100vh-10rem)] xl:flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y overflow-auto placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] notranslate"
+                className="w-full min-h-[420px] md:min-h-[520px] xl:min-h-[640px] xl:h-[68vh] xl:max-h-[calc(100vh-10rem)] xl:flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y overflow-auto placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
               />
               <div className="flex flex-col gap-3 border-t border-paper-ink/10 pt-4 mt-4 shrink-0">
                 {frameworkSummaryGenerated ? (
@@ -2199,7 +2209,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   aria-readonly={isAnalyzing}
                   placeholder="Start writing your 250+ word essay here..."
                   autoFocus
-                  className={`w-full min-h-[720px] p-8 bg-transparent border border-transparent rounded-sm font-serif text-xl leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] notranslate ${isAnalyzing ? 'cursor-default bg-paper-ink/[0.025] text-paper-ink/70' : ''}`}
+                  className={`w-full min-h-[720px] p-8 bg-transparent border border-transparent rounded-sm font-serif text-xl leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] ${isAnalyzing ? 'cursor-default bg-paper-ink/[0.025] text-paper-ink/70' : ''}`}
                 />
               </PaperCard>
               <div className="flex flex-col gap-3 bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest sm:flex-row sm:items-center sm:justify-between">
@@ -2273,8 +2283,8 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(380px,0.88fr)] xl:items-start">
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
-                <PaperCard className="notranslate">
-                  <div className="annotated-essay-scroll text-[17px] leading-8 text-paper-ink max-h-[520px] overflow-auto notranslate" translate="no">
+                <PaperCard>
+                  <div className="annotated-essay-scroll text-[17px] leading-8 text-paper-ink max-h-[520px] overflow-auto">
                     {essayParagraphs.map((paragraph, paragraphIndex) => {
                       const paragraphSpans = annotatedCorrectionSpans.filter(span => span.paragraphIndex === paragraphIndex);
                       const nodes: React.ReactNode[] = [];
@@ -2390,7 +2400,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
 
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-accent-terracotta" /> Logic & Structure Review
+                  <AlertCircle className="w-4 h-4 text-accent-terracotta" /> 逻辑与结构复盘
                 </h3>
                 <div className="max-h-[520px] overflow-auto pr-1 space-y-2">
                   {logicGroups.length ? logicGroups.map(group => (
@@ -2447,7 +2457,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               </section>
             </div>
 
-            <PaperCard className="min-h-[220px] notranslate">
+            <PaperCard className="min-h-[220px]">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                 <h3 className="text-sm font-bold uppercase tracking-widest">
                   {getTargetModelLevel(feedback)}
@@ -2456,7 +2466,13 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   <span className="border border-paper-ink/10 bg-paper-ink/5 px-2 py-1 rounded-sm text-paper-ink/55">
                     Training estimate {formatConservativeBandEstimate(averageWritingScore(feedback))}
                   </span>
-                  <span className="border border-accent-terracotta/20 bg-accent-terracotta/5 px-2 py-1 rounded-sm text-accent-terracotta">
+                  <span className={`border px-2 py-1 rounded-sm ${
+                    feedback.targetAnswerStatus === 'meets_target'
+                      ? 'border-green-700/20 bg-green-700/5 text-green-800'
+                      : targetNeedsRepair
+                        ? 'border-red-800/15 bg-red-50/60 text-red-800'
+                        : 'border-paper-ink/10 bg-paper-ink/5 text-paper-ink/55'
+                  }`}>
                     {isHighBandStable
                       ? '高分稳定检查'
                       : targetNeedsRepair
@@ -2472,7 +2488,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               )}
               {hasSubstantialModelAnswer && isPersonalizedModelAnswer && !isHighBandStable && (
                 <p className="text-sm leading-7 text-paper-ink/60 mb-3">
-                  This answer preserves your position and demonstrates selected repairs from the workspace above.
+                  这版范文保留了你的主要立场，并整合了上方重点修改。
                 </p>
               )}
               {(feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh || feedback.scoreConsistencyNoteZh) && (
@@ -2483,7 +2499,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               <div className="min-h-[132px] rounded-sm border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                 {hasSubstantialModelAnswer ? (
                   <>
-                    <p className="text-[11px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+                    <p className="text-[11px] font-sans font-bold tracking-wide text-paper-ink/40 mb-2">
                       高亮说明
                     </p>
                     <div className="text-[17px] text-paper-ink/75 leading-8 whitespace-pre-wrap">
@@ -2492,9 +2508,13 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   </>
                 ) : (
                   <p className="text-base leading-8 text-paper-ink/65">
-                    {isInsufficientSample
-                      ? 'Model-answer text is hidden for this insufficient sample so the saved record does not look more reliable than it is.'
-                      : 'No substantial model answer was returned for this attempt.'}
+                    {isHighBandStable
+                      ? '当前作文已达到目标层级。这里不需要生成替换范文。'
+                      : targetNeedsRepair
+                        ? '这版目标范文还没有稳定达到目标层级，暂不作为成功目标展示。'
+                        : isInsufficientSample
+                          ? '样本不足，暂不展示目标范文，避免记录看起来比实际更可靠。'
+                          : '目标范文尚未完成独立校验，暂不标记为已达标。'}
                   </p>
                 )}
               </div>
@@ -2502,7 +2522,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
 
             {vocabularyUpgrade && (
               <section>
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Language Bank</h3>
+                <h3 className="text-sm font-bold tracking-wide mb-4">语言素材库</h3>
                 <PaperCard className="bg-paper-ink/[0.02]">
                   <div className="grid gap-5 md:grid-cols-2">
                     <div className="space-y-3">

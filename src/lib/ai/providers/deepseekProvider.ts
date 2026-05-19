@@ -79,7 +79,8 @@ ${partFocus}
 ${speakingPromptCalibration}
 If the transcript is extremely short, nonsensical, or too thin for the part, return conservative insufficient-sample feedback.
 Feedback must be target-uplift training feedback. The current score is a conservative single-question training estimate, excluding pronunciation, not an official complete IELTS Speaking band. If evidence sits between two bands, prefer the lower visible estimate.
-For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice direction aim at a natural Band 7.0+ training target, not merely a minimal correction. If the learner is 7.0-7.5, upgradedAnswer must become a meaningfully stronger Band 8+ examiner-friendly answer rather than another ordinary Band 7 answer, and targetAnswerSelfScores must show at least 8.0 in FC, LR, and GRA. If the learner is already 8.0+, switch to high-band stability instead of generating a fake higher answer. Do not label output as Band 9.
+For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice direction aim at a natural Band 7.0+ training target, not merely a minimal correction. If the learner is 7.0-7.5, upgradedAnswer must become a meaningfully stronger Band 8+ examiner-friendly answer rather than another ordinary Band 7 answer, and targetAnswerSelfScores must show at least 8.0 in FC, LR, and GRA. If the learner is already 8.0+, switch to high-band stability instead of generating a fake higher answer; upgradedAnswer may be an empty string in that state, and highBandStabilityZh/nextStepZh should carry the guidance. Do not label output as Band 9.
+If the transcript clearly answers a different prompt, add fatalErrors tag "prompt_mismatch" with explanationZh "这段回答似乎没有回答当前题目，请确认是否选错题目。", and do not treat the problem only as grammar or vocabulary.
 Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
 In preservedStyle, include concrete expansionZh, sampleNextStep, transferQuestions, partUseZh, and riskNoteZh grounded in the learner transcript. If detail is missing, ask for the kind of real detail to add instead of inventing one.
 For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
@@ -110,7 +111,11 @@ ${JSON.stringify(params, null, 2)}`);
 You are an independent IELTS Speaking target-answer validator. Scoring-only operation.
 Do not generate a new target answer or teaching report. Score candidateTargetAnswer only.
 Use strict IELTS Speaking visible criteria: fluency/coherence, lexical resource, grammar range/accuracy. Pronunciation is null.
+Mirror normal speaking_analysis criteria; validation may be slightly stricter than generation, but it must never be looser. Do not pass a target that normal analysis would clearly score as 7.0 or 7.5.
 Do not apply a blanket single-question penalty to a complete target answer. Do not inflate scores or treat 7.5 as 8.0.
+For Part 2, Band 8+ requires setting/time/place, specific scene, concrete action, challenge/change, feeling shift, why it matters, and natural spoken sequencing. Do not pass a target as 8+ merely for length, formality, or vocabulary.
+For Part 3, Band 8+ requires direct position, nuance/condition/contrast, concrete example or observation, and cause/effect or consequence. It must not sound like Writing Task 2 read aloud.
+If uncertain, return borderline or failed.
 Target floor is ${params.targetFloor}; status is meets_target only if all required scores are >= targetFloor.
 ${partRules}
 
@@ -138,6 +143,7 @@ Chinese is for diagnosis, strategy, why-it-matters, and revision tasks. English 
 Set "task" to the exact input task value.
 Separate big-picture task response / paragraph logic problems from sentence-level corrections.
 Return essayLevelWarnings separately for global reliability/scoring-precondition warnings only: under-length response, very low-signal response, prompt mismatch/off-task answer, not an essay/only notes, unreliable training estimate, copied prompt/no original answer, or too fragmented to score normally. Do not put introduction advice, paragraph development advice, vocabulary advice, or sentence corrections in essayLevelWarnings.
+If the essay clearly answers a different prompt, add essayLevelWarnings title "Prompt mismatch warning" and messageZh "这段回答似乎没有回答当前题目，请确认是否选错题目。". Make Task Response reflect the mismatch; do not only treat it as language weakness.
 Use sentenceFeedback for direct local sentence corrections only. Give every sentence correction a stable id like C1, C2, C3.
 For sentenceFeedback severity, use optional values major, medium, minor, or polish. Omit it when unsure.
 For frameworkFeedback severity, use fatal, naturalness, or preserved.
@@ -149,7 +155,7 @@ For frameworkFeedback, keep three Chinese roles distinct: suggestionZh = why thi
 Include relatedCorrectionIds when a sentence correction supports the same logic issue; otherwise leave it empty and give paragraph-level guidance.
 Avoid duplicating full sentence correction text inside frameworkFeedback.
 Return vocabularyUpgrade as a two-part Language Bank. Infer the topic domain from the question and essay. topicVocabulary contains 5-8 topic-specific words/collocations/phrases with Chinese meaningZh and usageZh, covering both sides for advantages/disadvantages/outweigh/discuss-both/to-what-extent tasks where relevant. expressionUpgrades contains both category="from_essay" phrase upgrades and category="argument_frame" reusable Task 2 frames. Do not put writing-strategy advice in topicVocabulary.
-Current estimate must remain honest and conservative. If the current essay is below Band 7.0, use a stable Band 7.0-7.5 target model. If it is 7.0-7.5, modelAnswer must become a genuinely Band 8+ answer, and targetAnswerSelfScores must show at least 8.0 across TR, CC, LR, and GRA. If it is already 8.0+, switch to high-band stability instead of generating a fake higher replacement essay. Do not use Target Band 7.5, Target Band 7.5-8.0, or Band 9.
+Current estimate must remain honest and conservative. If the current essay is below Band 7.0, use a stable Band 7.0-7.5 target model. If it is 7.0-7.5, modelAnswer must become a genuinely Band 8+ answer, and targetAnswerSelfScores must show at least 8.0 across TR, CC, LR, and GRA. If it is already 8.0+, switch to high-band stability instead of generating a fake higher replacement essay; modelAnswer may be an empty string in that state, and highBandStabilityZh/nextStepZh should carry the guidance. Do not use Target Band 7.5, Target Band 7.5-8.0, or Band 9.
 Score-feedback consistency is mandatory. If any score dimension is below 7.0, the feedback must name the real blocker for that dimension. Task Response blockers include missing task parts, weak position, shallow development, unsupported solution, or wrong focus. Coherence blockers include unclear paragraph role, weak progression, or over-stacked ideas. Lexical blockers include unnatural collocation, over-formality, repetition, or imprecise topic vocabulary. Grammar blockers include sentence control, punctuation, clause logic, accuracy, or range. Never call a dimension excellent while assigning 6.5 unless you clearly explain why it is close but not yet Band 7.0.
 Logic & Structure Review must be a revision roadmap: what the issue is, why it affects IELTS performance, and what to add, remove, or rewrite. If the learner's original argument direction would cap the band, say it is not recommended, explain why it limits Task Response or Coherence, and make the modelAnswer use a stronger direction.
 The modelAnswer field must be a complete personalized Task 2 target model answer, normally 280-350 words even when the learner's essay is under 250 words. Prefer concise completeness and avoid 400+ words. It must apply Task Response/task command fixes, concession or balance if relevant, paragraph-level logic advice, sentence correction lessons, Language Bank items, and the user's usable ideas where appropriate. It must not merely polish the original essay; if an original idea is weak or off-task, replace it with a more appropriate task-relevant idea and explain that in feedback.
@@ -178,7 +184,10 @@ ${JSON.stringify(params, null, 2)}`);
 You are an independent IELTS Writing Task 2 target-answer validator. Scoring-only operation.
 Do not generate a teaching report, new model answer, or rewrite. Score candidateTargetAnswer only.
 Use strict Task Response, Coherence & Cohesion, Lexical Resource, and Grammatical Range & Accuracy criteria.
+Mirror normal writing_analysis criteria; validation may be slightly stricter than generation, but it must never be looser. Do not pass a target that normal analysis would clearly score as 7.0 or 7.5.
 Do not inflate scores, do not lower Band 8+, and do not reward generic formal phrases as a real upgrade.
+Band 8+ model answers must improve task response, reasoning mechanism, paragraph function, example specificity, progression, and natural precision. Do not reward phrases like "pervasive issue," "delve into," "multifaceted approach," or "it is imperative that" as fake upgrades.
+If uncertain, return borderline or failed.
 Target floor is ${params.targetFloor}; status is meets_target only if all four scores are >= targetFloor.
 
 ${writingTargetValidationSchemaInstruction}

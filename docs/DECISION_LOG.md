@@ -1,5 +1,19 @@
 # Decision Log
 
+## [2026-05-19] Target Loop Edge Cases and Feedback Readability Follow-up
+- **Decision**: High-band stability is a target state, not a missing-target error. When the current Speaking answer or Task 2 essay is already 8.0+ and enters `high_band_stability`, replacement answer/model text is not required.
+- **Implemented**:
+  - Safety normalization now tolerates empty `upgradedAnswer` / `modelAnswer` only for high-band stability; below-8 target states still require real target output and validation.
+  - Gemini and DeepSeek target-validation prompts now explicitly mirror normal Speaking / Writing Task 2 analysis criteria and must be no looser than normal analysis.
+  - DebugPanel keeps a compact target pipeline history, including initial analysis, target layer/status, validation attempts, repair attempts, provider, fallback, and final status.
+  - UI/export now show only the final validated target as successful; failed, borderline, or unvalidated targets are shown as compact not-yet-successful states.
+  - Speaking and Writing Task 2 now add a clear prompt-mismatch warning when an answer appears to belong to a different question.
+  - Feedback readability cleanup stayed limited: high-band stability is shorter, empty high-band Must Fix / Optional Polish cards are removed, internal labels were softened, and quote artifacts around empty targets were removed.
+  - No-translate protection is narrowed away from the app root and answer/model text so browser plugins, selection, copy, and translation can still work on learner content.
+  - Web Speech auto-resume remains a regression requirement: browser auto-end should resume while recording, but intentional Stop, Retry, and fatal errors should not restart recognition.
+- **Explicitly unchanged**: no provider routing change, no push, no merge, no pronunciation scoring, no advanced ASR, no Task 1 recalibration, no Task 1 redesign, no server/auth/database/RAG.
+- **Future**: Task 1 target calibration still needs a dedicated pass with real Task 1 debug samples.
+
 ## [2026-05-19] Independent Target Validation Required
 - **Decision**: Target generation and target validation are separate operations. Same-response self-check is useful secondary evidence, but it is not enough to label a generated answer/model as Band 7+ or Band 8+.
 - **Implemented**:

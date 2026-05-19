@@ -24,6 +24,17 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Recent Events
 
+- **2026-05-19 target-loop edge-case repair slice**: Remaining target-answer loop edge cases and feedback readability issues were repaired.
+  - High-band stability no longer requires `upgradedAnswer` / `modelAnswer`; empty replacement text in this state is valid and should not trigger parse/schema fallback.
+  - Non-high-band target states remain strict: missing target output, failed validation, or borderline validation must not be shown as successful Band 8+.
+  - Speaking and Writing Task 2 validators now explicitly mirror normal analysis criteria and may be stricter, but must not be looser than normal analysis.
+  - DebugPanel now exposes a compact target pipeline trail: initial analysis, target layer/status, validation attempts, retry repair focus, final status, provider, and fallback.
+  - Prompt-mismatch detection adds a learner warning when an answer appears to belong to another question: “这段回答似乎没有回答当前题目，请确认是否选错题目。”
+  - Feedback readability cleanup was limited, not a redesign: high-band stability is concise, internal labels are softened, empty high-band cards are removed, and quote artifacts are avoided.
+  - No-translate protection is narrowed from app-root/page-root to stable chrome/debug labels so answer text, target text, examples, and expressions remain selectable and plugin-friendly.
+  - Web Speech auto-resume remains protected: pause/auto-end resumes while recording; Stop, Retry, permission/support errors, and duplicate `start()` calls must stay safe.
+  - Task 1 remains backward-compatible and still needs a later target-calibration pass with real Task 1 debug samples.
+
 - **2026-05-19 independent target validation slice**: Target generation and target validation are now separate for Speaking and Writing Task 2.
   - Same-response target self-check is secondary evidence only; Band 7+ / Band 8+ labels require a scoring-only independent validation pass inside IELTS Scholar.
   - For current 7.0-7.5 answers, a generated Band 8+ target must validate at 8.0+ or it is marked borderline/failed. The app must not relabel 7.5 as 8.0 or inflate current user scores.

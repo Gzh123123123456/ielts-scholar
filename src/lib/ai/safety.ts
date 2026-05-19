@@ -183,6 +183,69 @@ const buildWritingLengthWarning = (
   };
 };
 
+const PROMPT_STOP_WORDS = new Set([
+  'about', 'after', 'again', 'also', 'because', 'before', 'being', 'between', 'could', 'describe', 'does',
+  'doing', 'during', 'example', 'explain', 'first', 'from', 'have', 'their', 'there', 'these', 'thing',
+  'think', 'this', 'those', 'time', 'what', 'when', 'where', 'which', 'while', 'with', 'would', 'your',
+  'some', 'many', 'people', 'person', 'place', 'event', 'important', 'reason', 'question', 'answer',
+]);
+
+const tokenizeForPromptMatch = (text: string): string[] =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .map(word => word.replace(/(?:ing|ed|es|s)$/i, ''))
+    .filter(word => word.length >= 4 && !PROMPT_STOP_WORDS.has(word));
+
+const containsAny = (text: string, pattern: RegExp) => pattern.test(text.toLowerCase());
+
+const detectLikelyPromptMismatch = (question: string, answer: string, minWords: number): boolean => {
+  if (countWords(answer) < minWords) return false;
+  const questionLower = question.toLowerCase();
+  const answerLower = answer.toLowerCase();
+  const techQuestion = containsAny(questionLower, /\b(technology|internet|computer|computers|online|digital|device|devices|apps?|ai|robot|coding|software)\b/);
+  const techAnswer = containsAny(answerLower, /\b(technology|internet|computer|computers|online|digital|device|devices|apps?|ai|robot|coding|software|programming|vibe coding)\b/);
+  const unrelatedEventAnswer = containsAny(answerLower, /\b(tajikistan|interpreter|translation event|ceremony|conference|tour guide|foreign guest)\b/);
+  if (techQuestion && !techAnswer && unrelatedEventAnswer) return true;
+
+  const questionKeywords = Array.from(new Set(tokenizeForPromptMatch(question))).slice(0, 12);
+  if (questionKeywords.length < 3) return false;
+  const answerKeywords = new Set(tokenizeForPromptMatch(answer));
+  const overlap = questionKeywords.filter(keyword => answerKeywords.has(keyword)).length;
+  const overlapRatio = overlap / questionKeywords.length;
+  const strongWrongPromptMarkers = containsAny(answerLower, /\b(i want to talk about|the event happened|it happened in|i was asked to|as an interpreter)\b/);
+  return overlap === 0 && overlapRatio < 0.12 && strongWrongPromptMarkers;
+};
+
+const PROMPT_MISMATCH_ZH = '这段回答似乎没有回答当前题目，请确认是否选错题目。';
+
+const buildSpeakingPromptMismatchWarning = (
+  question: string,
+  transcript: string,
+  part: SpeakingPart,
+): FatalError | null => {
+  const minWords = part === 1 ? 35 : part === 2 ? 70 : 45;
+  if (!detectLikelyPromptMismatch(question, transcript, minWords)) return null;
+  return {
+    original: 'Answer may belong to another prompt',
+    correction: 'Check the selected question before judging language details.',
+    tag: 'prompt_mismatch',
+    explanationZh: PROMPT_MISMATCH_ZH,
+  };
+};
+
+const buildWritingPromptMismatchWarning = (
+  question: string,
+  essay: string,
+): WritingFeedback['essayLevelWarnings'][number] | null => {
+  if (!detectLikelyPromptMismatch(question, essay, 80)) return null;
+  return {
+    title: 'Prompt mismatch warning',
+    messageZh: PROMPT_MISMATCH_ZH,
+  };
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -521,15 +584,7 @@ const normalizeSpeakingFeedback = (
   const transcriptWords = countWords(request.transcript || '');
   const lengthMustFix = buildSpeakingLengthMustFix(transcriptWords, part);
   const limitTransformation = shouldLimitSpeakingTransformation(request.transcript || '', transcriptWords, part);
-
-  const rawUpgradedAnswer = limitTransformation
-    ? buildInsufficientSpeakingTransformation(part)
-    : asString(
-        source.upgradedAnswer,
-        'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
-        'upgradedAnswer',
-        validationErrors,
-      );
+  const promptMismatchWarning = buildSpeakingPromptMismatchWarning(request.question || '', request.transcript || '', part);
   const cappedHeadline = normalizeHalfBandScore(applySpeakingLengthCap(
     asNumber(
       source.bandEstimateExcludingPronunciation,
@@ -539,6 +594,7 @@ const normalizeSpeakingFeedback = (
     transcriptWords,
     part,
   ));
+  const promptAwareHeadline = promptMismatchWarning ? Math.min(cappedHeadline, 5.5) : cappedHeadline;
   const visibleScores = {
     fluencyCoherence: normalizeHalfBandScore(applySpeakingLengthCap(
       asNumber(scores.fluencyCoherence, 'scores.fluencyCoherence', validationErrors),
@@ -562,19 +618,19 @@ const normalizeSpeakingFeedback = (
   };
   const sourceFatalErrors = Array.isArray(source.fatalErrors) ? source.fatalErrors : [];
   const hasQualityCap = Boolean(lengthMustFix || limitTransformation || hasLowSignalSpeakingText(request.transcript || ''));
-  const hasProviderFatalIssue = sourceFatalErrors.length > 0;
+  const hasProviderFatalIssue = sourceFatalErrors.length > 0 || Boolean(promptMismatchWarning);
   const minimumVisibleScore = Math.min(
     visibleScores.fluencyCoherence,
     visibleScores.lexicalResource,
     visibleScores.grammaticalRangeAccuracy,
   );
   const shouldNormalizeSpeakingScore =
-    cappedHeadline > 0 &&
+    promptAwareHeadline > 0 &&
     minimumVisibleScore > 0 &&
-    cappedHeadline < minimumVisibleScore &&
+    promptAwareHeadline < minimumVisibleScore &&
     !hasQualityCap &&
     !hasProviderFatalIssue;
-  const normalizedHeadline = shouldNormalizeSpeakingScore ? minimumVisibleScore : cappedHeadline;
+  const normalizedHeadline = shouldNormalizeSpeakingScore ? minimumVisibleScore : promptAwareHeadline;
   if (shouldNormalizeSpeakingScore) {
     normalizedFields.push('speakingScoreConsistency');
   }
@@ -588,8 +644,18 @@ const normalizeSpeakingFeedback = (
   const speakingTargetLayer = getTargetLabel(normalizedHeadline, 'answer');
   const targetAnswerSelfScores = normalizeSpeakingTargetSelfScores(source.targetAnswerSelfScores);
   const providerTargetAnswerStatus = normalizeTargetAnswerStatus(source.targetAnswerStatus);
-  const hasTargetAnswer = Boolean(rawUpgradedAnswer.trim()) && !isProviderIncompleteSpeakingAnswer(rawUpgradedAnswer);
   const currentAnswerIsHighBand = normalizedHeadline >= 8 && !hasQualityCap && !hasProviderFatalIssue;
+  const rawUpgradedAnswer = currentAnswerIsHighBand
+    ? ''
+    : limitTransformation
+      ? buildInsufficientSpeakingTransformation(part)
+      : asString(
+          source.upgradedAnswer,
+          'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
+          'upgradedAnswer',
+          validationErrors,
+        );
+  const hasTargetAnswer = Boolean(rawUpgradedAnswer.trim()) && !isProviderIncompleteSpeakingAnswer(rawUpgradedAnswer);
   const targetAnswerStatus: TargetAnswerStatus = (() => {
     if (currentAnswerIsHighBand) return 'meets_target';
     if (!hasTargetAnswer || limitTransformation) return 'not_generated';
@@ -633,7 +699,7 @@ const normalizeSpeakingFeedback = (
     estimateRationaleZh: optionalSafeString(source.estimateRationaleZh),
     targetBandFloor: speakingTargetFloor,
     targetLayer: currentAnswerIsHighBand
-      ? 'High-band Stability Check'
+      ? '高分稳定检查'
       : optionalSafeString(source.targetLayer) || speakingTargetLayer,
     targetValidationZh: targetAnswerStatus === 'meets_target'
       ? optionalSafeString(source.targetValidationZh) || defaultTargetValidationZh
@@ -672,6 +738,7 @@ const normalizeSpeakingFeedback = (
       ),
     },
     fatalErrors: [
+      ...(promptMismatchWarning ? [promptMismatchWarning] : []),
       ...(lengthMustFix ? [lengthMustFix] : []),
       ...asArray(source.fatalErrors, 'fatalErrors', validationErrors).map((item, index) => {
         const record = isRecord(item) ? item : {};
@@ -1507,6 +1574,9 @@ const normalizeWritingFeedback = (
   const essayWords = countWords(request.essay || '');
   const task = asWritingTask(source.task, request.task, validationErrors);
   const lengthWarning = buildWritingLengthWarning(essayWords, task);
+  const promptMismatchWarning = task === 'task2'
+    ? buildWritingPromptMismatchWarning(request.question || '', request.essay || '')
+    : null;
   const sentenceFeedback = asArray(source.sentenceFeedback, 'sentenceFeedback', validationErrors).map((item, index) => {
     const record = isRecord(item) ? item : {};
     if (!isRecord(item)) validationErrors.push(`sentenceFeedback[${index}] missing or invalid object`);
@@ -1602,7 +1672,7 @@ const normalizeWritingFeedback = (
     .filter(item => !/under-length|insufficient sample|extremely insufficient/i.test(item.issue))
     .filter(item => isFrameworkLevelIssue(item.issue, item.suggestionZh, item.issueType));
 
-  const scoresNormalized = {
+  const baseScoresNormalized = {
     taskResponse: applyLengthCap(asNumber(scores.taskResponse, 'scores.taskResponse', validationErrors), essayWords, 250),
     coherenceCohesion: applyLengthCap(asNumber(scores.coherenceCohesion, 'scores.coherenceCohesion', validationErrors), essayWords, 250),
     lexicalResource: applyLengthCap(asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors), essayWords, 250),
@@ -1612,6 +1682,13 @@ const normalizeWritingFeedback = (
       250,
     ),
   };
+  const scoresNormalized = promptMismatchWarning
+    ? {
+        ...baseScoresNormalized,
+        taskResponse: Math.min(baseScoresNormalized.taskResponse, 5.0),
+        coherenceCohesion: Math.min(baseScoresNormalized.coherenceCohesion, 5.5),
+      }
+    : baseScoresNormalized;
   const vocabularyUpgrade = buildLocalVocabularyUpgrade(source, request, sentenceFeedback, validationErrors);
   const consistencyBlockers = buildWritingDimensionBlockers(
     scoresNormalized,
@@ -1639,7 +1716,7 @@ const normalizeWritingFeedback = (
     normalizedFields.push('targetLayerConsistency');
   }
   const targetLevel = expectedWritingTargetLayer === 'high_band_stability'
-    ? 'High-band Stability Check'
+    ? '高分稳定检查'
     : getWritingTargetLevel(estimate);
   const providerTargetLevel = optionalSafeString(source.modelAnswerTargetLevel);
   if (providerTargetLevel && expectedWritingTargetLayer !== 'high_band_stability' && providerTargetLevel !== targetLevel) {
@@ -1648,19 +1725,22 @@ const normalizeWritingFeedback = (
   const targetFloor = targetFloorForLayer(writingTargetAnswerLayer);
   const firstTopicExpression = vocabularyUpgrade.topicVocabulary[0]?.expression || 'topic-specific language';
   const firstExpressionUpgrade = vocabularyUpgrade.expressionUpgrades[0]?.better || 'a clearer argument frame';
-  const normalizedModelAnswer = asString(
-    source.modelAnswer,
-    `A stronger revision should keep your main position, use topic language such as "${firstTopicExpression}", and apply "${firstExpressionUpgrade}" where it helps the argument sound clearer.`,
-    'modelAnswer',
-    validationErrors,
-  );
   const targetAnswerSelfScores = normalizeWritingTargetSelfScores(source.targetAnswerSelfScores);
   const providerTargetAnswerStatus = normalizeTargetAnswerStatus(source.targetAnswerStatus);
-  const hasTargetAnswer = typeof source.modelAnswer === 'string' && Boolean(source.modelAnswer.trim());
   const hasFatalWritingCap = Boolean(lengthWarning) ||
+    Boolean(promptMismatchWarning) ||
     finalFrameworkFeedback.some(item => item.severity === 'fatal') ||
     finalSentenceFeedback.some(item => item.severity === 'major');
   const currentEssayIsHighBand = estimate >= 8 && !hasFatalWritingCap;
+  const normalizedModelAnswer = currentEssayIsHighBand
+    ? ''
+    : asString(
+        source.modelAnswer,
+        `A stronger revision should keep your main position, use topic language such as "${firstTopicExpression}", and apply "${firstExpressionUpgrade}" where it helps the argument sound clearer.`,
+        'modelAnswer',
+        validationErrors,
+      );
+  const hasTargetAnswer = Boolean(normalizedModelAnswer.trim());
   const targetAnswerStatus: TargetAnswerStatus = (() => {
     if (currentEssayIsHighBand) return 'meets_target';
     if (!hasTargetAnswer) return 'not_generated';
@@ -1697,6 +1777,7 @@ const normalizeWritingFeedback = (
     essay: asString(source.essay, request.essay || FALLBACK_TEXT, 'essay', validationErrors),
     scores: scoresNormalized,
     essayLevelWarnings: [
+      ...(promptMismatchWarning ? [promptMismatchWarning] : []),
       ...sourceWarnings,
       ...(lengthWarning ? [lengthWarning] : []),
     ],

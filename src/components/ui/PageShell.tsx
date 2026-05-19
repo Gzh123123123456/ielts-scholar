@@ -15,8 +15,7 @@ interface PageShellProps {
 export const PageShell: React.FC<PageShellProps> = ({ children, className, size = 'medium' }) => {
   return (
     <div
-      className={cn('page-shell notranslate', size === 'wide' ? 'page-shell--wide' : 'page-shell--medium', className)}
-      translate="no"
+      className={cn('page-shell', size === 'wide' ? 'page-shell--wide' : 'page-shell--medium', className)}
     >
       {children}
     </div>

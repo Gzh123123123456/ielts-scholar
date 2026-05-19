@@ -594,8 +594,9 @@ const reviewCardTransferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianM
 const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. 起步目标答案';
   if (isSpeakingInsufficient(feedback)) return '## 4. 请先重录一个完整答案';
-  if (isHighBandSpeakingStable(feedback)) return '## 4. Validated Band 8+ Answer｜高分稳定检查';
-  if (hasUnstableSpeakingTarget(feedback)) return '## 4. Target Answer Still Needs Work｜目标答案待加强';
+  if (isHighBandSpeakingStable(feedback)) return '## 4. 高分稳定检查';
+  if (hasUnstableSpeakingTarget(feedback)) return '## 4. 目标答案待加强';
+  if (feedback.targetAnswerStatus !== 'meets_target') return '## 4. 目标答案尚未完成校验';
   return `## 4. ${feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}｜${getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}`;
 };
 
@@ -612,6 +613,22 @@ const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown
   }
   if (isSpeakingInsufficient(feedback)) {
     return '当前录音/转写不足以生成可靠目标答案。请先重录一个可理解的完整答案。';
+  }
+  if (isHighBandSpeakingStable(feedback)) {
+    return cleanLines([
+      targetLabel,
+      feedback.highBandStabilityZh,
+      feedback.nextStepZh,
+      '本次没有必须修改的问题。',
+      '本次没有必要的可选微调。',
+    ]).join('\n\n');
+  }
+  if (hasUnstableSpeakingTarget(feedback) || feedback.targetAnswerStatus !== 'meets_target') {
+    return cleanLines([
+      targetLabel,
+      feedback.targetAnswerRepairFocusZh || feedback.targetAnswerValidationRationaleZh || feedback.targetValidationZh,
+      '未通过独立校验的目标答案不作为成功目标展示。',
+    ]).join('\n\n');
   }
   return cleanLines([
     targetLabel,
@@ -839,15 +856,21 @@ export const buildWritingTask2TrainingMarkdown = (
     ? `\n\n### 范文标注｜Key Labels\n${feedback.modelAnswerAnnotations.slice(0, 5).map(item => `- ${phraseChunk(item.quote, 8)}: ${item.labelZh}`).join('\n')}`
     : '';
   const targetLayerLabel = isHighBandWritingStable(feedback)
-    ? 'High-band Stability Check / Validated Band 8+ Essay'
+    ? '高分稳定检查'
     : hasUnstableWritingTarget(feedback)
-      ? 'Target model answer still needs another pass'
-      : feedback.targetLayer || feedback.modelAnswerTargetLevel || getTargetLabel(estimate, 'modelAnswer');
+      ? '目标范文待加强'
+      : feedback.targetAnswerStatus !== 'meets_target'
+        ? '目标范文尚未完成校验'
+        : feedback.targetLayer || feedback.modelAnswerTargetLevel || getTargetLabel(estimate, 'modelAnswer');
   const targetStatusNote = cleanLines([
     hasUnstableWritingTarget(feedback) && '这版目标答案还没有稳定达到目标层级，需要进一步强化逻辑或表达。',
     isHighBandWritingStable(feedback) && (feedback.nextStepZh || '目标层级已达到。下一步重点是限时稳定、复盘表达和迁移到新题。'),
     feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetAnswerRationaleZh,
   ]).join('\n');
+  const shouldExportModelAnswer = feedback.targetAnswerStatus === 'meets_target' &&
+    !isHighBandWritingStable(feedback) &&
+    !hasUnstableWritingTarget(feedback) &&
+    Boolean(feedback.modelAnswer.trim());
 
   return `# IELTS Writing Task 2 训练笔记 - ${topicKeywords(feedback.question, undefined, 4).replace(/-/g, ' ')} - ${formatExportDate(timestamp)}
 
@@ -895,7 +918,7 @@ ${fromEssay.length ? fromEssay.map(item => `- ${item.original ? `${item.original
 ${frames.length ? frames.map(item => `- ${item.better}${item.note ? `\n  - ${item.note}` : ''}`).join('\n') : '- While [drawback] is a valid concern, it does not outweigh [main benefit].'}
 
 ## 7. ${targetLayerLabel}｜${isHighBandWritingStable(feedback) ? '高分稳定检查' : getTargetLabelZh(estimate, 'modelAnswer')}
-${feedback.modelAnswer || 'No reliable target model answer for this attempt.'}${annotations}
+${shouldExportModelAnswer ? `${feedback.modelAnswer}${annotations}` : isHighBandWritingStable(feedback) ? '当前作文已达到目标层级。这里不需要生成替换范文。' : '目标范文未通过或尚未完成独立校验，暂不作为成功目标展示。'}
 
 ## 8. 下次写作前检查｜Next Attempt Checklist
 ${bulletList(task2Checklist(feedback), '先确认题目任务、中心立场、每段功能和一个具体例子，再开始写。', 5)}`;

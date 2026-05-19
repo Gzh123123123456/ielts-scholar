@@ -2,7 +2,20 @@
 
 _Last updated: 2026-05-19_
 
-## Latest Slice - Independent Target Validation Loop
+## Latest Slice - Target Loop Edge Cases and Feedback Readability
+
+- **Done 2026-05-19 follow-up 3**: Repaired remaining target-loop edge cases and cleaned feedback readability without redesigning the UI.
+  - High-band stability no longer requires `upgradedAnswer` / `modelAnswer`; empty replacement output is valid only in `high_band_stability`.
+  - Target validators for Speaking and Writing Task 2 are documented in prompts as no looser than normal analysis; uncertain or borderline targets must not pass as `meets_target`.
+  - DebugPanel now shows compact target pipeline diagnostics across initial analysis, validation attempts, repair retry, final status, provider, and fallback.
+  - The UI/export only present final validated targets as successful. Failed, borderline, or unvalidated targets use compact “not yet successful” messaging.
+  - Speaking and Writing Task 2 add a clear wrong-question / prompt-mismatch warning when the answer appears to belong to another prompt.
+  - Feedback readability cleanup is limited to labels, high-band stability noise, quote artifacts, and target-status clarity; no full redesign was done.
+  - No-translate protection is narrowed so browser/plugins can still select, copy, and translate answer text, target text, examples, and reusable expressions.
+  - Web Speech auto-resume remains a regression requirement.
+  - Task 1 target calibration remains future work and needs real Task 1 debug samples.
+
+## Previous Slice - Independent Target Validation Loop
 
 - **Done 2026-05-19 follow-up 2**: Separated target generation from target validation for Speaking and Writing Task 2.
   - Same-response self-check is no longer enough to claim Band 7+ / Band 8+ target success.
