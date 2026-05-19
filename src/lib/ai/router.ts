@@ -7,7 +7,9 @@ import {
   WritingAnalysisRequest,
   WritingFrameworkCoachRequest,
   WritingFrameworkRequest,
+  SpeakingTargetValidationRequest,
   WritingTask1AnalysisRequest,
+  WritingTargetValidationRequest,
 } from './providers/base';
 import {
   ProviderDiagnostic,
@@ -16,6 +18,8 @@ import {
   WritingFeedback,
   WritingFrameworkCoachFeedback,
   WritingFrameworkSummary,
+  SpeakingTargetValidationResult,
+  WritingTargetValidationResult,
   WritingTask1Feedback,
 } from './schemas';
 import {
@@ -32,6 +36,8 @@ import {
   safeAnalyzeWritingTask1,
   safeCoachWritingFramework,
   safeExtractWritingFramework,
+  safeValidateSpeakingTarget,
+  safeValidateWritingTarget,
 } from './safety';
 
 type ProviderConfig = 'mock' | 'gemini' | 'auto';
@@ -323,6 +329,14 @@ export const routedAnalyzeSpeaking = (
     safeAnalyzeSpeaking(provider, providerName, request));
 };
 
+export const routedValidateSpeakingTarget = (
+  request: SpeakingTargetValidationRequest,
+): Promise<RoutedResult<SpeakingTargetValidationResult>> => {
+  const route = chooseRoute('speaking_target_validation', request, { reserveGemini: true });
+  return runWithGeminiRetry('speaking_target_validation', request, route, (provider, providerName) =>
+    safeValidateSpeakingTarget(provider, providerName, request));
+};
+
 export const routedAnalyzeWriting = (
   request: WritingAnalysisRequest,
   insufficientSample = false,
@@ -330,6 +344,14 @@ export const routedAnalyzeWriting = (
   const route = chooseRoute('writing_analysis', request, { reserveGemini: false, insufficientSample });
   return runWithGeminiRetry('writing_analysis', request, route, (provider, providerName) =>
     safeAnalyzeWriting(provider, providerName, request));
+};
+
+export const routedValidateWritingTarget = (
+  request: WritingTargetValidationRequest,
+): Promise<RoutedResult<WritingTargetValidationResult>> => {
+  const route = chooseRoute('writing_target_validation', request, { reserveGemini: false });
+  return runWithGeminiRetry('writing_target_validation', request, route, (provider, providerName) =>
+    safeValidateWritingTarget(provider, providerName, request));
 };
 
 export const routedAnalyzeWritingTask1 = (

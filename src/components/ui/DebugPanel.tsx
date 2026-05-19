@@ -35,7 +35,8 @@ export const DebugPanel: React.FC = () => {
     return (
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 left-4 p-2 bg-paper-ink/5 hover:bg-paper-ink/10 rounded-full transition-colors z-50 text-paper-ink/20"
+        className="fixed bottom-4 left-4 p-2 bg-paper-ink/5 hover:bg-paper-ink/10 rounded-full transition-colors z-50 text-paper-ink/20 notranslate"
+        translate="no"
         title="Open Debug Panel"
       >
         <Bug className="w-3 h-3" />
@@ -44,7 +45,7 @@ export const DebugPanel: React.FC = () => {
   }
 
   return (
-    <div className="fixed inset-y-0 left-0 w-80 bg-paper-50 border-r border-paper-ink/20 shadow-2xl z-50 flex flex-col font-sans text-[10px]">
+    <div className="fixed inset-y-0 left-0 w-80 bg-paper-50 border-r border-paper-ink/20 shadow-2xl z-50 flex flex-col font-sans text-[10px] notranslate" translate="no">
       <div className="p-3 border-b border-paper-ink/10 flex justify-between items-center bg-paper-200">
         <h3 className="font-bold uppercase tracking-widest text-accent-terracotta">Internal Debug</h3>
         <button onClick={() => setIsOpen(false)} className="hover:text-accent-terracotta">

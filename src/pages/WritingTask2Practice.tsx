@@ -7,6 +7,7 @@ import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
 import { routedAnalyzeWriting, routedCoachWritingFramework, routedExtractWritingFramework } from '@/src/lib/ai';
+import { validateWritingTargetLoop } from '@/src/lib/ai/targetValidation';
 import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import {
@@ -1735,13 +1736,25 @@ export default function WritingTask2Practice() {
       }
 
       const resultEssay = result.essay?.trim() ? result.essay : submittedEssay;
-      const resultFeedback: WritingFeedback = {
+      const normalizedInitialFeedback: WritingFeedback = {
         ...result,
         question: result.question?.trim() ? result.question : submittedQuestion.question,
         essay: resultEssay,
       };
-      setFeedbackFallbackUsed(diagnostic.fallbackUsed);
-      setFeedbackDiagnostic(diagnosticSummary);
+      const validation = isInsufficientTask2Sample(resultEssay)
+        ? { feedback: normalizedInitialFeedback, diagnostic: undefined }
+        : await validateWritingTargetLoop(
+          normalizedInitialFeedback,
+          false,
+          submittedFrameworkNotes,
+          submittedFinalFrameworkSummary,
+        );
+      const resultFeedback = validation.feedback;
+      const finalDiagnostic = validation.diagnostic || diagnostic;
+      const finalDiagnosticSummary = summarizeDiagnostic(finalDiagnostic);
+      setProviderDiagnostic(finalDiagnostic);
+      setFeedbackFallbackUsed(diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed);
+      setFeedbackDiagnostic(finalDiagnosticSummary);
       setFeedback(resultFeedback);
       setAnalyzedEssaySnapshot(resultEssay);
       setPhase('results');
@@ -1749,26 +1762,26 @@ export default function WritingTask2Practice() {
         question: submittedQuestion,
         essay: resultEssay,
         feedback: resultFeedback,
-        feedbackFallbackUsed: diagnostic.fallbackUsed,
+        feedbackFallbackUsed: diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed,
         phase: 'results',
-        providerDiagnostic: diagnosticSummary,
+        providerDiagnostic: finalDiagnosticSummary,
       });
       const analyzedBase = buildWritingRecord('analyzed', {
         question: submittedQuestion,
         essay: resultEssay,
         feedback: resultFeedback,
-        feedbackFallbackUsed: diagnostic.fallbackUsed,
-        phase: 'results',
-        providerDiagnostic: diagnosticSummary,
-      });
+          feedbackFallbackUsed: diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed,
+          phase: 'results',
+          providerDiagnostic: finalDiagnosticSummary,
+        });
       if (analyzedBase) {
         upsertPracticeRecord({
           ...analyzedBase,
           essay: resultEssay,
           feedback: resultFeedback,
-          feedbackFallbackUsed: diagnostic.fallbackUsed,
+          feedbackFallbackUsed: diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed,
           obsidianMarkdown: resultFeedback.obsidianMarkdown,
-          providerDiagnostic: diagnosticSummary,
+          providerDiagnostic: finalDiagnosticSummary,
         });
       }
 
@@ -1781,10 +1794,10 @@ export default function WritingTask2Practice() {
         essay: resultEssay,
         framework: submittedFinalFrameworkSummary,
         feedback: resultFeedback,
-        providerDiagnostic: diagnosticSummary,
+        providerDiagnostic: finalDiagnosticSummary,
       });
       addDebugLog("Writing analysis complete");
-      if (diagnostic.fallbackUsed) {
+      if (diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed) {
         addDebugLog("Provider fallback used for writing feedback.");
       }
     } catch (error) {
@@ -2057,6 +2070,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               </div>
               <form onSubmit={handleFrameworkSubmit} className="p-6 border-t border-paper-ink/10 space-y-3 shrink-0">
                 <textarea
+                  translate="no"
                   value={frameworkInput}
                   onChange={(e) => setFrameworkInput(e.target.value)}
                   onKeyDown={handleFrameworkInputKeyDown}
@@ -2069,7 +2083,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                   placeholder="Planning notes (Chinese or English): thesis, two main arguments, and counter-view structure..."
                   rows={6}
                   autoFocus
-                  className="w-full min-h-[180px] xl:min-h-[160px] bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                  className="w-full min-h-[180px] xl:min-h-[160px] bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] notranslate"
                 />
                 <p className="text-xs font-sans text-paper-ink/45">
                   Enter = newline. Ctrl+Enter / Cmd+Enter = Send to Coach.
@@ -2114,11 +2128,12 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                 </p>
               )}
               <textarea
+                translate="no"
                 value={finalFrameworkSummary}
                 onChange={(e) => setFinalFrameworkSummary(e.target.value)}
                 placeholder="Final Framework Summary (Chinese or English)..."
                 rows={12}
-                className="w-full min-h-[420px] md:min-h-[520px] xl:min-h-[640px] xl:h-[68vh] xl:max-h-[calc(100vh-10rem)] xl:flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y overflow-auto placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                className="w-full min-h-[420px] md:min-h-[520px] xl:min-h-[640px] xl:h-[68vh] xl:max-h-[calc(100vh-10rem)] xl:flex-1 bg-transparent border border-paper-ink/10 rounded-sm p-4 font-serif text-[17px] leading-relaxed resize-y overflow-auto placeholder:opacity-40 focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] notranslate"
               />
               <div className="flex flex-col gap-3 border-t border-paper-ink/10 pt-4 mt-4 shrink-0">
                 {frameworkSummaryGenerated ? (
@@ -2177,13 +2192,14 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
             <div className="space-y-6">
               <PaperCard className="p-0">
                 <textarea
+                  translate="no"
                   value={essay}
                   onChange={(e) => setEssay(e.target.value)}
                   readOnly={isAnalyzing}
                   aria-readonly={isAnalyzing}
                   placeholder="Start writing your 250+ word essay here..."
                   autoFocus
-                  className={`w-full min-h-[720px] p-8 bg-transparent border border-transparent rounded-sm font-serif text-xl leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] ${isAnalyzing ? 'cursor-default bg-paper-ink/[0.025] text-paper-ink/70' : ''}`}
+                  className={`w-full min-h-[720px] p-8 bg-transparent border border-transparent rounded-sm font-serif text-xl leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] notranslate ${isAnalyzing ? 'cursor-default bg-paper-ink/[0.025] text-paper-ink/70' : ''}`}
                 />
               </PaperCard>
               <div className="flex flex-col gap-3 bg-paper-ink/5 p-4 rounded text-xs font-sans text-paper-ink/40 uppercase tracking-widest sm:flex-row sm:items-center sm:justify-between">
@@ -2257,8 +2273,8 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(380px,0.88fr)] xl:items-start">
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-4">My Essay</h3>
-                <PaperCard>
-                  <div className="annotated-essay-scroll text-[17px] leading-8 text-paper-ink max-h-[520px] overflow-auto">
+                <PaperCard className="notranslate">
+                  <div className="annotated-essay-scroll text-[17px] leading-8 text-paper-ink max-h-[520px] overflow-auto notranslate" translate="no">
                     {essayParagraphs.map((paragraph, paragraphIndex) => {
                       const paragraphSpans = annotatedCorrectionSpans.filter(span => span.paragraphIndex === paragraphIndex);
                       const nodes: React.ReactNode[] = [];
@@ -2431,7 +2447,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
               </section>
             </div>
 
-            <PaperCard className="min-h-[220px]">
+            <PaperCard className="min-h-[220px] notranslate">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                 <h3 className="text-sm font-bold uppercase tracking-widest">
                   {getTargetModelLevel(feedback)}

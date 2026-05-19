@@ -7,6 +7,7 @@ import { SerifButton } from '@/src/components/ui/SerifButton';
 import { QuestionBankItem, QuestionBankModal } from '@/src/components/practice/QuestionBankModal';
 import { useApp } from '@/src/context/AppContext';
 import { getAIProviderName, routedAnalyzeSpeaking } from '@/src/lib/ai';
+import { validateSpeakingTargetLoop } from '@/src/lib/ai/targetValidation';
 import { formatBandEstimate, formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
 import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/questions/bank';
 import { SpeakingFeedback } from '@/src/lib/ai/schemas';
@@ -194,6 +195,8 @@ export default function SpeakingPractice() {
   const speechRetriesRef = useRef(0);
   const hasSpeechResultRef = useRef(false);
   const fatalSpeechErrorRef = useRef(false);
+  const intentionalSpeechStopRef = useRef(false);
+  const recognitionRunningRef = useRef(false);
   const isRecordingRef = useRef(false);
   const retryTimeoutRef = useRef<any>(null);
   const activeSessionRef = useRef<ActiveSpeakingPracticeSession | null>(null);
@@ -486,6 +489,7 @@ export default function SpeakingPractice() {
       retryTimeoutRef.current = null;
     }
     if (recognitionRef.current) {
+      intentionalSpeechStopRef.current = true;
       try { recognitionRef.current.stop(); } catch (e) { /* already stopped */ }
       recognitionRef.current = null;
     }
@@ -527,13 +531,14 @@ export default function SpeakingPractice() {
         return;
       }
 
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
-      recognitionRef.current.maxAlternatives = 3;
+      const attachRecognitionHandlers = (recognition: any) => {
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+        recognition.maxAlternatives = 3;
 
-      recognitionRef.current.onstart = () => {
+        recognition.onstart = () => {
+        recognitionRunningRef.current = true;
         setStatusMessage('Listening...');
         // Set a timeout to warn if no speech is detected after 5 seconds
         silenceTimeoutRef.current = setTimeout(() => {
@@ -541,7 +546,7 @@ export default function SpeakingPractice() {
         }, 5000);
       };
 
-      recognitionRef.current.onresult = (event: any) => {
+        recognition.onresult = (event: any) => {
         if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
         setStatusMessage('Listening...');
         
@@ -559,7 +564,7 @@ export default function SpeakingPractice() {
         }
       };
 
-      recognitionRef.current.onerror = (event: any) => {
+        recognition.onerror = (event: any) => {
         addDebugLog(`Speech error: ${event.error}`);
         addDebugLog(`lastSpeechError = "${event.error}"`);
 
@@ -575,35 +580,44 @@ export default function SpeakingPractice() {
         }
       };
 
-      recognitionRef.current.onend = () => {
+        recognition.onend = () => {
+        recognitionRunningRef.current = false;
         if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
 
-        const shouldRetry = !hasSpeechResultRef.current
-          && !fatalSpeechErrorRef.current
-          && speechRetriesRef.current < 2
-          && isRecordingRef.current;
+        if (intentionalSpeechStopRef.current || !isRecordingRef.current) {
+          addDebugLog('Speech recognition stopped intentionally.');
+          return;
+        }
 
-        if (shouldRetry) {
+        if (fatalSpeechErrorRef.current) {
+          addDebugLog('Auto-resume skipped because fatal error occurred.');
+          return;
+        }
+
+        if (retryTimeoutRef.current) return;
+
+        if (isRecordingRef.current) {
           speechRetriesRef.current += 1;
-          addDebugLog(`Auto-retry speech recognition (${speechRetriesRef.current}/2)`);
+          addDebugLog('Speech recognition auto-ended during active recording; restarting.');
 
           retryTimeoutRef.current = setTimeout(() => {
             retryTimeoutRef.current = null;
-            if (fatalSpeechErrorRef.current) return; // User clicked Done during delay
-            const SpeechRecognitionRetry = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-            const retry = new SpeechRecognitionRetry();
-            retry.continuous = true;
-            retry.interimResults = true;
-            retry.lang = 'en-US';
-            retry.maxAlternatives = 3;
-            retry.onstart = recognitionRef.current.onstart;
-            retry.onresult = recognitionRef.current.onresult;
-            retry.onerror = recognitionRef.current.onerror;
-            retry.onend = recognitionRef.current.onend;
+            if (intentionalSpeechStopRef.current || !isRecordingRef.current) return;
+            if (fatalSpeechErrorRef.current) {
+              addDebugLog('Auto-resume skipped because fatal error occurred.');
+              return;
+            }
+            if (recognitionRunningRef.current) return;
+            const retry = new SpeechRecognition();
+            attachRecognitionHandlers(retry);
             recognitionRef.current = retry;
             try {
               retry.start();
             } catch (e: any) {
+              if (e?.name === 'InvalidStateError') {
+                addDebugLog('Speech recognition restart skipped because it is already running.');
+                return;
+              }
               addDebugLog(`Retry start error: ${e.message}`);
             }
           }, 500);
@@ -611,11 +625,24 @@ export default function SpeakingPractice() {
           addDebugLog(`Speech recognition ended (retries: ${speechRetriesRef.current}, fatal: ${fatalSpeechErrorRef.current})`);
         }
       };
+      };
 
       speechRetriesRef.current = 0;
       hasSpeechResultRef.current = false;
       fatalSpeechErrorRef.current = false;
-      recognitionRef.current.start();
+      intentionalSpeechStopRef.current = false;
+      isRecordingRef.current = true;
+      recognitionRef.current = new SpeechRecognition();
+      attachRecognitionHandlers(recognitionRef.current);
+      try {
+        recognitionRef.current.start();
+      } catch (e: any) {
+        if (e?.name === 'InvalidStateError') {
+          addDebugLog('Speech recognition start skipped because it is already running.');
+        } else {
+          throw e;
+        }
+      }
       setIsRecording(true);
       setStep('recording');
       setTimer(0);
@@ -623,6 +650,9 @@ export default function SpeakingPractice() {
       addDebugLog("Recording started");
     } catch (err) {
       addDebugLog(`Mic Access Error: ${err}`);
+      fatalSpeechErrorRef.current = true;
+      intentionalSpeechStopRef.current = true;
+      recognitionRunningRef.current = false;
       setStatusMessage('Mic denied');
       setStep('editing');
     }
@@ -636,11 +666,14 @@ export default function SpeakingPractice() {
     }
     // Stop any running recognition
     if (recognitionRef.current) {
+      intentionalSpeechStopRef.current = true;
       try { recognitionRef.current.stop(); } catch (e) { /* may already be stopped */ }
       recognitionRef.current = null;
     }
     // Clear refs
     fatalSpeechErrorRef.current = true;
+    intentionalSpeechStopRef.current = true;
+    recognitionRunningRef.current = false;
     isRecordingRef.current = false;
     speechRetriesRef.current = 0;
     hasSpeechResultRef.current = false;
@@ -661,7 +694,7 @@ export default function SpeakingPractice() {
   };
 
   const stopRecording = () => {
-    fatalSpeechErrorRef.current = true; // Prevent any pending retry from restarting
+    intentionalSpeechStopRef.current = true;
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
       retryTimeoutRef.current = null;
@@ -768,17 +801,26 @@ export default function SpeakingPractice() {
         return;
       }
 
-      setFeedbackFallbackUsed(diagnostic.fallbackUsed);
-      setFeedback(result);
+      let resultFeedback = result;
+      let finalDiagnostic = diagnostic;
+      if (!isInsufficientSpeakingSample(cleanedTranscript, part, result)) {
+        const validation = await validateSpeakingTargetLoop(result, false);
+        resultFeedback = validation.feedback;
+        finalDiagnostic = validation.diagnostic || diagnostic;
+        setProviderDiagnostic(finalDiagnostic);
+      }
+
+      setFeedbackFallbackUsed(diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed);
+      setFeedback(resultFeedback);
       setStep('results');
-      const analyzedBase = buildCurrentSpeakingRecord('analyzed', result, cleanedTranscript);
+      const analyzedBase = buildCurrentSpeakingRecord('analyzed', resultFeedback, cleanedTranscript);
       if (analyzedBase) {
         upsertPracticeRecord({
           ...analyzedBase,
-          feedback: result,
-          obsidianMarkdown: result.obsidianMarkdown,
-          analyzedAt: diagnostic.timestamp,
-          providerDiagnostic: summarizeDiagnostic(diagnostic),
+          feedback: resultFeedback,
+          obsidianMarkdown: resultFeedback.obsidianMarkdown,
+          analyzedAt: finalDiagnostic.timestamp,
+          providerDiagnostic: summarizeDiagnostic(finalDiagnostic),
         });
       }
       clearActiveSpeakingAttempt(part);
@@ -792,12 +834,12 @@ export default function SpeakingPractice() {
         transcript: cleanedTranscript,
         rawTranscript: rawTranscript || undefined,
         transcriptOrigin: transcriptOriginRef.current,
-        feedback: result,
-        providerDiagnostic: summarizeDiagnostic(diagnostic),
+        feedback: resultFeedback,
+        providerDiagnostic: summarizeDiagnostic(finalDiagnostic),
       });
       
       addDebugLog("Analysis complete and results displayed.");
-      if (diagnostic.fallbackUsed) {
+      if (diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed) {
         addDebugLog("Provider fallback used for speaking feedback.");
       }
     } catch (error) {
@@ -1001,6 +1043,7 @@ export default function SpeakingPractice() {
                 </div>
               </div>
               <textarea
+                translate="no"
                 value={transcript}
                 onChange={(e) => {
                   setTranscript(e.target.value);
@@ -1009,7 +1052,7 @@ export default function SpeakingPractice() {
                 }}
                 disabled={step === 'recording' || step === 'results'}
                 placeholder={statusMessage === 'Mic denied' || statusMessage === 'Transcription unavailable' ? "Type your answer manually here..." : "Recognition will appear here..."}
-                className="w-full min-h-[300px] xl:min-h-[420px] bg-transparent border border-transparent rounded-sm font-serif text-lg leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                className="w-full min-h-[300px] xl:min-h-[420px] bg-transparent border border-transparent rounded-sm font-serif text-lg leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)] notranslate"
               />
               {step === 'editing' && (
                 <p className="mt-2 text-[11px] leading-5 text-paper-ink/45 font-sans">
@@ -1200,7 +1243,7 @@ export default function SpeakingPractice() {
                 </section>
               )}
 
-              <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta">
+              <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-accent-terracotta notranslate">
                 <div>
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
                     {shouldShowDevelopmentPlan

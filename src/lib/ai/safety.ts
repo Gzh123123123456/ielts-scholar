@@ -1,10 +1,12 @@
 import {
   AIProvider,
   SpeakingAnalysisRequest,
+  SpeakingTargetValidationRequest,
   WritingAnalysisRequest,
   WritingFrameworkCoachRequest,
   WritingTask1AnalysisRequest,
   WritingFrameworkRequest,
+  WritingTargetValidationRequest,
 } from './providers/base';
 import {
   ProviderDiagnostic,
@@ -12,6 +14,7 @@ import {
   SpeakingFeedback,
   SpeakingPart,
   SpeakingTargetAnswerSelfScores,
+  SpeakingTargetValidationResult,
   TargetAnswerLayer,
   TargetAnswerStatus,
   WritingFeedback,
@@ -19,6 +22,7 @@ import {
   WritingFrameworkReadiness,
   WritingFrameworkSummary,
   WritingTargetAnswerSelfScores,
+  WritingTargetValidationResult,
   WritingTask1Feedback,
   WritingTask,
 } from './schemas';
@@ -34,6 +38,8 @@ type WritingRequest = WritingAnalysisRequest;
 type WritingTask1Request = WritingTask1AnalysisRequest;
 type FrameworkCoachRequest = WritingFrameworkCoachRequest;
 type FrameworkRequest = WritingFrameworkRequest;
+type SpeakingValidationRequest = SpeakingTargetValidationRequest;
+type WritingValidationRequest = WritingTargetValidationRequest;
 
 interface SafeAnalyzeResult<T> {
   feedback: T;
@@ -587,19 +593,20 @@ const normalizeSpeakingFeedback = (
   const targetAnswerStatus: TargetAnswerStatus = (() => {
     if (currentAnswerIsHighBand) return 'meets_target';
     if (!hasTargetAnswer || limitTransformation) return 'not_generated';
-    if (speakingTargetScoresMeetFloor(targetAnswerSelfScores, speakingTargetFloor)) return 'meets_target';
     if (speakingTargetScoresBelowFloor(targetAnswerSelfScores, speakingTargetFloor)) {
       return providerTargetAnswerStatus === 'failed' ? 'failed' : 'borderline';
     }
     if (providerTargetAnswerStatus === 'failed' || providerTargetAnswerStatus === 'borderline') {
       return providerTargetAnswerStatus;
     }
+    if (speakingTargetScoresMeetFloor(targetAnswerSelfScores, speakingTargetFloor)) return 'borderline';
     return 'borderline';
   })();
   if (
     providerTargetAnswerStatus !== targetAnswerStatus ||
     (speakingTargetAnswerLayer !== 'high_band_stability' && !targetAnswerSelfScores) ||
-    speakingTargetScoresBelowFloor(targetAnswerSelfScores, speakingTargetFloor)
+    speakingTargetScoresBelowFloor(targetAnswerSelfScores, speakingTargetFloor) ||
+    (speakingTargetAnswerLayer === 'band_8_plus' && targetAnswerStatus === 'borderline')
   ) {
     normalizedFields.push('targetAnswerIntegrity');
   }
@@ -636,6 +643,8 @@ const normalizeSpeakingFeedback = (
     targetAnswerLayer: speakingTargetAnswerLayer,
     targetAnswerStatus,
     targetAnswerSelfScores,
+    targetAnswerValidationScores: normalizeSpeakingTargetSelfScores(source.targetAnswerValidationScores),
+    targetAnswerValidationRationaleZh: optionalSafeString(source.targetAnswerValidationRationaleZh),
     targetAnswerRationaleZh: optionalSafeString(source.targetAnswerRationaleZh),
     targetAnswerRepairFocusZh: optionalSafeString(source.targetAnswerRepairFocusZh) ||
       (targetAnswerStatus === 'borderline' || targetAnswerStatus === 'failed'
@@ -1655,19 +1664,20 @@ const normalizeWritingFeedback = (
   const targetAnswerStatus: TargetAnswerStatus = (() => {
     if (currentEssayIsHighBand) return 'meets_target';
     if (!hasTargetAnswer) return 'not_generated';
-    if (writingTargetScoresMeetFloor(targetAnswerSelfScores, targetFloor)) return 'meets_target';
     if (writingTargetScoresBelowFloor(targetAnswerSelfScores, targetFloor)) {
       return providerTargetAnswerStatus === 'failed' ? 'failed' : 'borderline';
     }
     if (providerTargetAnswerStatus === 'failed' || providerTargetAnswerStatus === 'borderline') {
       return providerTargetAnswerStatus;
     }
+    if (writingTargetScoresMeetFloor(targetAnswerSelfScores, targetFloor)) return 'borderline';
     return 'borderline';
   })();
   if (
     providerTargetAnswerStatus !== targetAnswerStatus ||
     (writingTargetAnswerLayer !== 'high_band_stability' && !targetAnswerSelfScores) ||
-    writingTargetScoresBelowFloor(targetAnswerSelfScores, targetFloor)
+    writingTargetScoresBelowFloor(targetAnswerSelfScores, targetFloor) ||
+    (writingTargetAnswerLayer === 'band_8_plus' && targetAnswerStatus === 'borderline')
   ) {
     normalizedFields.push('targetAnswerIntegrity');
   }
@@ -1708,6 +1718,8 @@ const normalizeWritingFeedback = (
     targetAnswerLayer: writingTargetAnswerLayer,
     targetAnswerStatus,
     targetAnswerSelfScores,
+    targetAnswerValidationScores: normalizeWritingTargetSelfScores(source.targetAnswerValidationScores),
+    targetAnswerValidationRationaleZh: optionalSafeString(source.targetAnswerValidationRationaleZh),
     targetAnswerRationaleZh: optionalSafeString(source.targetAnswerRationaleZh),
     targetAnswerRepairFocusZh: optionalSafeString(source.targetAnswerRepairFocusZh) ||
       (targetAnswerStatus === 'borderline' || targetAnswerStatus === 'failed'
@@ -2091,6 +2103,98 @@ const normalizeFrameworkCoach = (
   };
 };
 
+const validationStatusFromScores = (scores: (number | undefined)[], floor: number): TargetAnswerStatus => {
+  const numericScores = scores.filter((score): score is number => typeof score === 'number' && Number.isFinite(score));
+  if (numericScores.length !== scores.length) return 'failed';
+  if (numericScores.every(score => score >= floor)) return 'meets_target';
+  return numericScores.some(score => score < floor - 0.5) ? 'failed' : 'borderline';
+};
+
+const normalizeSpeakingTargetValidation = (
+  value: unknown,
+  request: SpeakingValidationRequest,
+  validationErrors: string[],
+  normalizedFields: string[],
+): SpeakingTargetValidationResult => {
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+  const scoresSource = isRecord(source.scores) ? source.scores : {};
+  if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
+  const targetFloor = normalizeHalfBandScore(asNumber(source.targetFloor, 'targetFloor', validationErrors, request.targetFloor));
+  const scores: SpeakingTargetAnswerSelfScores = {
+    fluencyCoherence: asOptionalHalfBand(scoresSource.fluencyCoherence),
+    lexicalResource: asOptionalHalfBand(scoresSource.lexicalResource),
+    grammaticalRangeAccuracy: asOptionalHalfBand(scoresSource.grammaticalRangeAccuracy),
+    pronunciation: null,
+  };
+  const status = validationStatusFromScores([
+    scores.fluencyCoherence,
+    scores.lexicalResource,
+    scores.grammaticalRangeAccuracy,
+  ], targetFloor);
+  const providerStatus = normalizeTargetAnswerStatus(source.status);
+  if (providerStatus !== status || status !== 'meets_target') normalizedFields.push('targetValidationFailed');
+
+  return {
+    module: 'speaking',
+    operation: 'speaking_target_validation',
+    targetFloor,
+    status,
+    scores,
+    rationaleZh: optionalSafeString(source.rationaleZh) ||
+      (status === 'meets_target'
+        ? 'Independent validator judged this target answer at or above the target floor.'
+        : 'Independent validator did not judge this target answer as stable at the target floor.'),
+    repairFocusZh: optionalSafeString(source.repairFocusZh) ||
+      (status === 'meets_target'
+        ? ''
+        : '这版目标答案还没有稳定达到目标层级，需要继续强化。'),
+  };
+};
+
+const normalizeWritingTargetValidation = (
+  value: unknown,
+  request: WritingValidationRequest,
+  validationErrors: string[],
+  normalizedFields: string[],
+): WritingTargetValidationResult => {
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+  const scoresSource = isRecord(source.scores) ? source.scores : {};
+  if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
+  const targetFloor = normalizeHalfBandScore(asNumber(source.targetFloor, 'targetFloor', validationErrors, request.targetFloor));
+  const scores: WritingTargetAnswerSelfScores = {
+    taskResponse: asOptionalHalfBand(scoresSource.taskResponse),
+    coherenceCohesion: asOptionalHalfBand(scoresSource.coherenceCohesion),
+    lexicalResource: asOptionalHalfBand(scoresSource.lexicalResource),
+    grammaticalRangeAccuracy: asOptionalHalfBand(scoresSource.grammaticalRangeAccuracy),
+  };
+  const status = validationStatusFromScores([
+    scores.taskResponse,
+    scores.coherenceCohesion,
+    scores.lexicalResource,
+    scores.grammaticalRangeAccuracy,
+  ], targetFloor);
+  const providerStatus = normalizeTargetAnswerStatus(source.status);
+  if (providerStatus !== status || status !== 'meets_target') normalizedFields.push('targetValidationFailed');
+
+  return {
+    module: 'writing',
+    operation: 'writing_target_validation',
+    targetFloor,
+    status,
+    scores,
+    rationaleZh: optionalSafeString(source.rationaleZh) ||
+      (status === 'meets_target'
+        ? 'Independent validator judged this model answer at or above the target floor.'
+        : 'Independent validator did not judge this model answer as stable at the target floor.'),
+    repairFocusZh: optionalSafeString(source.repairFocusZh) ||
+      (status === 'meets_target'
+        ? ''
+        : '这版目标答案还没有稳定达到目标层级，需要继续强化。'),
+  };
+};
+
 export const safeAnalyzeSpeaking = async (
   provider: AIProvider,
   providerName: string,
@@ -2134,6 +2238,53 @@ export const safeAnalyzeSpeaking = async (
   };
 };
 
+export const safeValidateSpeakingTarget = async (
+  provider: AIProvider,
+  providerName: string,
+  requestPayload: SpeakingValidationRequest,
+): Promise<SafeAnalyzeResult<SpeakingTargetValidationResult>> => {
+  let rawResponse: unknown = null;
+  let parsedJson: unknown = null;
+  let parseError: string | undefined;
+  const validationErrors: string[] = [];
+  const normalizedFields: string[] = [];
+
+  try {
+    if (!provider.validateSpeakingTarget) {
+      throw new Error('Provider does not implement validateSpeakingTarget');
+    }
+
+    rawResponse = await provider.validateSpeakingTarget(requestPayload);
+    const parsed = parseRawResponse(rawResponse);
+    parsedJson = parsed.parsedJson;
+    parseError = parsed.parseError;
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const feedback = normalizeSpeakingTargetValidation(parsedJson, requestPayload, validationErrors, normalizedFields);
+  const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
+
+  return {
+    feedback,
+    diagnostic: buildDiagnostic({
+      module: 'speaking',
+      operation: 'speaking_target_validation',
+      providerName,
+      requestPayload,
+      rawResponse,
+      parsedJson,
+      parseError,
+      validationErrors,
+      fallbackUsed,
+      failureKind,
+      normalizedFields,
+      timestamp: new Date().toISOString(),
+    }),
+  };
+};
+
 export const safeAnalyzeWriting = async (
   provider: AIProvider,
   providerName: string,
@@ -2163,6 +2314,53 @@ export const safeAnalyzeWriting = async (
     diagnostic: buildDiagnostic({
       module: 'writing',
       operation: 'writing_analysis',
+      providerName,
+      requestPayload,
+      rawResponse,
+      parsedJson,
+      parseError,
+      validationErrors,
+      fallbackUsed,
+      failureKind,
+      normalizedFields,
+      timestamp: new Date().toISOString(),
+    }),
+  };
+};
+
+export const safeValidateWritingTarget = async (
+  provider: AIProvider,
+  providerName: string,
+  requestPayload: WritingValidationRequest,
+): Promise<SafeAnalyzeResult<WritingTargetValidationResult>> => {
+  let rawResponse: unknown = null;
+  let parsedJson: unknown = null;
+  let parseError: string | undefined;
+  const validationErrors: string[] = [];
+  const normalizedFields: string[] = [];
+
+  try {
+    if (!provider.validateWritingTarget) {
+      throw new Error('Provider does not implement validateWritingTarget');
+    }
+
+    rawResponse = await provider.validateWritingTarget(requestPayload);
+    const parsed = parseRawResponse(rawResponse);
+    parsedJson = parsed.parsedJson;
+    parseError = parsed.parseError;
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const feedback = normalizeWritingTargetValidation(parsedJson, requestPayload, validationErrors, normalizedFields);
+  const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
+
+  return {
+    feedback,
+    diagnostic: buildDiagnostic({
+      module: 'writing',
+      operation: 'writing_target_validation',
       providerName,
       requestPayload,
       rawResponse,

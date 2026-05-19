@@ -24,6 +24,15 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Recent Events
 
+- **2026-05-19 independent target validation slice**: Target generation and target validation are now separate for Speaking and Writing Task 2.
+  - Same-response target self-check is secondary evidence only; Band 7+ / Band 8+ labels require a scoring-only independent validation pass inside IELTS Scholar.
+  - For current 7.0-7.5 answers, a generated Band 8+ target must validate at 8.0+ or it is marked borderline/failed. The app must not relabel 7.5 as 8.0 or inflate current user scores.
+  - If validation fails, the app retries target generation once with the validator repair focus. If the second validation still fails, UI/export keep the compact target-needs-work state.
+  - Mock provider demonstrates the fail-then-repair loop; real Gemini/DeepSeek providers expose validation operations without changing provider routing.
+  - Speaking Web Speech recognition now distinguishes intentional stop from browser pause/auto-end and auto-resumes while recording remains active.
+  - Page-level and app-container no-translate hints were added to reduce Chrome/extension translation pollution.
+  - Advanced ASR/audio transcription, pronunciation scoring, Task 1 recalibration, server/auth/database/RAG, and provider routing changes remain out of scope.
+
 - **2026-05-19 target-answer scoring loop slice**: Speaking and Writing Task 2 target generation now requires same-layer self-check before claiming the target.
   - Feedback schemas gained optional target-answer integrity fields: floor, layer, status, self-scores, rationale, repair focus, high-band stability guidance, and next step.
   - Gemini / DeepSeek prompts now require two-pass target generation: score current answer, generate target, self-score target with the same visible criteria, revise if needed, and downgrade to borderline/failed if the target still does not meet the floor.

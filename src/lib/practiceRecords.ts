@@ -282,6 +282,15 @@ const sanitizeWritingTask2Feedback = (value: unknown): WritingFeedback | undefin
         grammaticalRangeAccuracy: asOptionalNumber(value.targetAnswerSelfScores.grammaticalRangeAccuracy),
       }
       : undefined,
+    targetAnswerValidationScores: isObject(value.targetAnswerValidationScores)
+      ? {
+        taskResponse: asOptionalNumber(value.targetAnswerValidationScores.taskResponse),
+        coherenceCohesion: asOptionalNumber(value.targetAnswerValidationScores.coherenceCohesion),
+        lexicalResource: asOptionalNumber(value.targetAnswerValidationScores.lexicalResource),
+        grammaticalRangeAccuracy: asOptionalNumber(value.targetAnswerValidationScores.grammaticalRangeAccuracy),
+      }
+      : undefined,
+    targetAnswerValidationRationaleZh: asOptionalString(value.targetAnswerValidationRationaleZh),
     targetAnswerRationaleZh: asOptionalString(value.targetAnswerRationaleZh),
     targetAnswerRepairFocusZh: asOptionalString(value.targetAnswerRepairFocusZh),
     highBandStabilityZh: asOptionalString(value.highBandStabilityZh),
@@ -380,6 +389,15 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
         pronunciation: null,
       }
       : undefined,
+    targetAnswerValidationScores: isObject(value.targetAnswerValidationScores)
+      ? {
+        fluencyCoherence: asOptionalNumber(value.targetAnswerValidationScores.fluencyCoherence),
+        lexicalResource: asOptionalNumber(value.targetAnswerValidationScores.lexicalResource),
+        grammaticalRangeAccuracy: asOptionalNumber(value.targetAnswerValidationScores.grammaticalRangeAccuracy),
+        pronunciation: null,
+      }
+      : undefined,
+    targetAnswerValidationRationaleZh: asOptionalString(value.targetAnswerValidationRationaleZh),
     targetAnswerRationaleZh: asOptionalString(value.targetAnswerRationaleZh),
     targetAnswerRepairFocusZh: asOptionalString(value.targetAnswerRepairFocusZh),
     highBandStabilityZh: asOptionalString(value.highBandStabilityZh),

@@ -15,6 +15,8 @@ import {
   routedAnalyzeWritingTask1,
   routedCoachWritingFramework,
   routedExtractWritingFramework,
+  routedValidateSpeakingTarget,
+  routedValidateWritingTarget,
 } from './router';
 export {
   safeAnalyzeSpeaking,
@@ -22,6 +24,8 @@ export {
   safeAnalyzeWritingTask1,
   safeCoachWritingFramework,
   safeExtractWritingFramework,
+  safeValidateSpeakingTarget,
+  safeValidateWritingTarget,
 } from './safety';
 export {
   getApiUsageState,
@@ -43,6 +47,8 @@ export {
   routedAnalyzeWritingTask1,
   routedCoachWritingFramework,
   routedExtractWritingFramework,
+  routedValidateSpeakingTarget,
+  routedValidateWritingTarget,
 };
 
 type ProviderConfig = 'mock' | 'gemini' | 'auto';

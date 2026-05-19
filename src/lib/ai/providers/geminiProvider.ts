@@ -63,6 +63,22 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "obsidianMarkdown": "string"
 }`;
 
+export const speakingTargetValidationSchemaInstruction = `The JSON object must match this exact key structure:
+{
+  "module": "speaking",
+  "operation": "speaking_target_validation",
+  "targetFloor": 8,
+  "status": "meets_target | borderline | failed",
+  "scores": {
+    "fluencyCoherence": 0,
+    "lexicalResource": 0,
+    "grammaticalRangeAccuracy": 0,
+    "pronunciation": null
+  },
+  "rationaleZh": "string",
+  "repairFocusZh": "string"
+}`;
+
 export const speakingPromptCalibration = `Speaking feedback must be spoken IELTS feedback, not writing-style feedback.
 Current estimate: this is a conservative single-question training estimate, excluding pronunciation. IELTS Speaking is scored across a complete test, so do not present one Part 1/2/3 answer as an official complete Speaking band. If evidence sits between two bands, prefer the lower visible estimate, e.g. 5.5-6.0 should be handled as 5.5.
 Global target policy: keep the current estimate honest and conservative. Target answers / improved answers / model answers must always move upward: if the current answer is below Band 7.0, generate a stable Band 7.0-7.5 target; if the current answer is 7.0-7.5, generate a genuinely Band 8+ examiner-friendly upgraded answer with a safety margin above 7.5; if the current answer is already 8.0+, do not keep generating fake higher answers, switch to high-band stability. Do not inflate the current estimate to match the target. Do not label any learner-facing output as Band 9. Do not make Band 8+ mean more formal, more academic, or more essay-like by default; it means clearer logic, more precise language, stronger idea development, better examples, more natural flow, and examiner-friendly execution.
@@ -168,6 +184,22 @@ export const writingSchemaInstruction = `The JSON object must match this exact k
   "obsidianMarkdown": "string"
 }`;
 
+export const writingTargetValidationSchemaInstruction = `The JSON object must match this exact key structure:
+{
+  "module": "writing",
+  "operation": "writing_target_validation",
+  "targetFloor": 8,
+  "status": "meets_target | borderline | failed",
+  "scores": {
+    "taskResponse": 0,
+    "coherenceCohesion": 0,
+    "lexicalResource": 0,
+    "grammaticalRangeAccuracy": 0
+  },
+  "rationaleZh": "string",
+  "repairFocusZh": "string"
+}`;
+
 export const writingTask1SchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
@@ -266,6 +298,9 @@ export class GeminiProvider implements AIProvider {
     part: number;
     question: string;
     transcript: string;
+    targetRepairFocus?: string;
+    targetAttempt?: number;
+    priorTargetAnswer?: string;
   }): Promise<string> {
     const partFocus = params.part === 1
       ? 'Part 1 focus: direct answer quality, naturalness, concise development, and whether the answer sounds spontaneous.'
@@ -288,8 +323,38 @@ If the transcript is extremely short, nonsensical, or too thin for the part, do 
 Use fatalErrors only for true mistakes. Use band9Refinements as an internal compatibility field for Idea & Expression Upgrade items, especially when fatalErrors is empty or short. In each band9Refinements item, observation should be a concise issue/upgrade point, refinement should contain 1-3 usable English phrases or sentence frames only, and explanationZh should be short Chinese guidance. Do not write "Band 9" in the content.
 Idea & Expression Upgrade items should cover over-formal or AI-like phrasing, unnatural spoken rhythm, overlong Part 1 answers, missed chances for concise natural development, reasoning depth, and ways to sound more spontaneous.
 For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
+If targetRepairFocus and priorTargetAnswer are provided, this is a retry because an independent scoring-only validator rejected the previous target. Do not repeat the prior answer. Repair the specific weakness, preserve useful personal material, and make the new upgradedAnswer stronger under the same rubric without inflating the current score.
 
 ${speakingSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`);
+  }
+
+  async validateSpeakingTarget(params: {
+    part: number;
+    question: string;
+    candidateTargetAnswer: string;
+    targetFloor: number;
+    originalCurrentScore?: number;
+    targetLayer?: string;
+  }): Promise<string> {
+    const partRules = params.part === 1
+      ? 'Part 1: short, direct, natural, one concrete personal detail, not academic or overlong.'
+      : params.part === 2
+        ? 'Part 2: sustained long-turn story spine with setting, scene, concrete action, challenge/change, feeling shift, and why it matters. Preserve distinctive useful material.'
+        : 'Part 3: spoken reasoning with position, nuance or contrast, example/observation, consequence, and natural speech rhythm; not essay prose.';
+
+    return this.generateJson(`${strictJsonInstruction}
+
+You are an independent IELTS Speaking target-answer validator. This is a scoring-only pass.
+Do not generate feedback for the learner's original answer. Do not generate a new target answer. Do not rewrite the candidate.
+Score only the candidateTargetAnswer against the question and the same strict transcript-based Speaking criteria used by the app: fluency/coherence, lexical resource, and grammatical range/accuracy. Pronunciation must be null.
+Do not apply a blanket single-question penalty to a complete target answer. Do not inflate scores. Do not relabel 7.5 as 8.0.
+Target floor is ${params.targetFloor}. status may be meets_target only if every required score is >= targetFloor. If any score is below targetFloor, return borderline or failed and give a compact Chinese repairFocusZh.
+${partRules}
+
+${speakingTargetValidationSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);
@@ -301,6 +366,9 @@ ${JSON.stringify(params, null, 2)}`);
     essay: string;
     frameworkNotes?: string;
     finalFrameworkSummary?: string;
+    targetRepairFocus?: string;
+    targetAttempt?: number;
+    priorTargetAnswer?: string;
   }): Promise<string> {
     return this.generateJson(`${strictJsonInstruction}
 
@@ -329,8 +397,31 @@ For Band 7.0+ modelAnswer, the answer must be clear, relevant, supported, and co
 For advantages/disadvantages or outweigh prompts, if the main issue is missing or weak disadvantage coverage, the modelAnswer must include a clear concession/disadvantage paragraph before defending the final position.
 Return modelAnswerAnnotations for meaningful exact spans in modelAnswer: several topic_vocabulary spans, at least two expression_upgrade spans when available, at least one sentence_repair span, and at least one logic_repair span. quote must exactly appear in modelAnswer. Do not over-highlight the whole essay.
 Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
+If targetRepairFocus and priorTargetAnswer are provided, this is a retry because an independent scoring-only validator rejected the previous model answer. Do not repeat the prior model. Repair the specific weakness through stronger task response, paragraph function, example specificity, reasoning mechanism, cohesion, and controlled language. Do not inflate the current essay scores or lower the Band 8+ meaning.
 
 ${writingSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`);
+  }
+
+  async validateWritingTarget(params: {
+    task: string;
+    question: string;
+    candidateTargetAnswer: string;
+    targetFloor: number;
+    originalCurrentScore?: number;
+    targetLayer?: string;
+  }): Promise<string> {
+    return this.generateJson(`${strictJsonInstruction}
+
+You are an independent IELTS Writing Task 2 target-answer validator. This is a scoring-only pass.
+Do not generate a teaching report. Do not generate a new model answer. Do not rewrite the candidate.
+Score only candidateTargetAnswer against the exact question using the same strict IELTS Task 2 criteria: Task Response, Coherence & Cohesion, Lexical Resource, and Grammatical Range & Accuracy.
+Do not inflate scores, do not lower the meaning of Band 8+, and do not count generic formal phrasing as a real upgrade. A Band 8+ answer needs exact task response, clear sustained position, developed paragraph functions, concrete examples, natural precise vocabulary, and controlled grammar range.
+Target floor is ${params.targetFloor}. status may be meets_target only if every required score is >= targetFloor. If any score is below targetFloor, return borderline or failed and give a compact Chinese repairFocusZh.
+
+${writingTargetValidationSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);

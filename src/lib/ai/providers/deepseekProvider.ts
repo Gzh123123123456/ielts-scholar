@@ -4,8 +4,10 @@ import {
   frameworkSchemaInstruction,
   speakingPromptCalibration,
   speakingSchemaInstruction,
+  speakingTargetValidationSchemaInstruction,
   strictJsonInstruction,
   writingSchemaInstruction,
+  writingTargetValidationSchemaInstruction,
   writingTask1SchemaInstruction,
 } from './geminiProvider';
 
@@ -54,7 +56,14 @@ export class DeepSeekProvider implements AIProvider {
     return data?.choices?.[0]?.message?.content ?? '';
   }
 
-  async analyzeSpeaking(params: { part: number; question: string; transcript: string }): Promise<string> {
+  async analyzeSpeaking(params: {
+    part: number;
+    question: string;
+    transcript: string;
+    targetRepairFocus?: string;
+    targetAttempt?: number;
+    priorTargetAnswer?: string;
+  }): Promise<string> {
     const partFocus = params.part === 1
       ? 'Part 1: concise natural spoken answers.'
       : params.part === 2
@@ -74,8 +83,38 @@ For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice 
 Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
 In preservedStyle, include concrete expansionZh, sampleNextStep, transferQuestions, partUseZh, and riskNoteZh grounded in the learner transcript. If detail is missing, ask for the kind of real detail to add instead of inventing one.
 For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
+If targetRepairFocus and priorTargetAnswer are provided, this is a retry after independent validation failed. Do not repeat the prior answer; repair the specific weakness while keeping the current score honest.
 
 ${speakingSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`);
+  }
+
+  async validateSpeakingTarget(params: {
+    part: number;
+    question: string;
+    candidateTargetAnswer: string;
+    targetFloor: number;
+    originalCurrentScore?: number;
+    targetLayer?: string;
+  }): Promise<string> {
+    const partRules = params.part === 1
+      ? 'Part 1: short, direct, natural, one concrete personal detail; no fake academic vocabulary.'
+      : params.part === 2
+        ? 'Part 2: sustained story spine with setting, scene, action, change/challenge, feeling shift, and meaning.'
+        : 'Part 3: spoken reasoning with position, nuance/contrast, example, consequence; not essay prose.';
+
+    return this.generateJson(`${strictJsonInstruction}
+
+You are an independent IELTS Speaking target-answer validator. Scoring-only operation.
+Do not generate a new target answer or teaching report. Score candidateTargetAnswer only.
+Use strict IELTS Speaking visible criteria: fluency/coherence, lexical resource, grammar range/accuracy. Pronunciation is null.
+Do not apply a blanket single-question penalty to a complete target answer. Do not inflate scores or treat 7.5 as 8.0.
+Target floor is ${params.targetFloor}; status is meets_target only if all required scores are >= targetFloor.
+${partRules}
+
+${speakingTargetValidationSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);
@@ -87,6 +126,9 @@ ${JSON.stringify(params, null, 2)}`);
     essay: string;
     frameworkNotes?: string;
     finalFrameworkSummary?: string;
+    targetRepairFocus?: string;
+    targetAttempt?: number;
+    priorTargetAnswer?: string;
   }): Promise<string> {
     return this.generateJson(`${strictJsonInstruction}
 
@@ -115,8 +157,31 @@ For Band 7.0+ modelAnswer, the answer must be clear, relevant, supported, and co
 For advantages/disadvantages or outweigh prompts, if the main issue is missing or weak disadvantage coverage, the modelAnswer must include a clear concession/disadvantage paragraph before defending the final position.
 Return modelAnswerAnnotations for meaningful exact spans in modelAnswer: several topic_vocabulary spans, at least two expression_upgrade spans when available, at least one sentence_repair span, and at least one logic_repair span. quote must exactly appear in modelAnswer. Do not over-highlight the whole essay.
 Set modelAnswerPersonalized to true only when it uses the user's essay/framework context.
+If targetRepairFocus and priorTargetAnswer are provided, this is a retry after independent validation failed. Do not repeat the prior model; repair the exact weakness through stronger task response, paragraph function, examples, reasoning, cohesion, and controlled language.
 
 ${writingSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`);
+  }
+
+  async validateWritingTarget(params: {
+    task: string;
+    question: string;
+    candidateTargetAnswer: string;
+    targetFloor: number;
+    originalCurrentScore?: number;
+    targetLayer?: string;
+  }): Promise<string> {
+    return this.generateJson(`${strictJsonInstruction}
+
+You are an independent IELTS Writing Task 2 target-answer validator. Scoring-only operation.
+Do not generate a teaching report, new model answer, or rewrite. Score candidateTargetAnswer only.
+Use strict Task Response, Coherence & Cohesion, Lexical Resource, and Grammatical Range & Accuracy criteria.
+Do not inflate scores, do not lower Band 8+, and do not reward generic formal phrases as a real upgrade.
+Target floor is ${params.targetFloor}; status is meets_target only if all four scores are >= targetFloor.
+
+${writingTargetValidationSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);

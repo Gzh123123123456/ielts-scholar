@@ -2,7 +2,19 @@
 
 _Last updated: 2026-05-19_
 
-## Latest Slice - Feedback Calibration and Target Integrity
+## Latest Slice - Independent Target Validation Loop
+
+- **Done 2026-05-19 follow-up 2**: Separated target generation from target validation for Speaking and Writing Task 2.
+  - Same-response self-check is no longer enough to claim Band 7+ / Band 8+ target success.
+  - Generated target answers/models now run through scoring-only validation operations before UI/export can present them as validated target-layer output.
+  - Current <7.0 -> target floor 7.0; current 7.0-7.5 -> target floor 8.0; current >=8.0 -> high-band stability with no replacement pressure.
+  - If a 7.0-7.5 answer receives a generated target that independently scores 7.0 or 7.5, the app must not call it Band 8+.
+  - Failed validation retries target generation once with the validator repair focus; persistent failure remains borderline/failed with compact UI messaging.
+  - No score inflation is allowed; current user scores remain conservative and independent from target-answer quality.
+  - Mock provider demonstrates fail-then-repair target validation; advanced ASR remains future work.
+  - Web Speech auto-resume after browser pause/end and page-level no-translate protection were also completed in this slice.
+
+## Previous Slice - Feedback Calibration and Target Integrity
 
 - **Done 2026-05-19 follow-up**: Closed the Speaking / Writing Task 2 target-answer scoring loop.
   - Generated target answers/models now require self-scores against the same visible scoring layer before they can claim the target.

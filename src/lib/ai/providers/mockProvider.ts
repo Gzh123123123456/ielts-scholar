@@ -1,10 +1,12 @@
 import { AIProvider } from './base';
 import {
   SpeakingFeedback,
+  SpeakingTargetValidationResult,
   WritingFeedback,
   WritingFrameworkCoachFeedback,
   WritingFrameworkReadiness,
   WritingFrameworkSummary,
+  WritingTargetValidationResult,
   WritingTask1Feedback,
 } from '../schemas';
 import { getTargetLabel } from '../../bands';
@@ -32,6 +34,9 @@ export class MockProvider implements AIProvider {
     part: number;
     question: string;
     transcript: string;
+    targetRepairFocus?: string;
+    targetAttempt?: number;
+    priorTargetAnswer?: string;
   }): Promise<SpeakingFeedback> {
     await new Promise(r => setTimeout(r, 1500));
     const transcriptWords = params.transcript.trim().split(/\s+/).filter(Boolean).length;
@@ -177,6 +182,12 @@ export class MockProvider implements AIProvider {
       ],
       upgradedAnswer: conservativeEstimate >= 8
         ? params.transcript
+        : params.targetRepairFocus && conservativeEstimate >= 7
+          ? (params.part === 1
+              ? "Yes, definitely. I usually read short essays or fiction after a busy day, especially on the subway home. It gives me a quiet reset, and I can talk about one idea from the book with my friends later."
+              : params.part === 2
+                ? `One activity I remember clearly is vibe coding, basically using AI tools to build apps through natural-language prompts. I tried it one evening in my room after getting stuck on a small project. At first I only had a rough idea, but the turning point came when I described the feature in plain English and then tested each version like a real user. The specific scene I remember is watching a broken page finally work after several failed prompts. I felt a mix of relief and excitement because it changed coding from something distant into something I could actually explore. That is why it mattered to me: it gave me confidence and a practical way to turn ideas into small products.`
+                : "I'd say the biggest change is that cities are trying to become more liveable, although the results are uneven. For example, in some districts, old industrial land has been turned into housing with metro links and parks, so daily life is less dependent on cars. The turning point is not just urban expansion; it is whether planning reduces stress for ordinary residents. If transport, housing and public space improve together, the city becomes denser but also easier to live in.")
         : conservativeEstimate >= 7
         ? (params.part === 1
             ? "Yes, definitely. I tend to read short essays or fiction when I want to slow down a bit, especially after a busy day. It is not a huge hobby, but it gives me a quiet way to reset."
@@ -201,12 +212,49 @@ export class MockProvider implements AIProvider {
     };
   }
 
+  async validateSpeakingTarget(params: {
+    part: number;
+    question: string;
+    candidateTargetAnswer: string;
+    targetFloor: number;
+    originalCurrentScore?: number;
+    targetLayer?: string;
+  }): Promise<SpeakingTargetValidationResult> {
+    await new Promise(r => setTimeout(r, 450));
+    const answer = params.candidateTargetAnswer.toLowerCase();
+    const passesBand8 = params.targetFloor < 8 ||
+      /turning point|specific scene|less dependent on cars|quiet reset|natural-language prompts/.test(answer);
+    const score = passesBand8 ? params.targetFloor : Math.max(7, params.targetFloor - 0.5);
+
+    return {
+      module: 'speaking',
+      operation: 'speaking_target_validation',
+      targetFloor: params.targetFloor,
+      status: passesBand8 ? 'meets_target' : 'borderline',
+      scores: {
+        fluencyCoherence: score,
+        lexicalResource: score,
+        grammaticalRangeAccuracy: score,
+        pronunciation: null,
+      },
+      rationaleZh: passesBand8
+        ? 'Mock independent validator: target answer now reaches the required floor.'
+        : 'Mock independent validator: this target is still closer to 7.5 than stable 8.0.',
+      repairFocusZh: passesBand8
+        ? ''
+        : '这版目标答案还没有稳定达到目标层级，需要继续强化。请加入更清楚的场景、转折、例子和结果，而不是只换词。',
+    };
+  }
+
   async analyzeWriting(params: {
     task: string;
     question: string;
     essay: string;
     frameworkNotes?: string;
     finalFrameworkSummary?: string;
+    targetRepairFocus?: string;
+    targetAttempt?: number;
+    priorTargetAnswer?: string;
   }): Promise<WritingFeedback> {
     await new Promise(r => setTimeout(r, 2000));
     const words = countWords(params.essay);
@@ -499,7 +547,15 @@ export class MockProvider implements AIProvider {
               },
             ],
       },
-      modelAnswer: isRemoteWorkPrompt
+      modelAnswer: params.targetRepairFocus
+        ? `Many people believe that students should be free to choose what they study, while others think institutions should direct them towards subjects with clearer career value. I agree that personal choice should remain the starting point, but it needs to be combined with informed guidance rather than left entirely to chance.
+
+The strongest reason for allowing choice is that interest often produces sustained effort. For example, a student who is genuinely drawn to computer science may build small apps outside class, ask better questions and keep practising after initial failures. This kind of self-driven work is difficult to create through pressure alone, and it can become more valuable than simply following a subject that adults describe as practical. In this way, personal interest can support both academic performance and employability.
+
+This is not to suggest that career prospects are irrelevant. Some teenagers choose subjects because they sound exciting, without understanding the labour market or the skills needed to succeed. Schools should therefore make the choice more informed by offering career talks, sample projects and advice about transferable skills. For instance, a student interested in art could also learn digital design, communication or basic business skills, which makes the pathway more realistic.
+
+Overall, students should not be forced into subjects chosen only by adults, because this can damage motivation and long-term development. A better approach is guided autonomy: learners choose their main direction, while teachers help them connect that choice with concrete skills, examples and future opportunities.`
+        : isRemoteWorkPrompt
         ? `In recent years, many employees have been allowed to work remotely instead of travelling to an office every day. In my view, this trend has more advantages than disadvantages, provided that companies manage communication carefully.
 
 The most obvious benefit is that flexible working arrangements give workers greater control over their daily routine. When people save commuting time, they can start work with more energy and use the extra time for rest, exercise, self-improvement or family responsibilities. This can improve work-life balance without necessarily reducing productivity. It can also benefit employers, because remote work may widen the recruitment pool and allow companies to hire skilled people who live far from the main office.
@@ -554,6 +610,40 @@ ${lengthNote}
 
 ## Essay
 ${params.essay}`,
+    };
+  }
+
+  async validateWritingTarget(params: {
+    task: string;
+    question: string;
+    candidateTargetAnswer: string;
+    targetFloor: number;
+    originalCurrentScore?: number;
+    targetLayer?: string;
+  }): Promise<WritingTargetValidationResult> {
+    await new Promise(r => setTimeout(r, 450));
+    const answer = params.candidateTargetAnswer;
+    const passesBand8 = params.targetFloor < 8 ||
+      (/For example, a student/i.test(answer) && /guided autonomy/i.test(answer));
+    const score = passesBand8 ? params.targetFloor : Math.max(7, params.targetFloor - 0.5);
+
+    return {
+      module: 'writing',
+      operation: 'writing_target_validation',
+      targetFloor: params.targetFloor,
+      status: passesBand8 ? 'meets_target' : 'borderline',
+      scores: {
+        taskResponse: score,
+        coherenceCohesion: score,
+        lexicalResource: score,
+        grammaticalRangeAccuracy: score,
+      },
+      rationaleZh: passesBand8
+        ? 'Mock independent validator: model answer now reaches the required floor.'
+        : 'Mock independent validator: this model answer is still closer to 7.5 than stable 8.0.',
+      repairFocusZh: passesBand8
+        ? ''
+        : '这版目标答案还没有稳定达到目标层级，需要继续强化。请强化任务回应、段落功能、具体例子和推理机制，而不是只让措辞更正式。',
     };
   }
 

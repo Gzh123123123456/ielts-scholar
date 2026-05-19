@@ -1,5 +1,19 @@
 # Decision Log
 
+## [2026-05-19] Independent Target Validation Required
+- **Decision**: Target generation and target validation are separate operations. Same-response self-check is useful secondary evidence, but it is not enough to label a generated answer/model as Band 7+ or Band 8+.
+- **Implemented**:
+  - Added scoring-only provider operations for Speaking and Writing Task 2 target validation.
+  - Speaking and Writing Task 2 now run generated targets through an independent validator before the UI/export can trust the target label.
+  - Current answers below 7.0 target a 7.0+ floor; current 7.0-7.5 answers target an 8.0 floor; current 8.0+ answers move to high-band stability.
+  - If validation fails, the app retries target generation once with the validator repair focus. If it still fails, the target remains borderline/failed and is not labeled Band 8+.
+  - Independent validation scores override generator self-scores. No score inflation, no 7.5-as-8.0 relabeling, and no looser rubric.
+  - Mock provider demonstrates the fail-then-repair path for 7.0-7.5 targets.
+  - Speaking Web Speech recognition now auto-resumes after browser pause/end while recording is still active.
+  - Page-level no-translate hints were added to reduce browser/extension translation pollution.
+- **Explicitly unchanged**: no provider routing change, no merge/push, no ASR provider, no pronunciation scoring, no Task 1 redesign, no server/auth/database/RAG.
+- **Future**: Advanced ASR/audio transcription remains a separate future slice.
+
 ## [2026-05-19] Target-Answer Scoring Loop Closed
 - **Decision**: A generated target answer/model is not allowed to claim its target layer unless it self-checks against the same visible scoring layer.
 - **Implemented**:

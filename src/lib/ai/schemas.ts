@@ -7,7 +7,9 @@ export type ProviderOperation =
   | 'writing_analysis'
   | 'writing_task1_analysis'
   | 'writing_framework_coach'
-  | 'writing_framework_extraction';
+  | 'writing_framework_extraction'
+  | 'speaking_target_validation'
+  | 'writing_target_validation';
 export type ProviderFailureKind = 'provider_unavailable' | 'parse_or_schema';
 
 export interface ProviderDiagnostic {
@@ -72,6 +74,26 @@ export interface WritingTargetAnswerSelfScores {
   grammaticalRangeAccuracy?: number;
 }
 
+export interface SpeakingTargetValidationResult {
+  module: 'speaking';
+  operation: 'speaking_target_validation';
+  targetFloor: number;
+  status: TargetAnswerStatus;
+  scores: SpeakingTargetAnswerSelfScores;
+  rationaleZh: string;
+  repairFocusZh: string;
+}
+
+export interface WritingTargetValidationResult {
+  module: 'writing';
+  operation: 'writing_target_validation';
+  targetFloor: number;
+  status: TargetAnswerStatus;
+  scores: WritingTargetAnswerSelfScores;
+  rationaleZh: string;
+  repairFocusZh: string;
+}
+
 export interface SpeakingPreservedStyleItem {
   text: string;
   reasonZh: string;
@@ -98,6 +120,8 @@ export interface SpeakingFeedback {
   targetAnswerLayer?: TargetAnswerLayer;
   targetAnswerStatus?: TargetAnswerStatus;
   targetAnswerSelfScores?: SpeakingTargetAnswerSelfScores;
+  targetAnswerValidationScores?: SpeakingTargetAnswerSelfScores;
+  targetAnswerValidationRationaleZh?: string;
   targetAnswerRationaleZh?: string;
   targetAnswerRepairFocusZh?: string;
   highBandStabilityZh?: string;
@@ -211,6 +235,8 @@ export interface WritingFeedback {
   targetAnswerLayer?: TargetAnswerLayer;
   targetAnswerStatus?: TargetAnswerStatus;
   targetAnswerSelfScores?: WritingTargetAnswerSelfScores;
+  targetAnswerValidationScores?: WritingTargetAnswerSelfScores;
+  targetAnswerValidationRationaleZh?: string;
   targetAnswerRationaleZh?: string;
   targetAnswerRepairFocusZh?: string;
   highBandStabilityZh?: string;
