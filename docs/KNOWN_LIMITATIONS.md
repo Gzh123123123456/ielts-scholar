@@ -16,8 +16,12 @@
    - Personalized Task 2 model excerpts are only labeled personalized for new feedback that explicitly uses the learner essay/framework context. Old saved `modelAnswer` text remains readable but is not automatically treated as personalized.
 5. **Transcription**: Relies on browser Web Speech API. Works reliably in Chrome and Edge. Safari and AI Studio preview environments may be unreliable. Users should verify Chrome is using the correct microphone device. Advanced ASR, upload-audio transcription, and Gemini-audio style transcription are future separate slices, not part of the current feedback calibration work.
 6. **no-speech Recovery**: Speaking Practice auto-restarts recognition on `no-speech` errors (up to 2 retries). This covers brief silence, but if the wrong microphone device is selected in Chrome, recognition will not work regardless.
+   - Web Speech auto-resume is a regression-sensitive area: browser pause/auto-end should resume while recording is active, while Stop and Retry should stop or clear cleanly.
 7. **Storage**: Data is stored in `localStorage`. Active attempts, practice records, provider usage estimates, and router cooldown state are recoverable in the same browser, but clearing browser data will lose history. No IndexedDB/database migration exists yet.
 8. **Pronunciation**: No formal pronunciation score is provided as transcript-based analysis is insufficient for IELTS prosody marking. Speaking estimates exclude pronunciation and must not imply that pronunciation is dragging the score down.
-9. **Real-time Feedback**: Intentional exclusion of real-time correction in Speaking to preserve user fluency.
-10. **Export**: Obsidian export is via manual download of `.md` files.
-11. **Future Providers**: OpenAI-compatible/OpenRouter configuration UI is a future hidden direction and is not implemented.
+9. **High-band Boundary**: Single-question LLM scoring can fluctuate by 0.5 around 7.5/8.0. The app now represents this as `high_band_boundary`; it is close-to-target evidence, not deterministic official scoring.
+10. **Task 1 Calibration**: Writing Task 1 shares the target-state vocabulary, but it does not yet have the independent target validation loop used by Speaking and Writing Task 2. Generated Task 1 target reports should not be described as independently validated.
+11. **Plugin / Translation Protection**: Plugin/notranslate behavior is considered solved for now. Future work should not reopen it unless a direct regression appears; answer text, target text, examples, and expressions should remain selectable/copyable.
+12. **Real-time Feedback**: Intentional exclusion of real-time correction in Speaking to preserve user fluency.
+13. **Export**: Obsidian export is via manual download of `.md` files.
+14. **Future Providers**: OpenAI-compatible/OpenRouter configuration UI is a future hidden direction and is not implemented.

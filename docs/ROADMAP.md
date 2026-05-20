@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-17_
+_Last updated: 2026-05-20_
 
 ## V1.1 - API Readiness + Framework Intelligence
 - Keep Mock Provider as default.
@@ -74,6 +74,12 @@ _Last updated: 2026-05-17_
 - Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
 - Target outputs must apply corrections, idea-development guidance, and retained useful learner material.
 - Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
+- Shared target-state semantics are now part of the roadmap baseline across all five practice modules: `needs_repair`, `generated_target`, `target_failed_or_borderline`, `high_band_boundary`, and `high_band_stable`.
+- A 7.5/8.0 split around the high-band threshold is a `high_band_boundary`, not a deterministic contradiction, failure, or fake stable Band 8+ success.
+- `STANDARD ANSWER` is only for 8.0+ / high-band stable outputs. Below-8 attempts use Band 7.0+ target, Band 8+ target, boundary target, or repair labels.
+- Generated targets without independent validation should be described as generated, not validated. Task 1 full target calibration remains future work.
+- Speaking Part 2 is the first visual cleanup pattern for this score layer; broader visual cleanup should be scoped separately.
+- Idea/expression upgrade items should be grounded in the learner's original wording or material instead of rendered as generic filler.
 - Part 1 topic-thread practice and Part 3 discussion-thread practice remain future work.
 - Future interaction model remains pending and roadmap-only:
   - Part 1 Topic Thread Practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, and one topic-level analysis focused on short natural answers, personal details, consistency, and avoiding memorized long answers.

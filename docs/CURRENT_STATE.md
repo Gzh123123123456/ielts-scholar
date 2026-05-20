@@ -1,11 +1,10 @@
 # Current State (V1.3 closeout)
 
-_Last updated: 2026-05-17_
+_Last updated: 2026-05-20_
 
 ## Branch / Sync State
-- Local `main` contains today's completed question-bank picker work plus the consolidated Speaking reliability / markdown / global target-policy branch.
-- Integration commit on local `main`: `f7b24f0 Consolidate completed IELTS Scholar slices`.
-- GitHub `origin/main` should be updated during closeout only after lint/build pass and `main` is confirmed not diverged.
+- Local `main` and `origin/main` are synced at `b650827 Add high-band boundary feedback state` after the 2026-05-20 daily closeout.
+- Today's completed work includes independent target validation follow-ups plus the high-band boundary / score-layer semantic model.
 - `codex/speaking-reliability-uplift` has been integrated.
 - `codex/speaking-single-attempt-export` and `codex/task2-command-feedback` were inspected and kept unapplied as superseded.
 
@@ -35,6 +34,15 @@ _Last updated: 2026-05-17_
   - learner-facing Band 9 and Target Band 7.5 / 7.5-8.0 labels are not default target tiers;
   - current scores must not be inflated to match target outputs;
   - Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution, not more formal or more essay-like language by default.
+- Shared target-state semantics are active across Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2:
+  - `needs_repair`
+  - `generated_target`
+  - `target_failed_or_borderline`
+  - `high_band_boundary`
+  - `high_band_stable`
+- A 7.5/8.0 split between normal analysis and independent validation is treated as a high-band boundary: close to target, not a hard failure or fake stable success.
+- `STANDARD ANSWER` is reserved for 8.0+ / high-band stable outputs.
+- Generated Task 1 target reports remain conservative and are not independently validated; full Task 1 calibration remains future work.
 - V1.1 provider safety scaffolding is implemented:
   - Speaking and Writing provider calls route through safe analysis wrappers.
   - Malformed provider output is normalized into safe feedback objects.
@@ -58,11 +66,17 @@ _Last updated: 2026-05-17_
 - Speaking feedback now suppresses full target-answer transformation rendering for very short, nonsense, or insufficient-sample transcripts, including old restored records; the UI shows a concise Answer Development Plan instead without mutating saved records.
 - Speaking Practice uses the wide practice workspace consistently with Writing Task 1 / Task 2; feedback cards align to the same main container while long transformation text keeps a readable inner line length.
 - Speaking feedback now supports a distinct **Idea & Expression Upgrade** section for strong answers with few or no true errors.
+- Speaking Part 2 is the first feedback readability cleanup pattern:
+  - module headers use the `LANGUAGE PERFORMANCE` style;
+  - high-band boundary and stability use compact target-state labels;
+  - generic UI reminder text and learner-facing mock/prototype labels are removed;
+  - idea/expression upgrade items must be grounded in the learner's actual wording or material.
 - Speaking prompts are calibrated by part: Part 1 short natural answers, Part 2 single long-turn story spine, and Part 3 natural spoken abstract discussion rather than Writing Task 2 spoken aloud.
 - Speaking markdown export uses the local minimal review-card structure from `src/lib/markdownExport.ts`.
 - Malformed provider/debug strings are filtered out of learning content.
 - Incomplete provider feedback remains retryable instead of rendering as normal results.
 - `no-speech` auto-retry is implemented and preserved.
+- Web Speech auto-resume remains a regression item: browser pause/auto-end should resume while recording; Stop and Retry should still stop/clear cleanly.
 - Retry clears current-attempt state (transcript, feedback, timer, attempt refs).
 - Stop & Review prevents recognition restart after user stop.
 - Pre-analysis view remains focused on prompt, timer, controls, and transcript/review.
@@ -136,6 +150,7 @@ _Last updated: 2026-05-17_
 - Task 1 uses original text-based visual briefs and simple data cards for line graph, bar chart, table, pie chart, mixed chart, process, and map practice.
 - Task 1 feedback has its own schema and Mock Provider analysis path covering overview, key features, comparisons, data accuracy, coherence, must-fix items, rewrite task, reusable report patterns, improved report/model excerpt, and markdown export.
 - Task 1 diagnosis is Chinese-first in learner-facing sections, with English corrections/examples where useful; the target report remains English and follows the shared Band 7.0+ / Band 8+ target policy.
+- Task 1 target reports now share the global target-state vocabulary, but are marked generated rather than independently validated.
 - Old Task 1 feedback records with sparse, English-only, or malformed display text receive Chinese-first display framing at render time without rewriting stored records.
 - Task 1 under-length and extremely short answers receive conservative training estimates and explicit length feedback instead of high mock/local scores.
 - Active Writing Task 1 practice links to History instead of embedding a recent-record list.
@@ -147,6 +162,7 @@ _Last updated: 2026-05-17_
 ## Export Behavior (Implemented)
 - Markdown export is attempt-level in V1.
 - Speaking exports should keep active expressions as 2-4 short reusable chunks and use conceptual Answer Paths, not sliced sentence fragments.
+- Speaking exports mirror high-band boundary / stable / repair target labels and avoid empty replacement-answer artifacts.
 - Writing Task 2 exports should read as compact Obsidian training notes: max 3 revision-focus actions, compact logic cards, top sentence corrections only, and a phrase-level Language Bank.
 - Task 1 exports a downloaded `.md` file using the same pattern as other modules; if provider markdown is absent, the app generates a complete local note from structured feedback.
 - Session-level consolidated note export is not implemented yet.
