@@ -8,6 +8,11 @@ import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
 import { routedAnalyzeWriting, routedCoachWritingFramework, routedExtractWritingFramework } from '@/src/lib/ai';
 import { validateWritingTargetLoop } from '@/src/lib/ai/targetValidation';
+import {
+  isHighBandStableState,
+  isRepairState,
+  resolveWritingTargetState,
+} from '@/src/lib/scoreLayer';
 import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
 import { writingTask2, WritingQuestion } from '@/src/data/questions/bank';
 import {
@@ -224,6 +229,10 @@ const averageWritingScore = (feedback: WritingFeedback) =>
 
 const getTargetModelLevel = (feedback: WritingFeedback) => {
   const estimate = averageWritingScore(feedback);
+  const state = feedback.targetState || resolveWritingTargetState(feedback);
+  if (state === 'high_band_stable') return 'HIGH-BAND STABILITY CHECK';
+  if (state === 'high_band_boundary') return 'HIGH-BAND BOUNDARY';
+  if (state === 'target_failed_or_borderline') return 'TARGET MODEL NEEDS REPAIR';
   if (
     feedback.targetAnswerStatus === 'meets_target' &&
     (feedback.targetAnswerLayer === 'high_band_stability' || estimate >= 8)
@@ -240,12 +249,11 @@ const getTargetModelLevel = (feedback: WritingFeedback) => {
 const isHighBandWritingStable = (feedback?: WritingFeedback | null) =>
   Boolean(
     feedback &&
-    feedback.targetAnswerStatus === 'meets_target' &&
-    (feedback.targetAnswerLayer === 'high_band_stability' || averageWritingScore(feedback) >= 8),
+    isHighBandStableState(feedback.targetState || resolveWritingTargetState(feedback)),
   );
 
 const hasUnstableWritingTarget = (feedback?: WritingFeedback | null) =>
-  feedback?.targetAnswerStatus === 'borderline' || feedback?.targetAnswerStatus === 'failed';
+  Boolean(feedback && isRepairState(feedback.targetState || resolveWritingTargetState(feedback)));
 
 const uniqueStrings = (items: (string | undefined)[]) => {
   const seen = new Set<string>();
@@ -2509,7 +2517,7 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
                 ) : (
                   <p className="text-base leading-8 text-paper-ink/65">
                     {isHighBandStable
-                      ? '当前作文已达到目标层级。这里不需要生成替换范文。'
+                      ? feedback.modelAnswer.trim() || feedback.essay
                       : targetNeedsRepair
                         ? '这版目标范文还没有稳定达到目标层级，暂不作为成功目标展示。'
                         : isInsufficientSample

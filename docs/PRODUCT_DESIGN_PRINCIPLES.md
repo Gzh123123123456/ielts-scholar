@@ -1,6 +1,6 @@
 # Product Design Principles
 
-_Last updated: 2026-05-17_
+_Last updated: 2026-05-20_
 
 This document is the long-term product design source of truth for IELTS Scholar.
 It applies to all modules, all phases, and all future implementation work.
@@ -160,6 +160,13 @@ Overlay should be a lightweight but complete correction panel, not a tiny toolti
   - Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
   - Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
   - Target answers must apply feedback, idea-development advice, and retained useful learner material, not merely paraphrase the original.
+- High-band target-state policy:
+  - A 7.5/8.0 split between normal analysis and independent validation is a high-band boundary, not a deterministic contradiction.
+  - Boundary feedback should say the answer is close to target and needs stable natural reproducibility, not more decorative advanced wording.
+  - `STANDARD ANSWER` is only for 8.0+ / high-band stable outputs. Below-8 attempts should use Band 7.0+ target, Band 8+ target, boundary target, or repair labels.
+  - Generated targets without independent validation must be described as generated, not validated.
+  - Upgrade items must be grounded in the learner's original answer; do not render generic upgrade content just to fill a section.
+  - Speaking Part 2 is the first visual cleanup pattern. Task 1 full visual cleanup remains future work, while shared target-state logic must remain compatible with it.
 - Target Model Answer should be a full training target answer, not a short excerpt.
 - Acceptable target length is about 280-350 words.
 - It should preserve the learner's position, fix the highest-priority Logic Review issue, and integrate Language Bank / Expression Upgrade / key corrections.

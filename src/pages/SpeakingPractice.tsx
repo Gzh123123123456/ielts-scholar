@@ -16,6 +16,14 @@ import {
   buildSpeakingTrainingMarkdown,
 } from '@/src/lib/markdownExport';
 import {
+  HIGH_BAND_BOUNDARY_ZH,
+  HIGH_BAND_STABLE_ZH,
+  isHighBandBoundaryState,
+  isHighBandStableState,
+  isRepairState,
+  resolveSpeakingTargetState,
+} from '@/src/lib/scoreLayer';
+import {
   ActiveSpeakingPracticeSession,
   createRecordId,
   getActiveSpeakingSession,
@@ -53,14 +61,21 @@ const isInsufficientSpeakingSample = (
 const isHighBandSpeakingStable = (feedback?: SpeakingFeedback | null) =>
   Boolean(
     feedback &&
-    feedback.targetAnswerStatus === 'meets_target' &&
-    (feedback.targetAnswerLayer === 'high_band_stability' || feedback.bandEstimateExcludingPronunciation >= 8),
+    isHighBandStableState(feedback.targetState || resolveSpeakingTargetState(feedback)),
   );
 
 const hasUnstableSpeakingTarget = (feedback?: SpeakingFeedback | null) =>
-  feedback?.targetAnswerStatus === 'borderline' || feedback?.targetAnswerStatus === 'failed';
+  Boolean(feedback && isRepairState(feedback.targetState || resolveSpeakingTargetState(feedback)));
 
 const speakingTargetHeading = (feedback: SpeakingFeedback) => {
+  const state = feedback.targetState || resolveSpeakingTargetState(feedback);
+  if (state === 'high_band_stable') return 'STANDARD ANSWER';
+  if (state === 'high_band_boundary') return 'HIGH-BAND BOUNDARY TARGET';
+  if (state === 'target_failed_or_borderline') return 'TARGET ANSWER NEEDS REPAIR';
+  if (feedback.bandEstimateExcludingPronunciation < 7) return 'BAND 7.0+ TARGET ANSWER';
+  if (feedback.bandEstimateExcludingPronunciation < 8) return 'BAND 8+ TARGET ANSWER';
+  return feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer');
+
   if (isHighBandSpeakingStable(feedback)) return '高分稳定检查';
   if (hasUnstableSpeakingTarget(feedback)) return '目标答案仍需加强';
   if (feedback.targetAnswerStatus === 'meets_target' && feedback.targetAnswerLayer === 'band_8_plus') {
@@ -878,19 +893,28 @@ export default function SpeakingPractice() {
 
   const isMock = getAIProviderName() !== 'gemini';
   const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
+  const targetState = feedback ? feedback.targetState || resolveSpeakingTargetState(feedback) : undefined;
   const isHighBandStable = isHighBandSpeakingStable(feedback);
+  const isHighBandBoundary = isHighBandBoundaryState(targetState);
   const targetNeedsRepair = hasUnstableSpeakingTarget(feedback);
   const canShowValidatedSpeakingTarget = Boolean(
     feedback &&
-    feedback.targetAnswerStatus === 'meets_target' &&
-    !isHighBandStable &&
+    (feedback.targetAnswerStatus === 'meets_target' || isHighBandStable) &&
     !targetNeedsRepair &&
-    feedback.upgradedAnswer.trim(),
+    (feedback.upgradedAnswer.trim() || isHighBandStable),
   );
   const criticalErrors = feedback && isHighBandStable ? [] : feedback?.fatalErrors || [];
   const optionalPolish = feedback && isHighBandStable
     ? feedback.naturalnessHints.slice(0, 2)
     : feedback?.naturalnessHints || [];
+  const groundedIdeaUpgrades = feedback?.band9Refinements.filter(item => {
+    const transcriptSource = feedback.transcript.toLowerCase();
+    const quotedPhrases = Array.from(item.observation.matchAll(/["“](.+?)["”]/g)).map(match => match[1].toLowerCase());
+    const citesNaturalnessSource = feedback.naturalnessHints.some(hint =>
+      item.observation.includes(hint.original) || item.explanationZh.includes(hint.original),
+    );
+    return quotedPhrases.some(phrase => transcriptSource.includes(phrase)) || citesNaturalnessSource;
+  }) || [];
   const starterPlan = starterPracticePlan(part, question?.question);
   const speakingBankCounts = {
     1: speakingPart1.length,
@@ -1090,7 +1114,7 @@ export default function SpeakingPractice() {
           
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PaperCard className="bg-paper-200 border-none relative">
-                <h3 className="text-sm font-bold tracking-wide mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">语言表现</h3>
+                <h3 className="text-sm font-bold tracking-wide mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">LANGUAGE PERFORMANCE</h3>
                 <div className="flex flex-wrap items-end gap-4 mb-8">
                   <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
                   <div className="flex flex-col pb-2">
@@ -1118,16 +1142,16 @@ export default function SpeakingPractice() {
                   ))}
                 </div>
 
-                {isMock && (
+                {false && isMock && (
                   <div className="mt-6 flex items-center gap-2 p-2 bg-paper-ink/5 rounded text-xs text-paper-ink/45">
-                    <Info className="w-3 h-3" /> Prototype feedback using mock AI.
+                    <Info className="w-3 h-3" /> Mock provider active.
                   </div>
                 )}
               </PaperCard>
 
               {isHighBandStable && (
                 <PaperCard className="p-5 border-l-2 border-l-green-700/50 bg-green-50/30">
-                  <h4 className="text-sm font-bold tracking-wide text-green-800 mb-3">高分稳定检查</h4>
+                  <h4 className="text-sm font-bold tracking-wide text-green-800 mb-3 border-b border-paper-ink/10 pb-2">HIGH-BAND STABILITY CHECK</h4>
                   <p className="text-base leading-8 text-paper-ink/75">
                     当前回答已达到目标层级。下一步重点是自然输出、时间控制和迁移练习。
                   </p>
@@ -1138,10 +1162,11 @@ export default function SpeakingPractice() {
                 </PaperCard>
               )}
 
-              {!isHighBandStable && (
+              {!isHighBandStable && (criticalErrors.length > 0 || optionalPolish.length > 0 || shouldShowDevelopmentPlan) && (
               <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
+                {(criticalErrors.length > 0 || shouldShowDevelopmentPlan) && (
                 <div className="space-y-3">
-                  <h4 className="text-sm font-bold tracking-wide text-red-800 ml-1">必须先改</h4>
+                  <h4 className="text-sm font-bold tracking-wide text-red-800 ml-1 border-b border-paper-ink/10 pb-2">MUST FIX</h4>
                   {criticalErrors.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-green-700/50">
                       <p className="text-lg leading-8 text-paper-ink/85 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">
@@ -1164,9 +1189,11 @@ export default function SpeakingPractice() {
                     </div>
                   )}
                 </div>
+                )}
 
+                {optionalPolish.length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="text-sm font-bold tracking-wide text-paper-ink/65 ml-1">可选微调</h4>
+                  <h4 className="text-sm font-bold tracking-wide text-paper-ink/65 ml-1 border-b border-paper-ink/10 pb-2">OPTIONAL POLISH</h4>
                   {optionalPolish.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-paper-ink/20">
                       <p className="text-lg leading-8 text-paper-ink/75 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">
@@ -1185,24 +1212,25 @@ export default function SpeakingPractice() {
                     </div>
                   )}
                 </div>
+                )}
               </div>
               )}
 
-              {!shouldShowDevelopmentPlan && feedback.band9Refinements.length > 0 && (
+              {!shouldShowDevelopmentPlan && groundedIdeaUpgrades.length > 0 && (
                 <section className="space-y-3">
                   <h4 className="text-xs font-bold tracking-wide text-paper-ink/55 ml-1">
-                    表达与思路升级
+                    IDEA & EXPRESSION UPGRADE
                   </h4>
                   <PaperCard className="border-l-2 border-l-paper-ink/30 bg-paper-50">
                     <p className="text-sm font-sans uppercase tracking-widest text-paper-ink/35 mb-4">
-                      不是错误，而是让回答更自然、更稳定的优化建议。
+                      Use only evidence from your answer; skip generic upgrades when there is no source phrase.
                     </p>
                     <div className="grid gap-4 lg:grid-cols-2">
-                      {feedback.band9Refinements.map((item, index) => (
+                      {groundedIdeaUpgrades.map((item, index) => (
                         <div key={index} className="border border-paper-ink/10 bg-paper-ink/[0.03] p-4 rounded-sm">
-                          <p className="text-xs font-sans font-bold tracking-wide text-paper-ink/40 mb-2">改进重点</p>
+                          <p className="text-xs font-sans font-bold tracking-wide text-paper-ink/40 mb-2">Focus</p>
                           <p className="text-base leading-8 text-paper-ink/85 mb-4">{item.explanationZh || item.observation}</p>
-                          <p className="text-xs font-sans font-bold tracking-wide text-paper-ink/40 mb-2">可直接使用的表达</p>
+                          <p className="text-xs font-sans font-bold tracking-wide text-paper-ink/40 mb-2">Suggested wording</p>
                           <ul className="space-y-1 mb-4">
                             {[item.refinement, item.observation]
                               .filter(Boolean)
@@ -1213,7 +1241,7 @@ export default function SpeakingPractice() {
                                 </li>
                               ))}
                           </ul>
-                          <p className="text-xs font-sans font-bold tracking-wide text-paper-ink/40 mb-2">适用场景</p>
+                          <p className="text-xs font-sans font-bold tracking-wide text-paper-ink/40 mb-2">Why this works</p>
                           <p className="text-sm leading-7 text-paper-ink/70">
                             {feedback.part === 3
                               ? 'Part 3 需要从观点推进到原因、例子或影响。'
@@ -1231,36 +1259,37 @@ export default function SpeakingPractice() {
               {feedback.preservedStyle.length > 0 && (
                 <section className="border border-paper-ink/10 bg-paper-ink/[0.02] p-5">
                   <h4 className="text-sm font-sans font-bold uppercase tracking-widest text-paper-ink/50 mb-4">
-                    <span>个人素材与观点发散</span>
+                    <span>PERSONAL MATERIAL & IDEA EXPANSION</span>
                   </h4>
                   <div className="grid gap-3 md:grid-cols-2">
                     {feedback.preservedStyle.slice(0, 4).map((style, i) => (
                       <div key={i} className="border-l-2 border-l-accent-terracotta/30 pl-4 py-1">
-                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">你的素材</p>
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">Your material</p>
                         <p className="text-lg text-paper-ink leading-8">"{style.text}"</p>
-                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">可以保留的原因</p>
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">Why keep it</p>
                         <div className="text-base leading-8 text-paper-ink/75">{style.reasonZh}</div>
-                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">怎么发散</p>
+                        <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mt-3">How to expand</p>
                         <div className="text-base leading-8 text-paper-ink/75">
                           {style.expansionZh || materialExpansionFallback(feedback.part)}
                         </div>
                         {style.sampleNextStep && (
                           <div className="mt-2 text-base leading-7 text-paper-ink border-l-2 border-l-paper-ink/15 pl-3">
+                            <span className="block text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">Sample sentence</span>
                             {style.sampleNextStep}
                           </div>
                         )}
                         {style.transferQuestions?.length ? (
-                          <div className="mt-2 flex flex-wrap gap-2">
+                          <div className="mt-2">
+                            <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">Transfer to</p>
+                            <div className="flex flex-wrap gap-2">
                             {style.transferQuestions.slice(0, 2).map(item => (
                               <span key={item} className="rounded-sm border border-paper-ink/10 bg-paper-50 px-2 py-1 text-[10px] font-sans uppercase tracking-widest text-paper-ink/45">
                                 {item}
                               </span>
                             ))}
+                            </div>
                           </div>
                         ) : null}
-                        {style.riskNoteZh && (
-                          <p className="mt-2 text-sm leading-7 text-paper-ink/55">{style.riskNoteZh}</p>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -1283,6 +1312,8 @@ export default function SpeakingPractice() {
                       <span className="block mt-2 text-xs normal-case tracking-normal text-paper-ink/45">
                         {isHighBandStable
                           ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
+                          : isHighBandBoundary
+                            ? HIGH_BAND_BOUNDARY_ZH
                           : targetNeedsRepair
                             ? '这版目标答案还没有稳定达到目标层级，需要继续强化。'
                             : getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}
@@ -1290,7 +1321,9 @@ export default function SpeakingPractice() {
                     )}
                     {!shouldShowDevelopmentPlan && (feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh) && (
                       <span className="block mt-2 text-sm normal-case tracking-normal leading-7 text-paper-ink/55">
-                        {feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh}
+                        {isHighBandBoundary
+                          ? HIGH_BAND_BOUNDARY_ZH
+                          : feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh}
                       </span>
                     )}
                   </h4>
@@ -1325,7 +1358,7 @@ export default function SpeakingPractice() {
                       )}
                       {canShowValidatedSpeakingTarget ? (
                         <p className="text-xl md:text-2xl leading-10 text-paper-ink font-serif whitespace-pre-wrap">
-                          {feedback.upgradedAnswer}
+                          {feedback.upgradedAnswer.trim() || feedback.transcript}
                         </p>
                       ) : (
                         <p className="text-base leading-8 text-paper-ink/65">

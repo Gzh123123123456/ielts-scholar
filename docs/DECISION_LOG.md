@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-20] High-Band Boundary Target State
+- **Decision**: 7.5/8.0 single-question fluctuation is treated as a `high_band_boundary`, not as a deterministic contradiction, fake pass, or hard failure.
+- **Implemented**:
+  - Added the shared target-state model across Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2: `needs_repair`, `generated_target`, `target_failed_or_borderline`, `high_band_boundary`, and `high_band_stable`.
+  - Speaking and Writing Task 2 classify normal-analysis 7.5 plus independent validation 8.0 as boundary; normal 8.0+ becomes stable when there is no fatal blocker.
+  - Speaking Part 2 feedback is the first visual cleanup pattern: English uppercase module headers, compact boundary/stability wording, no generic UI reminder copy, and no learner-facing mock/prototype text.
+  - Idea/expression upgrade rendering is evidence-gated: generic upgrade items without a cited source phrase are omitted from the Speaking feedback UI.
+  - `STANDARD ANSWER` is reserved for 8.0+ / `high_band_stable`; below-8 attempts use Band 7.0+ / Band 8+ / boundary / repair target labels.
+  - Markdown export mirrors the same semantic labels and avoids empty replacement-answer artifacts.
+- **Explicitly unchanged**: plugin/notranslate work is considered solved and was not reopened; provider routing, Web Speech architecture, pronunciation scoring, advanced ASR, server/auth/database/RAG, and Task 1 visual redesign remain out of scope.
+- **Future**: Task 1 full visual cleanup and independent target calibration remain future work, but Task 1 now uses the shared conservative target-state vocabulary.
+
 ## [2026-05-19] Target Loop Edge Cases and Feedback Readability Follow-up
 - **Decision**: High-band stability is a target state, not a missing-target error. When the current Speaking answer or Task 2 essay is already 8.0+ and enters `high_band_stability`, replacement answer/model text is not required.
 - **Implemented**:

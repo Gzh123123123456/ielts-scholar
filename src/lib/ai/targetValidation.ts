@@ -16,6 +16,12 @@ import {
   buildSpeakingTrainingMarkdown,
   buildWritingTask2TrainingMarkdown,
 } from '../markdownExport';
+import {
+  HIGH_BAND_BOUNDARY_ZH,
+  HIGH_BAND_STABLE_ZH,
+  resolveSpeakingTargetState,
+  resolveWritingTargetState,
+} from '../scoreLayer';
 
 const MAX_TARGET_GENERATION_ATTEMPTS = 2;
 const TARGET_NOT_STABLE_ZH = '这版目标答案还没有稳定达到目标层级，需要继续强化。';
@@ -37,7 +43,7 @@ const applySpeakingValidation = (
   validation: SpeakingTargetValidationResult,
 ): SpeakingFeedback => {
   const status = normalizeFailedStatus(validation.status);
-  const next = {
+  const nextBase = {
     ...feedback,
     targetAnswerFloor: validation.targetFloor,
     targetAnswerStatus: status,
@@ -50,6 +56,20 @@ const applySpeakingValidation = (
     targetValidationZh: status === 'meets_target'
       ? targetValidatedZh(validation.targetFloor)
       : TARGET_NOT_STABLE_ZH,
+  };
+  const targetState = resolveSpeakingTargetState(nextBase);
+  const next = {
+    ...nextBase,
+    targetState,
+    targetValidationZh: targetState === 'high_band_boundary'
+      ? HIGH_BAND_BOUNDARY_ZH
+      : nextBase.targetValidationZh,
+    highBandStabilityZh: targetState === 'high_band_stable'
+      ? nextBase.highBandStabilityZh || HIGH_BAND_STABLE_ZH
+      : nextBase.highBandStabilityZh,
+    targetAnswerRepairFocusZh: targetState === 'high_band_boundary'
+      ? undefined
+      : nextBase.targetAnswerRepairFocusZh,
   };
   return {
     ...next,
@@ -62,7 +82,7 @@ const applyWritingValidation = (
   validation: WritingTargetValidationResult,
 ): WritingFeedback => {
   const status = normalizeFailedStatus(validation.status);
-  const next = {
+  const nextBase = {
     ...feedback,
     targetAnswerFloor: validation.targetFloor,
     targetAnswerStatus: status,
@@ -75,6 +95,20 @@ const applyWritingValidation = (
     targetValidationZh: status === 'meets_target'
       ? targetValidatedZh(validation.targetFloor)
       : TARGET_NOT_STABLE_ZH,
+  };
+  const targetState = resolveWritingTargetState(nextBase);
+  const next = {
+    ...nextBase,
+    targetState,
+    targetValidationZh: targetState === 'high_band_boundary'
+      ? HIGH_BAND_BOUNDARY_ZH
+      : nextBase.targetValidationZh,
+    highBandStabilityZh: targetState === 'high_band_stable'
+      ? nextBase.highBandStabilityZh || HIGH_BAND_STABLE_ZH
+      : nextBase.highBandStabilityZh,
+    targetAnswerRepairFocusZh: targetState === 'high_band_boundary'
+      ? undefined
+      : nextBase.targetAnswerRepairFocusZh,
   };
   return {
     ...next,

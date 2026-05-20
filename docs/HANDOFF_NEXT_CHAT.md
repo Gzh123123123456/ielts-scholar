@@ -1,6 +1,6 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-19_
+_Last updated: 2026-05-20_
 
 ## Repo
 
@@ -23,6 +23,16 @@ Claude Code currently uses a DeepSeek Anthropic-compatible endpoint, mapped to `
 Codex may resume later. GitHub is the shared sync point between local Claude Code and Codex.
 
 ## Recent Events
+
+- **2026-05-20 high-band boundary + Speaking Part 2 feedback cleanup slice**:
+  - Added a shared final target-state vocabulary across all five modules: Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2.
+  - 7.5/8.0 uncertainty is now `high_band_boundary`, not a deterministic analyzer/validator contradiction. Boundary means close to target but not fully reproducible yet.
+  - `high_band_stable` no longer needs replacement output; Speaking can show the current answer as `STANDARD ANSWER` when stable.
+  - Speaking Part 2 is the first UI cleanup pattern: module headers now follow the `LANGUAGE PERFORMANCE` style, generic UI guidance is removed, and learner-facing target labels distinguish Band 7.0+ target, Band 8+ target, boundary target, repair, and standard answer.
+  - Speaking idea/expression upgrades must be grounded in the user answer; ungrounded generic items are omitted instead of rendered as filler.
+  - Markdown export mirrors the semantic labels and avoids Risk note / empty replacement artifacts.
+  - Task 1 remains visually conservative and not redesigned; it uses the shared target-state vocabulary and marks generated target reports as generated rather than independently validated.
+  - Plugin/notranslate remains considered solved and should not be reopened unless a direct regression appears.
 
 - **2026-05-19 target-loop edge-case repair slice**: Remaining target-answer loop edge cases and feedback readability issues were repaired.
   - High-band stability no longer requires `upgradedAnswer` / `modelAnswer`; empty replacement text in this state is valid and should not trigger parse/schema fallback.

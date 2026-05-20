@@ -32,6 +32,13 @@ import {
   buildWritingTask1TrainingMarkdown,
   buildWritingTask2TrainingMarkdown,
 } from '../markdownExport';
+import {
+  HIGH_BAND_BOUNDARY_ZH,
+  HIGH_BAND_STABLE_ZH,
+  resolveSpeakingTargetState,
+  resolveTask1TargetState,
+  resolveWritingTargetState,
+} from '../scoreLayer';
 
 type SpeakingRequest = SpeakingAnalysisRequest;
 type WritingRequest = WritingAnalysisRequest;
@@ -55,7 +62,7 @@ const countWords = (text: string): number =>
   text.trim().split(/\s+/).filter(Boolean).length;
 
 const safeLearningText = (value: string, fallback = ''): string => {
-  const cleaned = value.replace(/\s+/g, ' ').trim();
+  const cleaned = value.replace(/"{3,}/g, '').replace(/\s+/g, ' ').trim();
   return cleaned && !BLOCKED_LEARNING_CONTENT.test(cleaned) ? cleaned : fallback;
 };
 
@@ -835,9 +842,25 @@ const normalizeSpeakingFeedback = (
       : null,
   };
 
-  const sanitizedFeedback: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
+  const resolvedSpeakingTargetState = resolveSpeakingTargetState(feedbackWithoutMarkdown);
+  normalizedFields.push(`targetState:${resolvedSpeakingTargetState}`);
+  const feedbackWithTargetState: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     ...feedbackWithoutMarkdown,
-    fatalErrors: feedbackWithoutMarkdown.fatalErrors
+    targetState: resolvedSpeakingTargetState,
+    targetValidationZh: resolvedSpeakingTargetState === 'high_band_boundary'
+      ? HIGH_BAND_BOUNDARY_ZH
+      : feedbackWithoutMarkdown.targetValidationZh,
+    highBandStabilityZh: resolvedSpeakingTargetState === 'high_band_stable'
+      ? feedbackWithoutMarkdown.highBandStabilityZh || HIGH_BAND_STABLE_ZH
+      : feedbackWithoutMarkdown.highBandStabilityZh,
+    targetAnswerRepairFocusZh: resolvedSpeakingTargetState === 'high_band_boundary'
+      ? undefined
+      : feedbackWithoutMarkdown.targetAnswerRepairFocusZh,
+  };
+
+  const sanitizedFeedback: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
+    ...feedbackWithTargetState,
+    fatalErrors: feedbackWithTargetState.fatalErrors
       .map(item => ({
         ...item,
         original: safeLearningText(item.original),
@@ -846,7 +869,7 @@ const normalizeSpeakingFeedback = (
         explanationZh: safeLearningText(item.explanationZh),
       }))
       .filter(item => item.original && item.correction && item.explanationZh),
-    naturalnessHints: feedbackWithoutMarkdown.naturalnessHints
+    naturalnessHints: feedbackWithTargetState.naturalnessHints
       .map(item => ({
         ...item,
         original: safeLearningText(item.original),
@@ -855,14 +878,14 @@ const normalizeSpeakingFeedback = (
         explanationZh: safeLearningText(item.explanationZh),
       }))
       .filter(item => item.original && item.better && item.explanationZh),
-    band9Refinements: feedbackWithoutMarkdown.band9Refinements
+    band9Refinements: feedbackWithTargetState.band9Refinements
       .map(item => ({
         observation: safeLearningText(item.observation),
         refinement: safeLearningText(item.refinement),
         explanationZh: safeLearningText(item.explanationZh),
       }))
       .filter(item => item.observation && item.refinement && item.explanationZh),
-    preservedStyle: feedbackWithoutMarkdown.preservedStyle
+    preservedStyle: feedbackWithTargetState.preservedStyle
       .map(item => ({
         text: safeLearningText(item.text),
         reasonZh: safeLearningText(item.reasonZh),
@@ -873,14 +896,14 @@ const normalizeSpeakingFeedback = (
         riskNoteZh: optionalSafeString(item.riskNoteZh),
       }))
       .filter(item => item.text && item.reasonZh),
-    upgradedAnswer: safeLearningText(feedbackWithoutMarkdown.upgradedAnswer),
-    reusableExample: feedbackWithoutMarkdown.reusableExample
+    upgradedAnswer: safeLearningText(feedbackWithTargetState.upgradedAnswer),
+    reusableExample: feedbackWithTargetState.reusableExample
       ? {
-          example: safeLearningText(feedbackWithoutMarkdown.reusableExample.example),
-          canBeReusedFor: feedbackWithoutMarkdown.reusableExample.canBeReusedFor
+          example: safeLearningText(feedbackWithTargetState.reusableExample.example),
+          canBeReusedFor: feedbackWithTargetState.reusableExample.canBeReusedFor
             .map(item => safeLearningText(item))
             .filter(Boolean),
-          explanationZh: safeLearningText(feedbackWithoutMarkdown.reusableExample.explanationZh),
+          explanationZh: safeLearningText(feedbackWithTargetState.reusableExample.explanationZh),
         }
       : null,
   };
@@ -1837,9 +1860,25 @@ const normalizeWritingFeedback = (
     }),
   };
 
-  return {
+  const resolvedWritingTargetState = resolveWritingTargetState(feedbackWithoutMarkdown);
+  normalizedFields.push(`targetState:${resolvedWritingTargetState}`);
+  const feedbackWithTargetState: Omit<WritingFeedback, 'obsidianMarkdown'> = {
     ...feedbackWithoutMarkdown,
-    obsidianMarkdown: buildWritingTask2TrainingMarkdown(feedbackWithoutMarkdown),
+    targetState: resolvedWritingTargetState,
+    targetValidationZh: resolvedWritingTargetState === 'high_band_boundary'
+      ? HIGH_BAND_BOUNDARY_ZH
+      : feedbackWithoutMarkdown.targetValidationZh,
+    highBandStabilityZh: resolvedWritingTargetState === 'high_band_stable'
+      ? feedbackWithoutMarkdown.highBandStabilityZh || HIGH_BAND_STABLE_ZH
+      : feedbackWithoutMarkdown.highBandStabilityZh,
+    targetAnswerRepairFocusZh: resolvedWritingTargetState === 'high_band_boundary'
+      ? undefined
+      : feedbackWithoutMarkdown.targetAnswerRepairFocusZh,
+  };
+
+  return {
+    ...feedbackWithTargetState,
+    obsidianMarkdown: buildWritingTask2TrainingMarkdown(feedbackWithTargetState),
   };
 };
 
@@ -1986,13 +2025,20 @@ const normalizeWritingTask1Feedback = (
       : undefined,
   };
 
-  return {
+  const task1TargetState = resolveTask1TargetState(feedbackWithoutMarkdown);
+  normalizedFields.push(`targetState:${task1TargetState}`);
+  const feedbackWithTargetState: Omit<WritingTask1Feedback, 'obsidianMarkdown'> = {
     ...feedbackWithoutMarkdown,
+    targetState: task1TargetState,
+  };
+
+  return {
+    ...feedbackWithTargetState,
     obsidianMarkdown: (() => {
       if (typeof source.obsidianMarkdown === 'string' && source.obsidianMarkdown.trim()) {
         normalizedFields.push('obsidianMarkdown');
       }
-      return buildWritingTask1TrainingMarkdown(feedbackWithoutMarkdown);
+      return buildWritingTask1TrainingMarkdown(feedbackWithTargetState);
     })(),
   };
 };

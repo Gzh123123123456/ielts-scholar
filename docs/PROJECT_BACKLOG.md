@@ -1,6 +1,17 @@
 # Project Backlog
 
-_Last updated: 2026-05-19_
+_Last updated: 2026-05-20_
+
+## Latest Slice - High-Band Boundary State and Speaking Part 2 Feedback Cleanup
+
+- **Done 2026-05-20**: Unified target-state semantics and cleaned the Speaking Part 2 feedback pattern.
+  - Shared target states now apply across Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2: `needs_repair`, `generated_target`, `target_failed_or_borderline`, `high_band_boundary`, and `high_band_stable`.
+  - 7.5 normal analysis plus 8.0 target validation is treated as a high-band boundary: close to target, not failure, not a fake stable Band 8+ claim.
+  - Speaking Part 2 feedback now uses consistent uppercase module headers, removes generic UI guidance, keeps Chinese explanations only where useful, and reserves `STANDARD ANSWER` for 8.0+ / stable answers.
+  - Idea & Expression Upgrade items are evidence-gated; if an item cannot be tied to the learner's actual wording/material, it is omitted.
+  - Markdown export mirrors target-state labels and avoids Risk note / empty replacement-answer artifacts.
+  - Task 1 full visual cleanup remains future work; current Task 1 target output stays conservative and generated-only unless future validation is added.
+  - Plugin/notranslate remains solved and should not be reopened without a direct regression.
 
 ## Latest Slice - Target Loop Edge Cases and Feedback Readability
 

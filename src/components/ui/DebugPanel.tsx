@@ -6,6 +6,7 @@ import { X, ChevronDown, ChevronUp, Bug } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { getAIProviderName } from '@/src/lib/ai';
 import type { ProviderDiagnostic } from '@/src/lib/ai/schemas';
+import { resolveTargetState } from '@/src/lib/scoreLayer';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -39,10 +40,36 @@ const scoreLine = (diagnostic: ProviderDiagnostic) => {
 const targetLine = (diagnostic: ProviderDiagnostic) => {
   const parsed = isRecord(diagnostic.parsedJson) ? diagnostic.parsedJson : {};
   const request = isRecord(diagnostic.requestPayload) ? diagnostic.requestPayload : {};
+  const scores = isRecord(parsed.scores) ? parsed.scores : undefined;
+  const currentScore = typeof parsed.bandEstimateExcludingPronunciation === 'number'
+    ? parsed.bandEstimateExcludingPronunciation
+    : typeof request.originalCurrentScore === 'number'
+      ? request.originalCurrentScore
+      : undefined;
+  const finalTargetState = typeof parsed.targetState === 'string'
+    ? parsed.targetState
+    : typeof currentScore === 'number'
+      ? resolveTargetState({
+          currentScore,
+          targetLayer: typeof parsed.targetAnswerLayer === 'string'
+            ? parsed.targetAnswerLayer as never
+            : typeof request.targetLayer === 'string'
+              ? request.targetLayer as never
+              : undefined,
+          targetStatus: typeof parsed.status === 'string'
+            ? parsed.status as never
+            : typeof parsed.targetAnswerStatus === 'string'
+              ? parsed.targetAnswerStatus as never
+              : undefined,
+          validationScores: scores as never,
+          hasTargetText: true,
+        })
+      : undefined;
   const parts = [
     typeof parsed.targetAnswerLayer === 'string' && `layer ${parsed.targetAnswerLayer}`,
     typeof parsed.targetAnswerStatus === 'string' && `target ${parsed.targetAnswerStatus}`,
     typeof parsed.status === 'string' && `status ${parsed.status}`,
+    finalTargetState && `final ${finalTargetState}`,
     typeof request.targetAttempt === 'number' && `attempt ${request.targetAttempt}`,
     typeof request.targetRepairFocus === 'string' && request.targetRepairFocus.trim() && `repair ${request.targetRepairFocus.trim()}`,
     typeof parsed.repairFocusZh === 'string' && parsed.repairFocusZh.trim() && `repair ${parsed.repairFocusZh.trim()}`,

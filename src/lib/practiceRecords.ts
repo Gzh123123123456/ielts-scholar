@@ -139,6 +139,15 @@ const asTargetAnswerStatus = (value: unknown) =>
     ? value
     : undefined;
 
+const asTargetState = (value: unknown) =>
+  value === 'needs_repair' ||
+  value === 'generated_target' ||
+  value === 'target_failed_or_borderline' ||
+  value === 'high_band_boundary' ||
+  value === 'high_band_stable'
+    ? value
+    : undefined;
+
 const asStatus = (value: unknown): PracticeRecordStatus =>
   value === 'analyzed' || value === 'provider_failed' || value === 'draft' ? value : 'draft';
 
@@ -293,6 +302,7 @@ const sanitizeWritingTask2Feedback = (value: unknown): WritingFeedback | undefin
     targetAnswerValidationRationaleZh: asOptionalString(value.targetAnswerValidationRationaleZh),
     targetAnswerRationaleZh: asOptionalString(value.targetAnswerRationaleZh),
     targetAnswerRepairFocusZh: asOptionalString(value.targetAnswerRepairFocusZh),
+    targetState: asTargetState(value.targetState),
     highBandStabilityZh: asOptionalString(value.highBandStabilityZh),
     nextStepZh: asOptionalString(value.nextStepZh),
     scoreConsistencyNoteZh: asOptionalString(value.scoreConsistencyNoteZh),
@@ -400,6 +410,7 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     targetAnswerValidationRationaleZh: asOptionalString(value.targetAnswerValidationRationaleZh),
     targetAnswerRationaleZh: asOptionalString(value.targetAnswerRationaleZh),
     targetAnswerRepairFocusZh: asOptionalString(value.targetAnswerRepairFocusZh),
+    targetState: asTargetState(value.targetState),
     highBandStabilityZh: asOptionalString(value.highBandStabilityZh),
     nextStepZh: asOptionalString(value.nextStepZh),
     scoreConsistencyNoteZh: asOptionalString(value.scoreConsistencyNoteZh),
@@ -516,6 +527,7 @@ const sanitizeWritingTask1Feedback = (value: unknown): WritingTask1Feedback | un
     reusableReportPatterns: asRequiredStringArray(value.reusableReportPatterns),
     improvedReport: asString(value.improvedReport),
     modelExcerpt: asOptionalString(value.modelExcerpt),
+    targetState: asTargetState(value.targetState),
     obsidianMarkdown: asString(value.obsidianMarkdown),
   };
 };

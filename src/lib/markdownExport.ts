@@ -2,6 +2,13 @@ import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from
 import type { SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
 import type { WritingTask1AcademicPrompt } from '../data/questions/bank';
 import type { WritingTask1QuickPlan } from './practiceRecords';
+import {
+  HIGH_BAND_BOUNDARY_ZH,
+  HIGH_BAND_STABLE_ZH,
+  resolveSpeakingTargetState,
+  resolveTask1TargetState,
+  resolveWritingTargetState,
+} from './scoreLayer';
 
 type ExportModule = 'speaking' | 'writing';
 type ExportTaskOrPart = 'p1' | 'p2' | 'p3' | 'task1' | 'task2';
@@ -44,7 +51,7 @@ const BLOCKED_LEARNING_CONTENT =
   /provider output was malformed or incomplete|please retry analysis after checking the debug panel|provider_safety|raw parse|validation failure|parse_or_schema|incomplete feedback|debug panel|\[remove or rephrase sentence\]/i;
 
 const cleanLearningText = (value?: string | null) => {
-  const cleaned = (value || '').replace(/\s+/g, ' ').trim();
+  const cleaned = (value || '').replace(/"{3,}/g, '').replace(/\s+/g, ' ').trim();
   return cleaned && !BLOCKED_LEARNING_CONTENT.test(cleaned) ? cleaned : '';
 };
 
@@ -169,18 +176,16 @@ const isMeaningfulShortAnswer = (feedback: Omit<SpeakingFeedback, 'obsidianMarkd
   countWords(feedback.transcript) > 0 && !hasLowSignalText(feedback.transcript);
 
 const isHighBandSpeakingStable = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
-  feedback.targetAnswerStatus === 'meets_target' &&
-  (feedback.targetAnswerLayer === 'high_band_stability' || feedback.bandEstimateExcludingPronunciation >= 8);
+  (feedback.targetState || resolveSpeakingTargetState(feedback)) === 'high_band_stable';
 
 const hasUnstableSpeakingTarget = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
-  feedback.targetAnswerStatus === 'borderline' || feedback.targetAnswerStatus === 'failed';
+  ['needs_repair', 'target_failed_or_borderline'].includes(feedback.targetState || resolveSpeakingTargetState(feedback));
 
 const isHighBandWritingStable = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>) =>
-  feedback.targetAnswerStatus === 'meets_target' &&
-  (feedback.targetAnswerLayer === 'high_band_stability' || averageWritingScore(feedback.scores) >= 8);
+  (feedback.targetState || resolveWritingTargetState(feedback)) === 'high_band_stable';
 
 const hasUnstableWritingTarget = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>) =>
-  feedback.targetAnswerStatus === 'borderline' || feedback.targetAnswerStatus === 'failed';
+  ['needs_repair', 'target_failed_or_borderline'].includes(feedback.targetState || resolveWritingTargetState(feedback));
 
 const phraseChunk = (value?: string, maxWords = 7) => {
   const cleaned = cleanLearningText(value)
@@ -592,6 +597,15 @@ const reviewCardTransferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianM
 };
 
 const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const state = feedback.targetState || resolveSpeakingTargetState(feedback);
+  if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. BAND 7.0+ TARGET ANSWER';
+  if (isSpeakingInsufficient(feedback)) return '## 4. NEEDS REPAIR';
+  if (state === 'high_band_stable') return '## 4. STANDARD ANSWER';
+  if (state === 'high_band_boundary') return '## 4. HIGH-BAND BOUNDARY';
+  if (state === 'target_failed_or_borderline') return '## 4. TARGET ANSWER NEEDS REPAIR';
+  if (feedback.bandEstimateExcludingPronunciation < 7) return '## 4. BAND 7.0+ TARGET ANSWER';
+  if (feedback.bandEstimateExcludingPronunciation < 8) return '## 4. BAND 8+ TARGET ANSWER';
+
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. 起步目标答案';
   if (isSpeakingInsufficient(feedback)) return '## 4. 请先重录一个完整答案';
   if (isHighBandSpeakingStable(feedback)) return '## 4. 高分稳定检查';
@@ -601,6 +615,21 @@ const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkd
 };
 
 const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const state = feedback.targetState || resolveSpeakingTargetState(feedback);
+  if (state === 'high_band_stable') {
+    return cleanLines([
+      feedback.highBandStabilityZh || HIGH_BAND_STABLE_ZH,
+      feedback.nextStepZh,
+      cleanLearningText(feedback.upgradedAnswer) || cleanLearningText(feedback.transcript),
+    ]).join('\n\n');
+  }
+  if (state === 'high_band_boundary') {
+    return cleanLines([
+      HIGH_BAND_BOUNDARY_ZH,
+      cleanLearningText(feedback.upgradedAnswer),
+    ]).join('\n\n');
+  }
+
   const targetLabel = isHighBandSpeakingStable(feedback)
     ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
     : hasUnstableSpeakingTarget(feedback)
@@ -707,13 +736,12 @@ const reviewCardIdeaExpansion = (feedback: Omit<SpeakingFeedback, 'obsidianMarkd
     .map((item, index) => {
       const lines = [
         `### ${index + 1}. Personal Material`,
-        `- 你的素材: ${cleanLearningText(item.text)}`,
-        `- 可以保留的原因: ${cleanLearningText(item.reasonZh) || 'This idea is relevant and can be used as answer material.'}`,
-        `- 怎么发散: ${cleanLearningText(item.expansionZh) || speakingExpansionFallback(feedback.part)}`,
+        `- Your material: ${cleanLearningText(item.text)}`,
+        `- Why keep it: ${cleanLearningText(item.reasonZh) || 'This idea is relevant and can be used as answer material.'}`,
+        `- How to expand: ${cleanLearningText(item.expansionZh) || speakingExpansionFallback(feedback.part)}`,
         cleanLearningText(item.partUseZh) && `- Part use: ${cleanLearningText(item.partUseZh)}`,
-        cleanLearningText(item.sampleNextStep) && `- Sample next step: ${cleanLearningText(item.sampleNextStep)}`,
-        item.transferQuestions?.length && `- Transfer questions: ${cleanLearningLines(item.transferQuestions).slice(0, 3).join(' / ')}`,
-        cleanLearningText(item.riskNoteZh) && `- Risk note: ${cleanLearningText(item.riskNoteZh)}`,
+        cleanLearningText(item.sampleNextStep) && `- Sample sentence: ${cleanLearningText(item.sampleNextStep)}`,
+        item.transferQuestions?.length && `- Transfer to: ${cleanLearningLines(item.transferQuestions).slice(0, 3).join(' / ')}`,
         `- 可用表达: ${expressionItems.length ? expressionItems.join(' / ') : 'because of this / a good example would be / this probably leads to'}`,
       ].filter(Boolean);
       return lines.join('\n');
@@ -918,7 +946,7 @@ ${fromEssay.length ? fromEssay.map(item => `- ${item.original ? `${item.original
 ${frames.length ? frames.map(item => `- ${item.better}${item.note ? `\n  - ${item.note}` : ''}`).join('\n') : '- While [drawback] is a valid concern, it does not outweigh [main benefit].'}
 
 ## 7. ${targetLayerLabel}｜${isHighBandWritingStable(feedback) ? '高分稳定检查' : getTargetLabelZh(estimate, 'modelAnswer')}
-${shouldExportModelAnswer ? `${feedback.modelAnswer}${annotations}` : isHighBandWritingStable(feedback) ? '当前作文已达到目标层级。这里不需要生成替换范文。' : '目标范文未通过或尚未完成独立校验，暂不作为成功目标展示。'}
+${shouldExportModelAnswer ? `${feedback.modelAnswer}${annotations}` : isHighBandWritingStable(feedback) ? cleanLearningText(feedback.modelAnswer) || feedback.essay : '目标范文未通过或尚未完成独立校验，暂不作为成功目标展示。'}
 
 ## 8. 下次写作前检查｜Next Attempt Checklist
 ${bulletList(task2Checklist(feedback), '先确认题目任务、中心立场、每段功能和一个具体例子，再开始写。', 5)}`;
@@ -937,6 +965,14 @@ export const buildWritingTask1TrainingMarkdown = (
   quickPlan?: WritingTask1QuickPlan,
   timestamp?: string | Date,
 ) => {
+  const task1TargetState = feedback.targetState || resolveTask1TargetState(feedback);
+  const task1TargetHeading = task1TargetState === 'high_band_stable'
+    ? 'STANDARD ANSWER'
+    : task1TargetState === 'needs_repair' || task1TargetState === 'target_failed_or_borderline'
+      ? 'TARGET REPORT NEEDS REPAIR'
+      : feedback.estimatedBand >= 7
+        ? 'GENERATED BAND 8+ TARGET REPORT'
+        : 'GENERATED BAND 7.0+ TARGET REPORT';
   const planItems = cleanLines([
     quickPlan?.overview && `Overview: ${quickPlan.overview}`,
     quickPlan?.keyFeatures && `Key features: ${quickPlan.keyFeatures}`,
@@ -959,7 +995,7 @@ ${feedback.report}
 ## 3. 分数快照｜Training Estimate
 - 任务完成度｜Task Achievement: ${formatConservativeBandEstimate(feedback.taskAchievement?.score ?? feedback.estimatedBand)}
 - 综合训练估计｜Overall training estimate: ${formatConservativeBandEstimate(feedback.estimatedBand)}
-- 目标层级｜Target layer: ${getTargetLabel(feedback.estimatedBand, 'report')} / ${getTargetLabelZh(feedback.estimatedBand, 'report')}
+- 目标层级｜Target layer: ${task1TargetHeading} / ${task1TargetState === 'generated_target' ? 'generated, not independently validated' : getTargetLabelZh(feedback.estimatedBand, 'report')}
 
 ## 4. Overview 与关键信息｜Overview / Key Features
 - Overview: ${conciseAction(feedback.overviewFeedback, 28)}
@@ -973,7 +1009,7 @@ ${feedback.report}
 ## 6. 语言修改｜Language Corrections
 ${languageCorrections.length ? languageCorrections.map(item => `- Original: ${item.original}\n  - Better: ${item.correction}\n  - 中文说明: ${conciseAction(item.explanation, 20)}`).join('\n') : '- 暂无稳定语言修改；先检查 overview、比较句和数据表达。'}
 
-## 7. ${getTargetLabel(feedback.estimatedBand, 'report')}｜${getTargetLabelZh(feedback.estimatedBand, 'report')}
+## 7. ${task1TargetHeading}
 ${feedback.improvedReport || feedback.modelExcerpt || 'No improved report returned.'}
 
 ## 8. 下次写作前检查｜Next Attempt Checklist

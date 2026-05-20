@@ -9,7 +9,8 @@ import { writingTask1Academic, WritingTask1AcademicPrompt } from '@/src/data/que
 import { routedAnalyzeWritingTask1 } from '@/src/lib/ai';
 import { useApp } from '@/src/context/AppContext';
 import { ProviderDiagnostic, WritingTask1Feedback } from '@/src/lib/ai/schemas';
-import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
+import { formatConservativeBandEstimate, getTargetLabelZh } from '@/src/lib/bands';
+import { resolveTask1TargetState } from '@/src/lib/scoreLayer';
 import {
   createRecordId,
   getActiveWritingTask1,
@@ -114,6 +115,13 @@ const getRewriteActions = (feedback: WritingTask1Feedback): string[] => {
   return Array.from(new Set(actions));
 };
 
+const getTask1TargetHeading = (feedback: WritingTask1Feedback) => {
+  const state = feedback.targetState || resolveTask1TargetState(feedback);
+  if (state === 'high_band_stable') return 'STANDARD ANSWER';
+  if (state === 'needs_repair' || state === 'target_failed_or_borderline') return 'TARGET REPORT NEEDS REPAIR';
+  return feedback.estimatedBand >= 7 ? 'GENERATED BAND 8+ TARGET REPORT' : 'GENERATED BAND 7.0+ TARGET REPORT';
+};
+
 const task1RewriteActions = (feedback: WritingTask1Feedback): string[] =>
   getRewriteActions(feedback).map((item, index) => chineseFirst(
     item,
@@ -136,6 +144,10 @@ const buildTask1Markdown = (
   feedback: WritingTask1Feedback,
 ) => {
   const date = new Date().toLocaleString();
+  const task1TargetHeading = getTask1TargetHeading(feedback);
+  const task1TargetNote = (feedback.targetState || resolveTask1TargetState(feedback)) === 'generated_target'
+    ? 'generated, not independently validated'
+    : getTargetLabelZh(feedback.estimatedBand, 'report');
   const languageCorrections = feedback.languageCorrections.length
     ? feedback.languageCorrections
         .map(item => `- Original: ${item.original}\n  - Correction: ${item.correction}\n  - 说明: ${item.explanation}`)
@@ -158,7 +170,7 @@ const buildTask1Markdown = (
 - Task type: ${prompt.taskType}
 - Topic: ${prompt.topic}
 - Training Estimate: ${formatConservativeBandEstimate(feedback.estimatedBand)}
-- Target Layer: ${getTargetLabel(feedback.estimatedBand, 'report')} / ${getTargetLabelZh(feedback.estimatedBand, 'report')}
+- Target Layer: ${task1TargetHeading} / ${task1TargetNote}
 
 ## Task Instruction
 ${feedback.instruction}
@@ -193,7 +205,7 @@ ${bulletList(getRewriteActions(feedback), 'Rewrite with a clearer overview and g
 ## Reusable Report Patterns
 ${bulletList(feedback.reusableReportPatterns, 'No reusable pattern returned.')}
 
-## ${getTargetLabel(feedback.estimatedBand, 'report')} / ${getTargetLabelZh(feedback.estimatedBand, 'report')}
+## ${task1TargetHeading}
 ${feedback.improvedReport || feedback.modelExcerpt || 'No improved report returned.'}
 `;
 };
@@ -528,9 +540,11 @@ export default function WritingTask1Placeholder() {
           </PaperCard>
 
           <PaperCard>
-            <h3 className="text-sm font-bold uppercase tracking-widest mb-1">{getTargetLabel(feedback.estimatedBand, 'report')}</h3>
+            <h3 className="text-sm font-bold uppercase tracking-widest mb-1">{getTask1TargetHeading(feedback)}</h3>
             <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-4">
-              {getTargetLabelZh(feedback.estimatedBand, 'report')}
+              {feedback.targetState === 'generated_target'
+                ? 'Generated target report; Task 1 independent validation is a future calibration pass.'
+                : getTargetLabelZh(feedback.estimatedBand, 'report')}
             </p>
             <p className="whitespace-pre-wrap text-base leading-8 text-paper-ink/80">{feedback.improvedReport || feedback.modelExcerpt}</p>
             <div className="flex flex-wrap gap-3 mt-5">

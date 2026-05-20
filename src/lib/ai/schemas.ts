@@ -59,6 +59,12 @@ export interface Band9Refinement {
 
 export type TargetAnswerLayer = 'band_7_to_7_5' | 'band_8_plus' | 'high_band_stability';
 export type TargetAnswerStatus = 'meets_target' | 'borderline' | 'failed' | 'not_generated' | 'not_applicable';
+export type TargetState =
+  | 'needs_repair'
+  | 'generated_target'
+  | 'target_failed_or_borderline'
+  | 'high_band_boundary'
+  | 'high_band_stable';
 
 export interface SpeakingTargetAnswerSelfScores {
   fluencyCoherence?: number;
@@ -124,6 +130,7 @@ export interface SpeakingFeedback {
   targetAnswerValidationRationaleZh?: string;
   targetAnswerRationaleZh?: string;
   targetAnswerRepairFocusZh?: string;
+  targetState?: TargetState;
   highBandStabilityZh?: string;
   nextStepZh?: string;
   scoreConsistencyNoteZh?: string;
@@ -239,6 +246,7 @@ export interface WritingFeedback {
   targetAnswerValidationRationaleZh?: string;
   targetAnswerRationaleZh?: string;
   targetAnswerRepairFocusZh?: string;
+  targetState?: TargetState;
   highBandStabilityZh?: string;
   nextStepZh?: string;
   scoreConsistencyNoteZh?: string;
@@ -278,6 +286,7 @@ export interface WritingTask1Feedback {
   reusableReportPatterns: string[];
   improvedReport: string;
   modelExcerpt?: string;
+  targetState?: TargetState;
   obsidianMarkdown: string;
 }
 
