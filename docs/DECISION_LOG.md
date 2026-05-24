@@ -1,5 +1,46 @@
 # Decision Log
 
+## [2026-05-24] Speaking Runtime and Feedback Stabilization Closeout
+- **Decision**: Close the current Speaking stabilization checkpoint as a product baseline, while leaving workflow/docs/skills optimization and deeper Speaking interaction flows for separate future work.
+- **Implemented**:
+  - Speaking active mainland seasonal bank runtime is connected through `src/data/speaking/activeSpeakingBank.ts`, with V1 fallback preserved and saved practice history keeping question snapshots separate from the active draw.
+  - Speaking transcript review uses one editable transcript box for analysis, with audio-backed transcription available as a helper path. Audio transcription reliability remains a known limitation and can still fail or fall back.
+  - Normal Speaking analysis uses structured provider feedback and local markdown/export generation. Provider-generated Speaking `obsidianMarkdown`, learner-facing Band 8+ target labels, certification/self-score target fields, and `riskNoteZh` are not part of ordinary `speaking_analysis`.
+  - Learner-facing Speaking target answers are displayed as learning resources when generated. Valid adjacent half-band ranges from one normal analysis pass render in the score display; otherwise the page shows a single estimated band.
+  - Target headings are pedagogical: current lower bound below 7.0 -> `BAND 7 TARGET ANSWER`; current lower bound at or above 7.0 unless high-band-stable -> `BAND 7+ TARGET ANSWER`; high-band-stable -> `STANDARD ANSWER`.
+  - Normal successful generated targets report neutral `generated_target` diagnostics instead of stale `needs_repair`, `target_failed_or_borderline`, verification failure, or certification failure wording.
+  - Low/mid-band Speaking feedback now has shared coverage/classification guardrails for genuine high-impact grammar, phrase, and task-coverage issues. The family-album Part 2 answer is regression evidence only and must not become hardcoded production logic.
+- **Explicitly unchanged**: no Part 1 topic-thread flow, no Part 3 discussion-thread flow, no pronunciation scoring, no PDF import, no SaaS bank publishing, no Writing Task 1 / Task 2 runtime changes, and no workflow/skills optimization in this closeout.
+- **Future**: prepare a separate project audit package for docs/workflow/skills optimization, then scope Part 1 topic-thread refinement, Part 3 discussion-flow refinement, audio transcription reliability, PDF active-bank publishing, and Writing-specific target consistency/calibration separately.
+
+## [2026-05-23] Speaking Target Answers Are Practice Resources, Not Certified Guarantees
+- **Decision**: Roll back learner-facing Speaking target certification gating. Speaking target answers are pedagogical practice answers, not self-certified Band guarantees.
+- **Implemented**:
+  - Normal Speaking analysis evaluates the learner's submitted transcript and shows the generated `upgradedAnswer` whenever generation succeeds.
+  - Current answer display is an estimated single-question training band or adjacent half-band range returned in the ordinary analysis pass, not a repeated certification result.
+  - The normal learner flow no longer runs a second target-certification / Band 8 confirmation gate before displaying the target answer.
+  - Normal Speaking provider output is structured feedback only; provider-generated `obsidianMarkdown`, target-certification/self-score fields, Band 8+ target expectations, and `riskNoteZh` are no longer requested for ordinary `speaking_analysis`.
+  - Speaking markdown/export is built locally after successful parsing, so a markdown/export field cannot invalidate otherwise usable structured feedback.
+  - Learner UI no longer shows VERIFIED / NOT VERIFIED target status or raw certification/provider errors in the target-answer area.
+  - If the current lower bound is below Band 7.0, the target heading is `BAND 7 TARGET ANSWER`; if it is Band 7.0 or above and not high-band-stable, it is `BAND 7+ TARGET ANSWER`.
+  - `STANDARD ANSWER` remains reserved for the existing high-band-stable condition.
+  - Low/mid-band layered Speaking feedback remains preserved, including MUST FIX, HIGH-IMPACT PHRASE FIXES, and PERSONAL MATERIAL & IDEA EXPANSION.
+- **Explicitly unchanged**: no transcription/audio behavior change, no one-box transcript UI change, no seasonal Speaking bank runtime change, no Writing Task 1 / Task 2 runtime change, no pronunciation scoring, and no Speaking thread-flow work.
+- **Future**: Writing Task 2 target consistency and Writing Task 1 calibration remain separate future audits.
+
+## [2026-05-22] Unified Blind Speaking Score Authority
+- **Decision**: Speaking visible scores and Speaking target certification now use one blind `speaking_score_only` authority for Parts 1, 2, and 3. The score-only prompt receives only part, question, transcript, and part-specific requirements; it is not told target floor, target layer, original score, or whether the text is a generated target.
+- **Superseded 2026-05-23**: This architecture is historical only. The normal Speaking learner flow no longer uses blind score-only certification or Band 8 confirmation to gate target-answer display.
+- **Implemented**:
+  - Speaking analysis first calls `speaking_score_only` and locks the visible current estimate / FC / LR / GRA scores from that result.
+  - Feedback generation may use the locked score for feedback depth and target-layer choice, but any contradictory generated score is overwritten by the blind score authority.
+  - Speaking target certification now blind-scores the generated target text and compares scores locally against Band 7.0+ or Band 8+ thresholds.
+  - Band 8+ target certification requires an additional blind consistency confirmation through the same scorer before the learner-facing verified label is allowed.
+  - Auto mode does not silently certify Speaking targets through DeepSeek when Gemini authoritative scoring is unavailable; targets become not-yet-verified instead.
+  - Learner labels are compact: `BAND 7.0+ TARGET ANSWER · VERIFIED`, `BAND 8+ TARGET ANSWER · VERIFIED`, or `UPGRADED ANSWER · NOT YET VERIFIED...`.
+- **Explicitly unchanged**: no transcription/audio behavior change, no one-box transcript UI change, no pronunciation scoring, no Speaking thread-flow work, and no Writing Task 1 / Task 2 runtime repair in this slice.
+- **Future**: Writing Task 2 should later receive its own target-consistency audit; Task 1 remains separately calibrated/future-scoped.
+
 ## [2026-05-20] High-Band Boundary Target State
 - **Decision**: 7.5/8.0 single-question fluctuation is treated as a `high_band_boundary`, not as a deterministic contradiction, fake pass, or hard failure.
 - **Implemented**:

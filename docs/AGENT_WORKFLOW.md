@@ -56,9 +56,10 @@ Do not merge manually unless explicitly requested.
 
 ## Agent Role Boundary
 
+- Codex is the primary implementation agent when the user is using Codex, but it should still work only from scoped prompts and repo docs/source.
 - Claude Code should **not** perform product UI / information architecture patches unless explicitly approved.
 - For product / UI design work, first consult `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
-- Claude Code may still do documentation, status checks, lint / build verification, and explicitly scoped mechanical edits if later approved.
+- Claude Code remains an optional verification/docs/status helper unless explicitly approved for more.
 
 ## Normal Development Rules
 

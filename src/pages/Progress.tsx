@@ -4,9 +4,6 @@ import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import {
-  speakingPart1,
-  speakingPart2,
-  speakingPart3,
   speakingTopicCategories,
   writingTask1Academic,
   WritingTask1AcademicTaskType,
@@ -15,6 +12,11 @@ import {
   SpeakingTopicCategory,
   WritingTask2TopicCategory,
 } from '@/src/data/questions/bank';
+import {
+  speakingPart1,
+  speakingPart2,
+  speakingPart3,
+} from '@/src/data/speaking/activeSpeakingBank';
 import {
   getPracticeRecords,
   PracticeRecord,

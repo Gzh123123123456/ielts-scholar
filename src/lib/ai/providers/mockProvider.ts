@@ -1,6 +1,7 @@
-import { AIProvider } from './base';
+﻿import { AIProvider } from './base';
 import {
   SpeakingFeedback,
+  SpeakingScoreOnlyResult,
   SpeakingTargetValidationResult,
   WritingFeedback,
   WritingFrameworkCoachFeedback,
@@ -30,38 +31,62 @@ const countWords = (text: string): number =>
   text.trim().split(/\s+/).filter(Boolean).length;
 
 export class MockProvider implements AIProvider {
+  async transcribeSpeakingAudio(params: {
+    part: number;
+    question: string;
+    audioBase64: string;
+    mimeType: string;
+    topic?: string;
+    tags?: string[];
+    cueCard?: string;
+    roughBrowserTranscript?: string;
+    transcriptionHints?: string[];
+  }) {
+    await new Promise(r => setTimeout(r, 700));
+    return {
+      module: 'speaking' as const,
+      operation: 'speaking_audio_transcription' as const,
+      transcript: `[mock audio transcript] This is a mock transcription for Speaking Part ${params.part}. Replace it with what you actually said before analysis.`,
+      uncertaintyNotes: ['Mock provider does not listen to audio. Use Gemini mode for real audio transcription.'],
+      providerDiagnostic: `Mock audio transcription only; received ${params.mimeType || 'unknown audio'} for "${shorten(params.question, 60)}".`,
+    };
+  }
+
   async analyzeSpeaking(params: {
     part: number;
     question: string;
     transcript: string;
+    authoritativeScore?: SpeakingScoreOnlyResult;
     targetRepairFocus?: string;
     targetAttempt?: number;
     priorTargetAnswer?: string;
   }): Promise<SpeakingFeedback> {
     await new Promise(r => setTimeout(r, 1500));
     const transcriptWords = params.transcript.trim().split(/\s+/).filter(Boolean).length;
+    const isPowerCutDemo = params.part === 2
+      && /\b(electricity|power)\b/i.test(params.transcript)
+      && /\b(ultraman|monster|darkness|candle|lighter|pitch black|resourceful|restored)\b/i.test(params.transcript);
+    const isStrongPowerCutDemo = isPowerCutDemo
+      && /\b(honestly|vividly|pitch black|unsettling|imagination|resourceful|restored)\b/i.test(params.transcript);
     const looksHighBand = transcriptWords >= (params.part === 2 ? 170 : params.part === 3 ? 95 : 45)
       && /\b(because|although|for example|for instance|which means|as a result|on the other hand|it depends|what matters is|the reason is)\b/i.test(params.transcript);
     const looksStrong = transcriptWords >= (params.part === 2 ? 140 : params.part === 3 ? 75 : 35)
       && /\b(because|although|for example|for instance|which means|as a result|on the other hand)\b/i.test(params.transcript);
-    const conservativeEstimate = looksHighBand
-      ? 8.0
-      : looksStrong
-      ? 7.0
-      : params.part === 3
-        ? 5.5
-        : transcriptWords < 20
-          ? 5.0
-          : 6.0;
-    const targetFloor = conservativeEstimate >= 7 ? 8 : 7;
-    const targetAnswerLayer = conservativeEstimate >= 8
-      ? 'high_band_stability'
-      : conservativeEstimate >= 7
-        ? 'band_8_plus'
-        : 'band_7_to_7_5';
-    const demoBorderlineTarget = conservativeEstimate >= 7 && conservativeEstimate < 8 && params.part === 3;
-    const targetAnswerStatus = demoBorderlineTarget ? 'borderline' : 'meets_target';
-    const targetSelfScore = demoBorderlineTarget ? 7.5 : conservativeEstimate >= 7 ? 8.0 : 7.0;
+    const conservativeEstimate = params.authoritativeScore?.bandEstimateExcludingPronunciation
+      ?? (isStrongPowerCutDemo
+        ? 7.0
+        : isPowerCutDemo
+          ? 5.5
+          : looksHighBand
+            ? 8.0
+            : looksStrong
+              ? 7.0
+              : params.part === 3
+                ? 5.5
+                : transcriptWords < 20
+                  ? 5.0
+                  : 6.0);
+    const scoreSet = params.authoritativeScore?.scores;
     const hasGrammarDemoError = /\bI likes\b/i.test(params.transcript);
     return {
       mode: 'practice',
@@ -70,53 +95,26 @@ export class MockProvider implements AIProvider {
       question: params.question,
       transcript: params.transcript,
       bandEstimateExcludingPronunciation: conservativeEstimate,
+      bandEstimateRange: isPowerCutDemo ? {
+        lower: isStrongPowerCutDemo ? 7.0 : 5.5,
+        upper: isStrongPowerCutDemo ? 7.5 : 6.0,
+        rationaleZh: isStrongPowerCutDemo
+          ? 'Mock boundary demo: this strong Part 2 story has enough development for a 7.0-7.5 range, excluding pronunciation.'
+          : 'Mock boundary demo: the story has usable personal material, but frequent grammar and collocation issues keep it between adjacent half-bands.',
+      } : undefined,
       estimateRationaleZh: conservativeEstimate >= 7
         ? '可见语言维度已经接近 7.0：有清楚延展、例子或因果关系；发音未评估。'
         : '当前回答仍按单题训练样本保守估计：内容延展、自然口语节奏或 Part 适配还不稳定；发音未评估。',
-      targetBandFloor: targetFloor,
-      targetLayer: conservativeEstimate >= 8
-        ? '高分稳定检查'
-        : conservativeEstimate >= 7 ? 'Band 8+ Examiner-Friendly Answer' : 'Band 7.0+ Target Answer',
-      targetValidationZh: demoBorderlineTarget
-        ? '这版目标答案还没有稳定达到目标层级，需要继续强化推理链和例子。'
-        : conservativeEstimate >= 8
-        ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
-        : conservativeEstimate >= 7
-        ? '升级答案需要明显加强逻辑、例子和自然口语表达，而不是只换高级词。'
-        : '目标答案需要稳定达到 7.0-7.5 层级，不能只是轻微润色。',
-      targetUpgradeFocusZh: params.part === 1
-        ? 'Part 1: compact, natural, specific.'
-        : params.part === 2
-          ? 'Part 2: story spine with setting, scene, action, change, feeling, and meaning.'
-          : 'Part 3: claim, contrast or condition, example, and consequence in spoken style.',
-      targetAnswerFloor: targetFloor,
-      targetAnswerLayer,
-      targetAnswerStatus,
-      targetAnswerSelfScores: {
-        fluencyCoherence: targetSelfScore,
-        lexicalResource: targetSelfScore,
-        grammaticalRangeAccuracy: targetSelfScore,
-        pronunciation: null,
-      },
-      targetAnswerRationaleZh: demoBorderlineTarget
-        ? 'Mock demo: this Part 3 target is intentionally marked borderline because its reasoning depth is still closer to 7.5 than 8.0.'
-        : conservativeEstimate >= 8
-        ? '当前答案本身已经达到高分层；mock 不再制造更高替换答案。'
-        : 'Mock target answer includes a self-check score at or above the target floor.',
-      targetAnswerRepairFocusZh: demoBorderlineTarget
-        ? 'Part 3 需要更清楚的 condition/contrast、例子和 consequence，不能只补一句泛泛影响。'
-        : '',
       highBandStabilityZh: conservativeEstimate >= 8
         ? '保持自然、清晰和限时稳定；不要为了显得更高级而拉长或书面化。'
         : '',
       nextStepZh: conservativeEstimate >= 8
         ? '换一道相近题复述同一素材，检查是否还能稳定输出。'
         : '重新朗读目标答案，再用自己的细节替换其中的示例。',
-      scoreConsistencyNoteZh: '',
       scores: {
-        fluencyCoherence: conservativeEstimate,
-        lexicalResource: Math.min(conservativeEstimate + 0.5, 7.0),
-        grammaticalRangeAccuracy: conservativeEstimate,
+        fluencyCoherence: scoreSet?.fluencyCoherence ?? conservativeEstimate,
+        lexicalResource: scoreSet?.lexicalResource ?? Math.min(conservativeEstimate + 0.5, 7.0),
+        grammaticalRangeAccuracy: scoreSet?.grammaticalRangeAccuracy ?? conservativeEstimate,
         pronunciation: null,
         pronunciationNote: 'Not formally assessed in V1; this is a single-question training estimate only.',
       },
@@ -172,11 +170,6 @@ export class MockProvider implements AIProvider {
             : params.part === 2
               ? 'Part 2: stretch it into a believable story with scene and feeling.'
               : 'Part 3: use it as an example, then explain the wider reason or consequence.',
-          riskNoteZh: params.part === 1
-            ? 'Risk: do not turn this into a long Part 2 story.'
-            : params.part === 2
-              ? 'Risk: do not only say you changed; show the scene and the turning point.'
-              : 'Risk: do not stay at personal story level; generalize the point.',
           reasonZh: '保留了个人成长故事，这在 Part 1 中很真实。',
         },
       ],
@@ -208,20 +201,65 @@ export class MockProvider implements AIProvider {
             : ['How have cities changed in recent years?', 'What changes make a city more liveable?', 'How has public transport changed people\'s lives?'],
         explanationZh: '这个短语可以用来描述城市变化或发展类话题。',
       },
-      obsidianMarkdown: '',
+    } as SpeakingFeedback;
+  }
+
+  async scoreSpeakingOnly(params: {
+    part: number;
+    question: string;
+    transcript: string;
+  }): Promise<SpeakingScoreOnlyResult> {
+    await new Promise(r => setTimeout(r, 450));
+    const transcriptWords = countWords(params.transcript);
+    const isPowerCutDemo = params.part === 2
+      && /\b(electricity|power)\b/i.test(params.transcript)
+      && /\b(ultraman|monster|darkness|candle|lighter|pitch black|resourceful|restored)\b/i.test(params.transcript);
+    const isStrongPowerCutDemo = isPowerCutDemo
+      && /\b(honestly|vividly|pitch black|unsettling|imagination|resourceful|restored)\b/i.test(params.transcript);
+    const looksHighBand = transcriptWords >= (params.part === 2 ? 170 : params.part === 3 ? 95 : 45)
+      && /\b(because|although|for example|for instance|which means|as a result|on the other hand|it depends|what matters is|the reason is)\b/i.test(params.transcript);
+    const looksStrong = transcriptWords >= (params.part === 2 ? 140 : params.part === 3 ? 75 : 35)
+      && /\b(because|although|for example|for instance|which means|as a result|on the other hand)\b/i.test(params.transcript);
+    const estimate = isStrongPowerCutDemo
+      ? 7.0
+      : isPowerCutDemo
+        ? 5.5
+        : looksHighBand
+          ? 8.0
+          : looksStrong
+            ? 7.0
+            : params.part === 3
+              ? 5.5
+              : transcriptWords < 20
+                ? 5.0
+                : 6.0;
+
+    return {
+      module: 'speaking',
+      operation: 'speaking_score_only',
+      part: params.part as 1 | 2 | 3,
+      scores: {
+        fluencyCoherence: estimate,
+        lexicalResource: Math.min(estimate + 0.5, 7.0),
+        grammaticalRangeAccuracy: estimate,
+        pronunciation: null,
+      },
+      bandEstimateExcludingPronunciation: estimate,
+      rationaleZh: isPowerCutDemo
+        ? 'Mock score-only boundary demo for the power-cut answer; pronunciation is excluded.'
+        : 'Mock score-only estimate based on answer length, cohesion markers, and part fit; pronunciation is excluded.',
+      boundaryStatus: estimate >= 8 ? 'borderline_8' : estimate >= 7 ? 'borderline_7' : 'clear',
     };
   }
 
   async validateSpeakingTarget(params: {
     part: number;
     question: string;
-    candidateTargetAnswer: string;
+    transcript: string;
     targetFloor: number;
-    originalCurrentScore?: number;
-    targetLayer?: string;
   }): Promise<SpeakingTargetValidationResult> {
     await new Promise(r => setTimeout(r, 450));
-    const answer = params.candidateTargetAnswer.toLowerCase();
+    const answer = params.transcript.toLowerCase();
     const passesBand8 = params.targetFloor < 8 ||
       /turning point|specific scene|less dependent on cars|quiet reset|natural-language prompts/.test(answer);
     const score = passesBand8 ? params.targetFloor : Math.max(7, params.targetFloor - 0.5);
@@ -938,3 +976,4 @@ Reusable language for this essay
     };
   }
 }
+

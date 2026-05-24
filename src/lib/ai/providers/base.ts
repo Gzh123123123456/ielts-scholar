@@ -1,5 +1,7 @@
 import {
   SpeakingFeedback,
+  SpeakingAudioTranscriptionResult,
+  SpeakingScoreOnlyResult,
   SpeakingTargetValidationResult,
   WritingFeedback,
   WritingFrameworkCoachFeedback,
@@ -12,9 +14,28 @@ export interface SpeakingAnalysisRequest {
   part: number;
   question: string;
   transcript: string;
+  authoritativeScore?: SpeakingScoreOnlyResult;
   targetRepairFocus?: string;
   targetAttempt?: number;
   priorTargetAnswer?: string;
+}
+
+export interface SpeakingScoreOnlyRequest {
+  part: number;
+  question: string;
+  transcript: string;
+}
+
+export interface SpeakingAudioTranscriptionRequest {
+  part: number;
+  question: string;
+  audioBase64: string;
+  mimeType: string;
+  topic?: string;
+  tags?: string[];
+  cueCard?: string;
+  roughBrowserTranscript?: string;
+  transcriptionHints?: string[];
 }
 
 export interface WritingAnalysisRequest {
@@ -31,10 +52,8 @@ export interface WritingAnalysisRequest {
 export interface SpeakingTargetValidationRequest {
   part: number;
   question: string;
-  candidateTargetAnswer: string;
+  transcript: string;
   targetFloor: number;
-  originalCurrentScore?: number;
-  targetLayer?: string;
 }
 
 export interface WritingTargetValidationRequest {
@@ -73,6 +92,10 @@ export interface WritingFrameworkCoachRequest {
 }
 
 export interface AIProvider {
+  transcribeSpeakingAudio?(params: SpeakingAudioTranscriptionRequest): Promise<SpeakingAudioTranscriptionResult | string>;
+
+  scoreSpeakingOnly?(params: SpeakingScoreOnlyRequest): Promise<SpeakingScoreOnlyResult | string>;
+
   analyzeSpeaking(params: SpeakingAnalysisRequest): Promise<SpeakingFeedback | string>;
 
   validateSpeakingTarget?(params: SpeakingTargetValidationRequest): Promise<SpeakingTargetValidationResult | string>;

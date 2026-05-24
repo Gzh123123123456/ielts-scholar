@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
@@ -6,21 +6,22 @@ import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { QuestionBankItem, QuestionBankModal } from '@/src/components/practice/QuestionBankModal';
 import { useApp } from '@/src/context/AppContext';
-import { getAIProviderName, routedAnalyzeSpeaking } from '@/src/lib/ai';
-import { validateSpeakingTargetLoop } from '@/src/lib/ai/targetValidation';
-import { formatBandEstimate, formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from '@/src/lib/bands';
-import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/questions/bank';
+import {
+  canUseRealAudioTranscriptionProvider,
+  getAIProviderName,
+  routedAnalyzeSpeaking,
+  routedTranscribeSpeakingAudio,
+} from '@/src/lib/ai';
+import { buildSpeakingTranscriptionHints } from '@/src/lib/ai/transcriptionHints';
+import { formatBandEstimate, formatConservativeBandEstimate } from '@/src/lib/bands';
+import { speakingPart1, speakingPart2, speakingPart3, SpeakingQuestion } from '@/src/data/speaking/activeSpeakingBank';
 import { SpeakingFeedback } from '@/src/lib/ai/schemas';
 import {
   buildMarkdownExportFilename,
   buildSpeakingTrainingMarkdown,
 } from '@/src/lib/markdownExport';
 import {
-  HIGH_BAND_BOUNDARY_ZH,
-  HIGH_BAND_STABLE_ZH,
-  isHighBandBoundaryState,
   isHighBandStableState,
-  isRepairState,
   resolveSpeakingTargetState,
 } from '@/src/lib/scoreLayer';
 import {
@@ -34,6 +35,8 @@ import {
 } from '@/src/lib/practiceRecords';
 import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Info, BookOpen } from 'lucide-react';
 
+type TranscriptionSource = 'browser' | 'audio' | 'manual';
+
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
 const hasLowSignalSpeakingText = (text: string) => {
@@ -43,6 +46,17 @@ const hasLowSignalSpeakingText = (text: string) => {
   const uniqueWords = new Set(words);
   return normalized.replace(/\s/g, '').length < 12 || (words.length >= 4 && uniqueWords.size <= 2);
 };
+
+const blobToBase64 = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Unable to read audio blob.'));
+    reader.readAsDataURL(blob);
+  });
 
 const isInsufficientSpeakingSample = (
   text: string,
@@ -64,29 +78,29 @@ const isHighBandSpeakingStable = (feedback?: SpeakingFeedback | null) =>
     isHighBandStableState(feedback.targetState || resolveSpeakingTargetState(feedback)),
   );
 
-const hasUnstableSpeakingTarget = (feedback?: SpeakingFeedback | null) =>
-  Boolean(feedback && isRepairState(feedback.targetState || resolveSpeakingTargetState(feedback)));
+const validSpeakingBandRange = (feedback: SpeakingFeedback) => {
+  const range = feedback.bandEstimateRange;
+  if (!range) return null;
+  const lower = Number(range.lower);
+  const upper = Number(range.upper);
+  if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null;
+  if (lower <= 0 || upper <= lower) return null;
+  if (Math.round(lower * 2) !== lower * 2 || Math.round(upper * 2) !== upper * 2) return null;
+  if (Math.round((upper - lower) * 2) !== 1) return null;
+  return { lower, upper, rationaleZh: range.rationaleZh };
+};
+
+const speakingCurrentLowerBound = (feedback: SpeakingFeedback) =>
+  validSpeakingBandRange(feedback)?.lower ?? feedback.bandEstimateExcludingPronunciation;
 
 const speakingTargetHeading = (feedback: SpeakingFeedback) => {
-  const state = feedback.targetState || resolveSpeakingTargetState(feedback);
-  if (state === 'high_band_stable') return 'STANDARD ANSWER';
-  if (state === 'high_band_boundary') return 'HIGH-BAND BOUNDARY TARGET';
-  if (state === 'target_failed_or_borderline') return 'TARGET ANSWER NEEDS REPAIR';
-  if (feedback.bandEstimateExcludingPronunciation < 7) return 'BAND 7.0+ TARGET ANSWER';
-  if (feedback.bandEstimateExcludingPronunciation < 8) return 'BAND 8+ TARGET ANSWER';
-  return feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer');
-
-  if (isHighBandSpeakingStable(feedback)) return '高分稳定检查';
-  if (hasUnstableSpeakingTarget(feedback)) return '目标答案仍需加强';
-  if (feedback.targetAnswerStatus === 'meets_target' && feedback.targetAnswerLayer === 'band_8_plus') {
-    return 'Band 8+ Examiner-Friendly Target';
-  }
-  if (feedback.targetAnswerStatus !== 'meets_target') return '目标答案尚未完成校验';
-  return feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer');
+  if (isHighBandSpeakingStable(feedback)) return 'STANDARD ANSWER';
+  if (speakingCurrentLowerBound(feedback) < 7) return 'BAND 7 TARGET ANSWER';
+  return 'BAND 7+ TARGET ANSWER';
 };
 
 const answerDevelopmentPlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
-  const questionReference = prompt ? `这道题是：“${prompt}”` : '先围绕当前题目补充内容。';
+  const questionReference = prompt ? `Current question: ${prompt}` : 'Build around the current question first.';
   const starter = speakingPart === 1
     ? 'Starter: I would say yes, mainly because...'
     : speakingPart === 2
@@ -94,22 +108,22 @@ const answerDevelopmentPlan = (speakingPart: 1 | 2 | 3, prompt = '') => {
       : 'Starter: In my view, this depends on the situation...';
   const items = speakingPart === 1
     ? [
-      '先给一个直接答案，不要只说 yes/no。',
-      '补充一个具体个人细节，例如时间、地点、人物或频率。',
-      '解释一个简短原因，让回答自然完整。',
+      'Give a direct answer; do not only say yes or no.',
+      'Add one specific personal detail, such as time, place, person, or frequency.',
+      'Explain one short reason so the answer feels complete.',
     ]
     : speakingPart === 2
       ? [
-        '交代背景：人物、地点、时间或事件起点。',
-        '展开 2 个具体细节，而不是只给结论。',
-        '说明你的感受、变化或为什么这件事重要。',
-        '用一个自然结尾收束故事。',
+        'Set the scene: person, place, time, or starting point.',
+        'Develop two concrete details instead of only giving a conclusion.',
+        'Explain your feeling, change, or why it mattered.',
+        'End the story naturally.',
       ]
       : [
-        '先提出清楚观点。',
-        '比较两种情况或两类人群。',
-        '加入一个现实例子支持观点。',
-        '解释这个例子背后的更大影响。',
+        'State a clear position first.',
+        'Compare two situations or two groups of people.',
+        'Add one realistic example.',
+        'Explain the wider consequence behind the example.',
       ];
 
   return { questionReference, starter, items };
@@ -193,6 +207,15 @@ export default function SpeakingPractice() {
   const [step, setStep] = useState<'idle' | 'recording' | 'editing' | 'analyzing' | 'results'>('idle');
   const [transcript, setTranscript] = useState('');
   const [rawTranscript, setRawTranscript] = useState('');
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioMimeType, setAudioMimeType] = useState('');
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
+  const [audioTranscript, setAudioTranscript] = useState('');
+  const [audioTranscriptionError, setAudioTranscriptionError] = useState('');
+  const [audioUncertaintyNotes, setAudioUncertaintyNotes] = useState<string[]>([]);
+  const [audioTranscriptionProvider, setAudioTranscriptionProvider] = useState('');
+  const [audioTranscriptIsMock, setAudioTranscriptIsMock] = useState(false);
+  const [transcriptionSource, setTranscriptionSource] = useState<TranscriptionSource>('manual');
   const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const [feedback, setFeedback] = useState<SpeakingFeedback | null>(null);
@@ -200,11 +223,13 @@ export default function SpeakingPractice() {
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
-  const [apiStatusMessage, setApiStatusMessage] = useState('');
   const [transcriptCleanupNote, setTranscriptCleanupNote] = useState('');
   const [statusMessage, setStatusMessage] = useState<'Ready' | 'Requesting microphone...' | 'Listening...' | 'No speech detected' | 'Transcription unavailable' | 'Mic denied'>('Ready');
 
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<any>(null);
   const transcriptOriginRef = useRef<'speech' | 'manual'>('manual');
   const silenceTimeoutRef = useRef<any>(null);
@@ -218,6 +243,9 @@ export default function SpeakingPractice() {
   const activeSessionRef = useRef<ActiveSpeakingPracticeSession | null>(null);
   const activeAttemptIdRef = useRef(createRecordId('sp'));
   const isRestoringRecordRef = useRef(false);
+  const transcriptionSourceRef = useRef<TranscriptionSource>('manual');
+  const hasManualTranscriptEditRef = useRef(false);
+  const autoAudioTranscriptionAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (!capabilities.speechRecognition && !capabilities.webkitSpeechRecognition) {
@@ -229,8 +257,11 @@ export default function SpeakingPractice() {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
 
-  const getBank = (p: 1 | 2 | 3) => p === 1 ? speakingPart1 : p === 2 ? speakingPart2 : speakingPart3;
+  useEffect(() => {
+    transcriptionSourceRef.current = transcriptionSource;
+  }, [transcriptionSource]);
 
+  const getBank = (p: 1 | 2 | 3) => p === 1 ? speakingPart1 : p === 2 ? speakingPart2 : speakingPart3;
   const buildCurrentSpeakingRecord = (
     status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft',
     feedbackOverride: SpeakingFeedback | null = feedback,
@@ -257,7 +288,9 @@ export default function SpeakingPractice() {
       analyzedAt: status === 'analyzed' ? existing?.analyzedAt || timestamp : existing?.analyzedAt,
       transcript: transcriptOverride,
       rawTranscript: rawTranscript || undefined,
+      audioTranscript: audioTranscript || undefined,
       transcriptOrigin: transcriptOriginRef.current,
+      transcriptSource: transcriptionSource === 'browser' ? 'speech' : transcriptionSource,
       feedback: status === 'provider_failed' ? undefined : feedbackOverride || undefined,
       obsidianMarkdown: status === 'provider_failed' ? undefined : feedbackOverride?.obsidianMarkdown,
     };
@@ -308,6 +341,12 @@ export default function SpeakingPractice() {
     saveActiveSpeakingSession(activeSessionRef.current);
   };
 
+  const cleanupAudioCapture = () => {
+    audioStreamRef.current?.getTracks().forEach(track => track.stop());
+    audioStreamRef.current = null;
+    mediaRecorderRef.current = null;
+  };
+
   const hasMeaningfulAttemptContent = (status?: 'draft' | 'analyzed' | 'provider_failed') =>
     Boolean(transcript.trim() || feedback || status === 'analyzed' || status === 'provider_failed');
 
@@ -348,6 +387,17 @@ export default function SpeakingPractice() {
     });
     setTranscript(record.transcript);
     setRawTranscript(record.rawTranscript || '');
+    setAudioTranscript(record.audioTranscript || '');
+    setAudioBlob(null);
+    setAudioMimeType('');
+    setAudioTranscriptionError('');
+    setAudioUncertaintyNotes([]);
+    setAudioTranscriptionProvider('');
+    setAudioTranscriptIsMock(false);
+    setTranscriptionSource(record.transcriptSource === 'audio' ? 'audio' : record.transcriptSource === 'speech' ? 'browser' : 'manual');
+    transcriptionSourceRef.current = record.transcriptSource === 'audio' ? 'audio' : record.transcriptSource === 'speech' ? 'browser' : 'manual';
+    hasManualTranscriptEditRef.current = false;
+    autoAudioTranscriptionAttemptedRef.current = false;
     transcriptOriginRef.current = record.transcriptOrigin;
     setFeedback(record.feedback || null);
     setFeedbackFallbackUsed(Boolean(record.providerDiagnostic?.fallbackUsed));
@@ -400,7 +450,7 @@ export default function SpeakingPractice() {
     }
     if (!question || step === 'recording' || step === 'analyzing') return;
     persistCurrentSpeakingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
-  }, [part, question, step, transcript, rawTranscript, feedback, providerErrorMessage]);
+  }, [part, question, step, transcript, rawTranscript, audioTranscript, transcriptionSource, feedback, providerErrorMessage]);
 
   const getQuestionTopicKey = (item: SpeakingQuestion) => item.topicCategory || item.topic;
 
@@ -420,6 +470,17 @@ export default function SpeakingPractice() {
     setStep('idle');
     setTranscript('');
     setRawTranscript('');
+    setAudioBlob(null);
+    setAudioMimeType('');
+    setAudioTranscript('');
+    setAudioTranscriptionError('');
+    setAudioUncertaintyNotes([]);
+    setAudioTranscriptionProvider('');
+    setAudioTranscriptIsMock(false);
+    setTranscriptionSource('manual');
+    transcriptionSourceRef.current = 'manual';
+    hasManualTranscriptEditRef.current = false;
+    autoAudioTranscriptionAttemptedRef.current = false;
     setFeedback(null);
     setFeedbackFallbackUsed(false);
     setTimer(0);
@@ -485,6 +546,17 @@ export default function SpeakingPractice() {
     activeAttemptIdRef.current = createRecordId('sp');
     setTranscript('');
     setRawTranscript('');
+    setAudioBlob(null);
+    setAudioMimeType('');
+    setAudioTranscript('');
+    setAudioTranscriptionError('');
+    setAudioUncertaintyNotes([]);
+    setAudioTranscriptionProvider('');
+    setAudioTranscriptIsMock(false);
+    setTranscriptionSource('manual');
+    transcriptionSourceRef.current = 'manual';
+    hasManualTranscriptEditRef.current = false;
+    autoAudioTranscriptionAttemptedRef.current = false;
     setFeedback(null);
     setFeedbackFallbackUsed(false);
     setProviderDiagnostic(null);
@@ -511,12 +583,28 @@ export default function SpeakingPractice() {
     }
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     if (timerRef.current) clearInterval(timerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (e) { /* may already be stopped */ }
+    }
+    cleanupAudioCapture();
+    audioChunksRef.current = [];
     clearActiveSpeakingAttempt(part);
     activeAttemptIdRef.current = createRecordId('sp');
     setQuestion(selected);
     setStep('idle');
     setTranscript('');
     setRawTranscript('');
+    setAudioBlob(null);
+    setAudioMimeType('');
+    setAudioTranscript('');
+    setAudioTranscriptionError('');
+    setAudioUncertaintyNotes([]);
+    setAudioTranscriptionProvider('');
+    setAudioTranscriptIsMock(false);
+    setTranscriptionSource('manual');
+    transcriptionSourceRef.current = 'manual';
+    hasManualTranscriptEditRef.current = false;
+    autoAudioTranscriptionAttemptedRef.current = false;
     setFeedback(null);
     setFeedbackFallbackUsed(false);
     setProviderDiagnostic(null);
@@ -524,7 +612,6 @@ export default function SpeakingPractice() {
     setIsRecording(false);
     setStatusMessage('Ready');
     setProviderErrorMessage('');
-    setApiStatusMessage('');
     setTranscriptCleanupNote('');
     setRestoreMessage('');
     transcriptOriginRef.current = 'manual';
@@ -535,19 +622,59 @@ export default function SpeakingPractice() {
   const startRecording = async () => {
     setStatusMessage('Requesting microphone...');
     try {
-      // Explicitly request mic access
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // We check permission but don't hold the stream if we're not saving audio in V1
-      stream.getTracks().forEach(track => track.stop());
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+      setAudioBlob(null);
+      setAudioMimeType('');
+      setAudioTranscript('');
+      setAudioTranscriptionError('');
+      setAudioUncertaintyNotes([]);
+      setAudioTranscriptionProvider('');
+      setAudioTranscriptIsMock(false);
+      hasManualTranscriptEditRef.current = false;
+      autoAudioTranscriptionAttemptedRef.current = false;
+
+      if (window.MediaRecorder) {
+        const preferredMimeType = [
+          'audio/webm;codecs=opus',
+          'audio/webm',
+          'audio/mp4',
+          'audio/ogg;codecs=opus',
+        ].find(type => MediaRecorder.isTypeSupported(type));
+        const recorder = preferredMimeType
+          ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+          : new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+        recorder.ondataavailable = event => {
+          if (event.data.size > 0) audioChunksRef.current.push(event.data);
+        };
+        recorder.onstop = () => {
+          const mimeType = recorder.mimeType || preferredMimeType || 'audio/webm';
+          const chunks = audioChunksRef.current;
+          if (chunks.length) {
+            setAudioBlob(new Blob(chunks, { type: mimeType }));
+            setAudioMimeType(mimeType);
+          }
+          cleanupAudioCapture();
+        };
+        recorder.onerror = event => {
+          addDebugLog(`MediaRecorder error: ${event}`);
+          setAudioTranscriptionError('Audio recording failed. Browser transcript and manual editing are still available.');
+          cleanupAudioCapture();
+        };
+        recorder.start();
+        addDebugLog('MediaRecorder audio capture started.');
+      } else {
+        setAudioTranscriptionError('MediaRecorder is unavailable in this browser. Browser transcript and manual editing are still available.');
+        addDebugLog('MediaRecorder unavailable; continuing with browser transcript only.');
+      }
       
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SpeechRecognition) {
         setStatusMessage('Transcription unavailable');
-        setStep('editing');
-        return;
-      }
-
-      const attachRecognitionHandlers = (recognition: any) => {
+      } else {
+        const attachRecognitionHandlers = (recognition: any) => {
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-US';
@@ -575,8 +702,14 @@ export default function SpeakingPractice() {
         if (finalTranscript) {
           hasSpeechResultRef.current = true;
           transcriptOriginRef.current = 'speech';
+          setTranscriptionSource(prev => {
+            const next = prev === 'manual' ? 'browser' : prev;
+            transcriptionSourceRef.current = next;
+            return next;
+          });
           setTranscript(prev => (prev + ' ' + finalTranscript).trim());
           setRawTranscript(prev => (prev + ' ' + finalTranscript).trim());
+          addDebugLog('Browser transcript captured');
         }
       };
 
@@ -659,6 +792,7 @@ export default function SpeakingPractice() {
           throw e;
         }
       }
+      }
       setIsRecording(true);
       setStep('recording');
       setTimer(0);
@@ -669,6 +803,7 @@ export default function SpeakingPractice() {
       fatalSpeechErrorRef.current = true;
       intentionalSpeechStopRef.current = true;
       recognitionRunningRef.current = false;
+      cleanupAudioCapture();
       setStatusMessage('Mic denied');
       setStep('editing');
     }
@@ -700,6 +835,17 @@ export default function SpeakingPractice() {
     // Clear state
     setTranscript('');
     setRawTranscript('');
+    setAudioBlob(null);
+    setAudioMimeType('');
+    setAudioTranscript('');
+    setAudioTranscriptionError('');
+    setAudioUncertaintyNotes([]);
+    setAudioTranscriptionProvider('');
+    setAudioTranscriptIsMock(false);
+    setTranscriptionSource('manual');
+    transcriptionSourceRef.current = 'manual';
+    hasManualTranscriptEditRef.current = false;
+    autoAudioTranscriptionAttemptedRef.current = false;
     setFeedback(null);
     setTimer(0);
     setIsRecording(false);
@@ -718,13 +864,123 @@ export default function SpeakingPractice() {
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch (e) { /* may already be stopped */ }
     }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (e) { cleanupAudioCapture(); }
+    } else {
+      cleanupAudioCapture();
+    }
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     clearInterval(timerRef.current);
     setIsRecording(false);
     setStep('editing');
     setStatusMessage('Ready');
+    if (!audioBlob && !mediaRecorderRef.current) {
+      setTranscriptCleanupNote('Browser transcription used.');
+    }
     addDebugLog("Recording stopped");
   };
+
+  const transcribeAudio = async () => {
+    if (!audioBlob || isTranscribingAudio) return;
+    if (!realAudioTranscriptionAvailable) {
+      const message = getAIProviderName().startsWith('mock')
+        ? 'Mock transcription is for development only; browser transcript is used.'
+        : 'Audio transcription unavailable; browser transcript used. Please check before analysis.';
+      setAudioTranscriptionError(message);
+      setTranscriptCleanupNote(message);
+      addDebugLog('Audio transcription unavailable');
+      return;
+    }
+    setIsTranscribingAudio(true);
+    setAudioTranscriptionError('');
+    setAudioTranscript('');
+    setAudioUncertaintyNotes([]);
+    setAudioTranscriptionProvider('');
+    setAudioTranscriptIsMock(false);
+    setProviderDiagnostic(null);
+    setTranscriptCleanupNote('Improving transcript from audio...');
+    addDebugLog('Audio transcript requested');
+    try {
+      const audioBase64 = await blobToBase64(audioBlob);
+      const transcriptionHints = buildSpeakingTranscriptionHints({
+        part,
+        question: question?.question || '',
+        topic: question?.topicCategory || question?.topic,
+        tags: question?.tags,
+        cueCard: question?.cueCard,
+      });
+      const { feedback: result, diagnostic, route } = await routedTranscribeSpeakingAudio({
+        part,
+        question: question?.question || '',
+        audioBase64,
+        mimeType: audioMimeType || audioBlob.type || 'audio/webm',
+        topic: question?.topicCategory || question?.topic,
+        tags: question?.tags,
+        cueCard: question?.cueCard,
+        roughBrowserTranscript: rawTranscript,
+        transcriptionHints,
+      });
+      setProviderDiagnostic(diagnostic);
+      setAudioTranscriptionProvider(route.providerName);
+
+      if (diagnostic.failureKind || !result.transcript.trim()) {
+        const message = route.providerName === 'mock'
+          ? 'Mock transcription is for development only; browser transcript is used.'
+          : 'Audio transcription unavailable; browser transcript used. Please check before analysis.';
+        setAudioTranscriptionError(message);
+        setTranscriptCleanupNote('Audio transcription unavailable; browser transcript used. Please check before analysis.');
+        addDebugLog('Audio transcription unavailable');
+        return;
+      }
+
+      const cleanedAudioTranscript = result.transcript.trim();
+      const isMockAudioTranscript = route.providerName === 'mock' || /\[mock audio transcript\]/i.test(cleanedAudioTranscript);
+      setAudioTranscript(cleanedAudioTranscript);
+      setAudioUncertaintyNotes(result.uncertaintyNotes || []);
+      addDebugLog('Audio transcript received');
+      setAudioTranscriptIsMock(isMockAudioTranscript);
+
+      if (isMockAudioTranscript) {
+        const message = 'Mock transcription is for development only; browser transcript is used.';
+        setAudioTranscriptionError(message);
+        setTranscriptCleanupNote(message);
+        return;
+      }
+
+      if (hasManualTranscriptEditRef.current) {
+        setTranscriptCleanupNote('Audio transcript is ready, but your manual edits were preserved.');
+        return;
+      }
+
+      setTranscript(cleanedAudioTranscript);
+      setTranscriptCleanupNote('Audio transcription used. Please quickly check before analysis.');
+      setTranscriptionSource('audio');
+      transcriptionSourceRef.current = 'audio';
+      transcriptOriginRef.current = 'manual';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Audio transcription unavailable; browser transcript used. Please check before analysis.';
+      setAudioTranscriptionError(message);
+      setTranscriptCleanupNote('Audio transcription unavailable; browser transcript used. Please check before analysis.');
+      addDebugLog('Audio transcription unavailable');
+    } finally {
+      setIsTranscribingAudio(false);
+    }
+  };
+
+  useEffect(() => {
+    if (step !== 'editing' || !audioBlob || autoAudioTranscriptionAttemptedRef.current) return;
+    autoAudioTranscriptionAttemptedRef.current = true;
+    if (!canUseRealAudioTranscriptionProvider()) {
+      const message = getAIProviderName().startsWith('mock')
+        ? 'Mock transcription is for development only; browser transcript is used.'
+        : 'Audio transcription unavailable; browser transcript used. Please check before analysis.';
+      setTranscriptCleanupNote(message);
+      setAudioTranscriptionError(message);
+      addDebugLog('Audio transcription unavailable');
+      return;
+    }
+    void transcribeAudio();
+  }, [audioBlob, step]);
 
   const analyze = async () => {
     if (!transcript.trim()) return;
@@ -733,27 +989,22 @@ export default function SpeakingPractice() {
       setFeedback(null);
       setFeedbackFallbackUsed(false);
     }
-    const cleanup = { transcript: transcript.trim(), corrections: [] as string[] };
-    const cleanedTranscript = cleanup.transcript;
-    if (cleanup.corrections.length) {
-      setTranscript(cleanedTranscript);
-      setTranscriptCleanupNote(`已自动修正可能的转写误差：${cleanup.corrections.join('；')}`);
-    } else {
-      setTranscriptCleanupNote('');
-    }
+    const cleanedTranscript = transcript.trim();
+    if (cleanedTranscript !== transcript) setTranscript(cleanedTranscript);
+    setTranscriptCleanupNote('');
     setStep('analyzing');
     setProviderErrorMessage('');
-    setApiStatusMessage('');
     setProviderDiagnostic(null);
     addDebugLog("Starting AI analysis flow...");
+    addDebugLog("Analyzing final reviewed transcript");
+    if (rawTranscript.trim()) addDebugLog("Raw browser transcript preserved separately.");
     try {
-      const { feedback: result, diagnostic, route } = await routedAnalyzeSpeaking({
+      const { feedback: result, diagnostic } = await routedAnalyzeSpeaking({
         part,
         question: question?.question || '',
-        transcript: cleanedTranscript
+        transcript: cleanedTranscript,
       }, isInsufficientSpeakingSample(cleanedTranscript, part));
       setProviderDiagnostic(diagnostic);
-      setApiStatusMessage(route.fallbackReason || route.learnerReason);
 
       if (diagnostic.failureKind === 'provider_unavailable') {
         setFeedbackFallbackUsed(false);
@@ -818,15 +1069,8 @@ export default function SpeakingPractice() {
         return;
       }
 
-      let resultFeedback = result;
-      let finalDiagnostic = diagnostic;
-      if (!isInsufficientSpeakingSample(cleanedTranscript, part, result)) {
-        const validation = await validateSpeakingTargetLoop(result, false);
-        resultFeedback = validation.feedback;
-        finalDiagnostic = validation.diagnostic || diagnostic;
-        validation.diagnostics.forEach(item => setProviderDiagnostic(item));
-        if (!validation.diagnostics.length && finalDiagnostic !== diagnostic) setProviderDiagnostic(finalDiagnostic);
-      }
+      const resultFeedback = result;
+      const finalDiagnostic = diagnostic;
 
       setFeedbackFallbackUsed(diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed);
       setFeedback(resultFeedback);
@@ -851,7 +1095,9 @@ export default function SpeakingPractice() {
         question: question?.question,
         transcript: cleanedTranscript,
         rawTranscript: rawTranscript || undefined,
+        audioTranscript: audioTranscript || undefined,
         transcriptOrigin: transcriptOriginRef.current,
+        transcriptSource: transcriptionSource === 'browser' ? 'speech' : transcriptionSource,
         feedback: resultFeedback,
         providerDiagnostic: summarizeDiagnostic(finalDiagnostic),
       });
@@ -864,7 +1110,6 @@ export default function SpeakingPractice() {
       addDebugLog(`Analysis Error: ${error}`);
       setFeedbackFallbackUsed(false);
       setStep('editing');
-      setApiStatusMessage('');
     }
   };
 
@@ -892,21 +1137,31 @@ export default function SpeakingPractice() {
   };
 
   const isMock = getAIProviderName() !== 'gemini';
-  const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
-  const targetState = feedback ? feedback.targetState || resolveSpeakingTargetState(feedback) : undefined;
-  const isHighBandStable = isHighBandSpeakingStable(feedback);
-  const isHighBandBoundary = isHighBandBoundaryState(targetState);
-  const targetNeedsRepair = hasUnstableSpeakingTarget(feedback);
-  const canShowValidatedSpeakingTarget = Boolean(
-    feedback &&
-    (feedback.targetAnswerStatus === 'meets_target' || isHighBandStable) &&
-    !targetNeedsRepair &&
-    (feedback.upgradedAnswer.trim() || isHighBandStable),
+  const realAudioTranscriptionAvailable = canUseRealAudioTranscriptionProvider();
+  const canRetryAudioTranscription = Boolean(audioBlob) && realAudioTranscriptionAvailable && !isTranscribingAudio;
+  const transcriptStatus = transcriptCleanupNote || (
+    transcriptionSource === 'audio'
+      ? 'Audio transcription used. Please quickly check before analysis.'
+      : transcriptionSource === 'browser'
+        ? 'Browser transcription used.'
+        : 'Edited manually.'
   );
+  const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
+  const isHighBandStable = isHighBandSpeakingStable(feedback);
+  const speakingRange = feedback ? validSpeakingBandRange(feedback) : null;
+  const scoreDisplayLabel = speakingRange ? 'Estimated Range' : 'Estimated Band';
+  const scoreDisplayValue = speakingRange
+    ? `${formatBandEstimate(speakingRange.lower)}–${formatBandEstimate(speakingRange.upper)}`
+    : formatConservativeBandEstimate(feedback?.bandEstimateExcludingPronunciation);
+  const currentLowerBound = feedback ? speakingCurrentLowerBound(feedback) : 0;
+  const canShowSpeakingTargetAnswer = Boolean(feedback?.upgradedAnswer.trim() || isHighBandStable);
   const criticalErrors = feedback && isHighBandStable ? [] : feedback?.fatalErrors || [];
   const optionalPolish = feedback && isHighBandStable
     ? feedback.naturalnessHints.slice(0, 2)
     : feedback?.naturalnessHints || [];
+  const phraseFixSectionLabel = currentLowerBound < 7
+    ? 'HIGH-IMPACT PHRASE FIXES'
+    : 'OPTIONAL POLISH';
   const groundedIdeaUpgrades = feedback?.band9Refinements.filter(item => {
     const transcriptSource = feedback.transcript.toLowerCase();
     const quotedPhrases = Array.from(item.observation.matchAll(/["“](.+?)["”]/g)).map(match => match[1].toLowerCase());
@@ -973,12 +1228,6 @@ export default function SpeakingPractice() {
           </div>
         </div>
       )}
-      {apiStatusMessage && (
-        <div className="mb-6 p-3 bg-paper-ink/5 border border-paper-ink/10 text-paper-ink/65 text-sm rounded-sm font-sans">
-          {apiStatusMessage}
-        </div>
-      )}
-
       <div className="practice-workspace grid lg:grid-cols-12 gap-8 items-start mb-12">
         <div className={`lg:col-span-12 ${step === 'results' ? 'xl:col-span-12 space-y-6' : 'xl:col-span-12 xl:grid xl:grid-cols-[minmax(360px,0.9fr)_minmax(460px,1.1fr)] xl:gap-6 xl:items-start space-y-6 xl:space-y-0'}`}>
           <PaperCard className="relative overflow-hidden">
@@ -1025,9 +1274,6 @@ export default function SpeakingPractice() {
               )}
               {step === 'editing' && (
                 <>
-                  <SerifButton onClick={analyze} disabled={!transcript.trim()} className="flex items-center gap-2 px-8">
-                    <Send className="w-4 h-4" /> Analyze
-                  </SerifButton>
                   <SerifButton onClick={resetCurrentAttempt} variant="outline" className="flex items-center gap-2">
                     <RefreshCcw className="w-4 h-4" /> Retry
                   </SerifButton>
@@ -1057,7 +1303,7 @@ export default function SpeakingPractice() {
               <div className="flex items-center justify-between mb-4 border-b border-paper-ink/5 pb-2">
                 <div className="flex items-center gap-3">
                   <h3 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center gap-2">
-                    <Edit3 className="w-3 h-3" /> {step === 'editing' ? 'Edit Your Transcript' : 'My Transcript'}
+                    <Edit3 className="w-3 h-3" /> TRANSCRIPT
                   </h3>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1076,11 +1322,19 @@ export default function SpeakingPractice() {
                   )}
                 </div>
               </div>
+              <div className="mb-3 font-sans">
+                <p className="text-xs leading-5 text-paper-ink/55">
+                  Please quickly check the transcript before analysis.
+                </p>
+              </div>
               <textarea
                 value={transcript}
                 onChange={(e) => {
                   setTranscript(e.target.value);
                   setTranscriptCleanupNote('');
+                  setTranscriptionSource('manual');
+                  transcriptionSourceRef.current = 'manual';
+                  hasManualTranscriptEditRef.current = true;
                   transcriptOriginRef.current = 'manual';
                 }}
                 disabled={step === 'recording' || step === 'results'}
@@ -1088,15 +1342,64 @@ export default function SpeakingPractice() {
                 className="w-full min-h-[300px] xl:min-h-[420px] bg-transparent border border-transparent rounded-sm font-serif text-lg leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
               />
               {step === 'editing' && (
-                <p className="mt-2 text-[11px] leading-5 text-paper-ink/45 font-sans">
-                  Review quick recognition mistakes before analysis. Analyze uses this edited transcript.
-                  {rawTranscript && rawTranscript !== transcript ? ' Raw browser text is preserved in the saved record.' : ''}
-                </p>
-              )}
-              {transcriptCleanupNote && (
-                <p className="mt-2 text-[11px] leading-5 text-paper-ink/45 font-sans">
-                  {transcriptCleanupNote}
-                </p>
+                <div className="mt-4 space-y-3 border-t border-paper-ink/10 pt-4 font-sans">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs leading-5 text-paper-ink/55">
+                      {transcriptStatus}
+                    </p>
+                    {canRetryAudioTranscription && (
+                      <button
+                        type="button"
+                        onClick={transcribeAudio}
+                        className="text-xs font-bold uppercase tracking-widest text-accent-terracotta hover:text-paper-ink"
+                      >
+                        Retry transcription
+                      </button>
+                    )}
+                  </div>
+
+                  <SerifButton onClick={analyze} disabled={!transcript.trim()} className="flex items-center gap-2 px-8">
+                    <Send className="w-4 h-4" /> Analyze
+                  </SerifButton>
+
+                  {(rawTranscript.trim() || audioTranscript.trim() || audioUncertaintyNotes.length > 0 || audioTranscriptionError) && (
+                    <details className="border border-paper-ink/10 bg-paper-ink/[0.02] p-3 text-xs leading-5 text-paper-ink/55">
+                      <summary className="cursor-pointer font-bold text-paper-ink/60">
+                        Transcription details
+                      </summary>
+                      {rawTranscript.trim() && (
+                        <div className="mt-3">
+                          <p className="font-bold uppercase tracking-widest text-paper-ink/40">Browser</p>
+                          <p className="mt-1 whitespace-pre-wrap font-serif text-sm leading-7 text-paper-ink/70">
+                            {rawTranscript}
+                          </p>
+                        </div>
+                      )}
+                      {audioTranscript.trim() && (
+                        <div className="mt-3">
+                          <p className="font-bold uppercase tracking-widest text-paper-ink/40">
+                            Audio {audioTranscriptionProvider ? `(${audioTranscriptionProvider})` : ''}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap font-serif text-sm leading-7 text-paper-ink/70">
+                            {audioTranscript}
+                          </p>
+                        </div>
+                      )}
+                      {audioUncertaintyNotes.length > 0 && (
+                        <ul className="mt-3 list-disc pl-5 text-paper-ink/50">
+                          {audioUncertaintyNotes.map((note, index) => (
+                            <li key={`${note}-${index}`}>{note}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {audioTranscriptionError && (
+                        <p className={`mt-3 ${audioTranscriptIsMock ? 'text-amber-900' : 'text-red-800'}`}>
+                          {audioTranscriptionError}
+                        </p>
+                      )}
+                    </details>
+                  )}
+                </div>
               )}
             </PaperCard>
           )}
@@ -1104,7 +1407,7 @@ export default function SpeakingPractice() {
           {step === 'analyzing' && (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
               <RefreshCcw className="w-6 h-6 animate-spin text-accent-terracotta/40" />
-              <p className="font-serif text-paper-ink/45 text-sm">Checking the training estimate and target layer...</p>
+              <p className="font-serif text-paper-ink/45 text-sm">Checking your training estimate and feedback...</p>
             </div>
           )}
         </div>
@@ -1116,16 +1419,16 @@ export default function SpeakingPractice() {
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-sm font-bold tracking-wide mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">LANGUAGE PERFORMANCE</h3>
                 <div className="flex flex-wrap items-end gap-4 mb-8">
-                  <span className="text-7xl font-bold text-accent-terracotta leading-none">{formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)}</span>
+                  <span className="text-7xl font-bold text-accent-terracotta leading-none">{scoreDisplayValue}</span>
                   <div className="flex flex-col pb-2">
-                    <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">Single-question training estimate</span>
-                    <span className="text-xs text-paper-ink/45">约 {formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)}，不含发音；短样本按保守值处理。</span>
+                    <span className="text-sm text-paper-ink/60 font-bold uppercase tracking-widest">{scoreDisplayLabel}</span>
+                    <span className="text-xs text-paper-ink/45">Single-question Speaking training estimate; pronunciation is not formally scored.</span>
                   </div>
                 </div>
                 
-                {(feedback.scoreConsistencyNoteZh || feedback.estimateRationaleZh) && (
+                {(speakingRange?.rationaleZh || feedback.scoreConsistencyNoteZh || feedback.estimateRationaleZh) && (
                   <p className="mb-5 text-sm leading-7 text-paper-ink/60">
-                    {feedback.scoreConsistencyNoteZh || feedback.estimateRationaleZh}
+                    {speakingRange?.rationaleZh || feedback.scoreConsistencyNoteZh || feedback.estimateRationaleZh}
                   </p>
                 )}
 
@@ -1193,7 +1496,7 @@ export default function SpeakingPractice() {
 
                 {optionalPolish.length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="text-sm font-bold tracking-wide text-paper-ink/65 ml-1 border-b border-paper-ink/10 pb-2">OPTIONAL POLISH</h4>
+                  <h4 className="text-sm font-bold tracking-wide text-paper-ink/65 ml-1 border-b border-paper-ink/10 pb-2">{phraseFixSectionLabel}</h4>
                   {optionalPolish.length === 0 ? (
                     <PaperCard className="p-5 border-l-2 border-l-paper-ink/20">
                       <p className="text-lg leading-8 text-paper-ink/75 bg-paper-ink/[0.04] border border-paper-ink/10 p-4 rounded-sm">
@@ -1222,9 +1525,6 @@ export default function SpeakingPractice() {
                     IDEA & EXPRESSION UPGRADE
                   </h4>
                   <PaperCard className="border-l-2 border-l-paper-ink/30 bg-paper-50">
-                    <p className="text-sm font-sans uppercase tracking-widest text-paper-ink/35 mb-4">
-                      Use only evidence from your answer; skip generic upgrades when there is no source phrase.
-                    </p>
                     <div className="grid gap-4 lg:grid-cols-2">
                       {groundedIdeaUpgrades.map((item, index) => (
                         <div key={index} className="border border-paper-ink/10 bg-paper-ink/[0.03] p-4 rounded-sm">
@@ -1297,35 +1597,13 @@ export default function SpeakingPractice() {
               )}
 
               <PaperCard className={`bg-paper-50 !p-8 md:!p-10 border-l-2 ${
-                feedback.targetAnswerStatus === 'meets_target'
-                  ? 'border-l-green-700'
-                  : targetNeedsRepair
-                    ? 'border-l-red-800'
-                    : 'border-l-paper-ink/20'
+                isHighBandStable ? 'border-l-green-700' : 'border-l-paper-ink/20'
               }`}>
                 <div>
                   <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
                     {shouldShowDevelopmentPlan
                       ? 'Band 7.0+ Starter Target'
                       : speakingTargetHeading(feedback)}
-                    {!shouldShowDevelopmentPlan && (
-                      <span className="block mt-2 text-xs normal-case tracking-normal text-paper-ink/45">
-                        {isHighBandStable
-                          ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
-                          : isHighBandBoundary
-                            ? HIGH_BAND_BOUNDARY_ZH
-                          : targetNeedsRepair
-                            ? '这版目标答案还没有稳定达到目标层级，需要继续强化。'
-                            : getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}
-                      </span>
-                    )}
-                    {!shouldShowDevelopmentPlan && (feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh) && (
-                      <span className="block mt-2 text-sm normal-case tracking-normal leading-7 text-paper-ink/55">
-                        {isHighBandBoundary
-                          ? HIGH_BAND_BOUNDARY_ZH
-                          : feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetUpgradeFocusZh || feedback.targetValidationZh}
-                      </span>
-                    )}
                   </h4>
                   {shouldShowDevelopmentPlan ? (
                     <div className="max-w-5xl space-y-5 text-paper-ink">
@@ -1356,17 +1634,13 @@ export default function SpeakingPractice() {
                           {feedback.nextStepZh || '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'}
                         </p>
                       )}
-                      {canShowValidatedSpeakingTarget ? (
+                      {canShowSpeakingTargetAnswer ? (
                         <p className="text-xl md:text-2xl leading-10 text-paper-ink font-serif whitespace-pre-wrap">
                           {feedback.upgradedAnswer.trim() || feedback.transcript}
                         </p>
                       ) : (
                         <p className="text-base leading-8 text-paper-ink/65">
-                          {isHighBandStable
-                            ? '当前回答已达到目标层级。这里不需要生成替换答案。'
-                            : targetNeedsRepair
-                              ? '这版目标答案还没有稳定达到目标层级，暂不作为成功目标答案展示。'
-                              : '目标答案尚未完成独立校验，暂不标记为已达标。'}
+                          Unable to generate a target answer. Please retry.
                         </p>
                       )}
                     </div>

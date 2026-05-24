@@ -1,9 +1,21 @@
-# Current State (V1.3 closeout)
+# Current State (V1.3 Speaking closeout)
 
-_Last updated: 2026-05-20_
+_Last updated: 2026-05-24_
+
+## Current Snapshot
+
+- Branch/sync state must be verified with `git status` and `git log` before work; do not treat commit hashes in docs as permanent truth.
+- Codex is currently the primary implementation agent for scoped product slices.
+- Claude Code, if used, is only an optional verifier/docs/status helper unless explicitly approved.
+- No active product feature is currently in progress unless the user gives a new scoped task.
+- Task 2 annotated essay overlay baseline is implemented; future work is polish/consolidation only unless explicitly scoped.
+- Speaking 2026 May-Aug mainland active bank runtime is integrated through an adapter with V1 fallback and stable IDs.
+- Task 1 target output is conservative/generated; full calibration remains future work and needs real Task 1 samples.
+- Provider routing, server/auth/database/RAG, advanced ASR, pronunciation scoring, export behavior, and history architecture should not change unless explicitly scoped.
+- For code navigation, read `docs/CODEBASE_MAP.md`.
 
 ## Branch / Sync State
-- Local `main` and `origin/main` are synced at `b650827 Add high-band boundary feedback state` after the 2026-05-20 daily closeout.
+- Verify local branch/sync state with git commands before work. The last documented closeout said local `main` and `origin/main` were synced after the 2026-05-20 daily closeout, but docs can lag behind the actual repository.
 - Today's completed work includes independent target validation follow-ups plus the high-band boundary / score-layer semantic model.
 - `codex/speaking-reliability-uplift` has been integrated.
 - `codex/speaking-single-attempt-export` and `codex/task2-command-feedback` were inspected and kept unapplied as superseded.
@@ -27,22 +39,32 @@ _Last updated: 2026-05-20_
   - Vite/client API keys are local-personal prototype only and are not production-safe.
 - No RAG pipeline is connected.
 - V1 pronunciation is **not formally assessed**.
-- Global target policy is active:
+- Global target policy is active, with Speaking using the simplified target-answer flow recorded below:
   - current estimates stay conservative and honest;
-  - target answers/model answers/improved reports are minimum Band 7.0+;
-  - if the current estimate is 7.0 or above, the next target is Band 8+ Examiner-Friendly;
+  - Writing Task 1 / Task 2 target reports and models keep the existing minimum Band 7.0+ / Band 8+ training policy;
+  - Speaking current answers show either one estimated training band or a valid adjacent half-band range from one ordinary analysis pass;
+  - Speaking target headings are local and pedagogical: current lower bound below 7.0 -> `BAND 7 TARGET ANSWER`; current lower bound at or above 7.0, unless high-band-stable -> `BAND 7+ TARGET ANSWER`; high-band-stable -> `STANDARD ANSWER`;
+  - Speaking normal learner flow has no learner-facing Band 8+, certification, VERIFIED / NOT VERIFIED, or target self-score flow;
   - learner-facing Band 9 and Target Band 7.5 / 7.5-8.0 labels are not default target tiers;
   - current scores must not be inflated to match target outputs;
-  - Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution, not more formal or more essay-like language by default.
-- Shared target-state semantics are active across Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2:
+  - stronger targets mean stronger logic, precision, examples, naturalness, and examiner-friendly execution, not more formal or more essay-like language by default.
+- Shared target-state semantics remain available across Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2:
   - `needs_repair`
   - `generated_target`
   - `target_failed_or_borderline`
   - `high_band_boundary`
   - `high_band_stable`
+- In the current normal successful Speaking learner flow, generated target answers use neutral `generated_target` semantics; `needs_repair` and certification-style failure wording must not appear merely because no independent target certification ran.
 - A 7.5/8.0 split between normal analysis and independent validation is treated as a high-band boundary: close to target, not a hard failure or fake stable success.
 - `STANDARD ANSWER` is reserved for 8.0+ / high-band stable outputs.
 - Generated Task 1 target reports remain conservative and are not independently validated; full Task 1 calibration remains future work.
+- Speaking Part 1 / Part 2 / Part 3 now use the same simplified learner-facing model: the current answer shows an estimated single-question training band or adjacent half-band range from one ordinary Speaking analysis pass, and generated target answers are shown whenever `upgradedAnswer` is present.
+- Speaking target headings are pedagogical: lower bound below 7.0 -> `BAND 7 TARGET ANSWER`; lower bound at or above 7.0 -> `BAND 7+ TARGET ANSWER`; existing high-band-stable -> `STANDARD ANSWER`.
+- Normal Speaking learner UI does not show `BAND 8+ TARGET ANSWER`, `ADVANCED TARGET ANSWER`, VERIFIED / NOT VERIFIED states, target-certification failures, or provider method errors.
+- Normal Speaking provider responses return structured feedback only. Providers no longer generate `obsidianMarkdown`, Band 8+/certification/self-score target fields, or `riskNoteZh` for ordinary `speaking_analysis`; markdown export is built locally after successful parsing.
+- Accepted 2026-05-24 runtime evidence: a real lower-band Part 2 result rendered a valid adjacent range as `5.5-6.0 ESTIMATED RANGE`, showed a complete `BAND 7 TARGET ANSWER`, and Debug reported `targetState:generated_target` / `final generated_target`.
+- Low/mid-band Speaking feedback now has shared coverage/classification guardrails so substantial answers keep meaningful MUST FIX, HIGH-IMPACT PHRASE FIXES, and PERSONAL MATERIAL & IDEA EXPANSION treatment without sample-specific hardcoding.
+- Speaking transcription/audio behavior and the one-box transcript UI were not changed by this target-display cleanup. Writing Task 2 target/score consistency and Writing Task 1 calibration remain separate future audits.
 - V1.1 provider safety scaffolding is implemented:
   - Speaking and Writing provider calls route through safe analysis wrappers.
   - Malformed provider output is normalized into safe feedback objects.
@@ -50,6 +72,8 @@ _Last updated: 2026-05-20_
 
 ## Speaking Practice (Implemented)
 - Speaking Practice now saves local-first practice attempts so Part 1/2/3 work can be recovered after part switching, navigation, or page reload.
+- Speaking transcript flow includes the current simplified one-box editable transcript review plus an audio-backed transcription path.
+- Audio transcription reliability remains limited and fallback-prone; when provider transcription fails or is unavailable, browser transcript review and manual editing remain the safe path.
 - Active Speaking practice pages no longer show large Recent Attempts / Practice Records panels; History is the learner-facing record center.
 - Empty Speaking question loads are not saved as noisy draft records; drafts are saved only after meaningful transcript or analysis state exists.
 - Speaking question banks now include a small V1 prompt set for practical local testing:
@@ -72,7 +96,7 @@ _Last updated: 2026-05-20_
   - generic UI reminder text and learner-facing mock/prototype labels are removed;
   - idea/expression upgrade items must be grounded in the learner's actual wording or material.
 - Speaking prompts are calibrated by part: Part 1 short natural answers, Part 2 single long-turn story spine, and Part 3 natural spoken abstract discussion rather than Writing Task 2 spoken aloud.
-- Speaking markdown export uses the local minimal review-card structure from `src/lib/markdownExport.ts`.
+- Speaking markdown export uses the local minimal review-card structure from `src/lib/markdownExport.ts`; provider-generated Speaking `obsidianMarkdown` is no longer part of the normal analysis contract.
 - Malformed provider/debug strings are filtered out of learning content.
 - Incomplete provider feedback remains retryable instead of rendering as normal results.
 - `no-speech` auto-retry is implemented and preserved.
@@ -133,7 +157,7 @@ _Last updated: 2026-05-20_
 - Pure lexical or grammar/local wording issues are rendered as sentence corrections or vocabulary upgrades, not big logic issues.
 - Logic cards no longer repeat full sentence correction text or duplicate the old "No sentence-level correction covers this issue" grey box.
 - Task 2 markdown export follows the same warning -> logic -> sentence correction -> vocabulary hierarchy.
-- Inline annotated essay overlay remains deferred to the next V1.3 step; it is not implemented in this repair.
+- Task 2 annotated essay overlay baseline is implemented; future work is polish/consolidation only unless explicitly scoped.
 
 ### Task 2 Phase 3 Content Logic Refinement
 - **Vocabulary & Expression Upgrade** now behaves as a compact learning bank rather than a second correction list, with topic vocabulary, short user wording upgrades, collocations, and reusable argument frames.
@@ -141,7 +165,7 @@ _Last updated: 2026-05-20_
 - **Logic & Structure Review** uses stronger local inference for related correction numbers, especially off-topic introductions, weak thesis/position issues, balance/concession gaps, and body-paragraph development problems.
 - **Personalized Model Answer Excerpt** is supported by passing Phase 1 notes and the editable framework summary into final analysis. New provider output can mark the excerpt as personalized when it preserves the learner's position/framework and fixes the feedback issues.
 - Old saved records that only contain the earlier `modelAnswer` field still render as a normal model excerpt instead of being falsely labeled personalized.
-- V1.3 Step 2, **Interactive Annotated Essay Overlay**, is documented only as the next step and was not implemented.
+- V1.3 Step 2, **Interactive Annotated Essay Overlay**, has a baseline implementation in Phase 3. Do not rebuild it from scratch.
 
 ## Writing Task 1 Academic Practice (Implemented)
 - V1.2 product direction is now Writing Task 1 Academic Basic Practice before Mock Exam.

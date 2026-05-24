@@ -1,8 +1,87 @@
 # Project Backlog
 
-_Last updated: 2026-05-20_
+_Last updated: 2026-05-24_
 
-## Latest Slice - High-Band Boundary State and Speaking Part 2 Feedback Cleanup
+## Next Candidate Tasks
+
+0. **Project workflow/docs/skills audit package**
+   - status: next immediate task after this stable Speaking checkpoint is pushed
+   - purpose: prepare a complete audit package for document simplification, durable sample/regression rules, minimal Codex skills for normal implementation and daily closeout, and shorter future bootstrap prompts
+   - non-scope now: do not create skills or restructure the documentation system during the Speaking closeout commit
+
+1. **Speaking target-answer certification rollback**
+   - status: completed for normal Speaking response contract and accepted closeout runtime
+   - decision: learner-facing Speaking target answers are practice resources, not self-certified score guarantees
+   - normal flow: always show `upgradedAnswer` when generation succeeds
+   - current score display: estimated single-question band or adjacent half-band range from one ordinary `speaking_analysis` pass; verified lower-band Part 2 runtime rendered `5.5-6.0 ESTIMATED RANGE`
+   - headings: current lower bound below 7.0 -> `BAND 7 TARGET ANSWER`; current lower bound at or above 7.0 -> `BAND 7+ TARGET ANSWER`; existing high-band-stable -> `STANDARD ANSWER`
+   - debug state: normal successful generated targets use neutral `generated_target` semantics, not `needs_repair` / `target_failed_or_borderline`
+   - guardrail: no Band 8+ learner target, no VERIFIED / NOT VERIFIED labels, no internal certification errors, and no target-certification gate in the learner flow
+   - contract cleanup: normal Speaking provider JSON is structured feedback only; provider-generated `obsidianMarkdown`, Band 8+/certification/self-score target fields, and `riskNoteZh` are no longer requested
+   - export behavior: Speaking markdown is built locally after successful parsing; old saved records with markdown remain readable
+   - feedback coverage: low/mid-band substantial answers should surface genuine high-impact grammar/phrase/task issues through shared Speaking logic; the family-album sample is regression evidence only, not hardcoded product behavior
+   - preserve: low/mid-band layered feedback, part-specific Speaking feedback style, transcript UI/audio path, active seasonal bank runtime
+   - future separate audits: Writing Task 2 target consistency and Writing Task 1 calibration
+
+2. **Documentation hygiene / CODEBASE_MAP.md**
+   - status: navigation map added; broader docs/workflow simplification is deferred to the separate audit package above
+   - purpose: improve Codex navigation and reduce repeated guessing
+
+3. **Speaking 2026 May-Aug seasonal bank runtime integration**
+   - status: active adapter implemented; future work is source-quality expansion and publishing workflow
+   - key rule: use adapter, preserve V1 fallback, derive Part 3 from followUps where appropriate, preserve stable IDs
+   - non-scope: no scoring/provider/recording/export changes
+   - source-quality gap as of 2026-05-21: repo source material does not include complete mainland Part 1 entries for Music, Scenery, Building, Childhood activities, Views, or Life stages; Sports team, Reading, and Typing remain intentionally partial because the extracted source only provides partial question lists.
+   - source-quality gap as of 2026-05-21: repo source material does not include complete mainland cue cards/follow-ups for the requested retained/old topics such as bicycle/motorcycle/car travel, quick-witted problem solver, self-studying friend, unenjoyed music activity, recently enjoyed movie, interesting building, imagination, helpful person, over-budget item, encouraging a reluctant person, nature protector, famous/interesting city, or visited-and-liked city. Do not add these until a traceable source is available.
+
+4. **Task 1 source/UI text audit and calibration preparation**
+   - status: future precheck
+   - key rule: full Task 1 calibration requires real Task 1 debug samples
+   - non-scope: no blind scoring rewrite
+
+5. **Speaking transcript fidelity**
+   - status: audio-backed verbatim transcription v1 implemented; 2026-05-22 polish tightened context hints
+   - principle: do not silently grammar-correct learner speech; preserve the raw browser transcript separately from the analyzed transcript
+   - current baseline: Transcript Fidelity v1 review checkpoint is implemented; analysis uses the user-reviewed editable transcript only, with compact local review hints for likely browser ASR artifacts
+   - done 2026-05-21: Audio-backed verbatim transcription v1 records in-memory MediaRecorder audio beside browser Web Speech and keeps one main editable transcript box for analysis
+   - UX rule: audio transcription is the preferred quality path when Gemini is available; browser transcript is the fallback and browser/audio/raw details are secondary/collapsed
+   - accuracy rule: compact context/keyword hints help Gemini resolve likely ASR ambiguity such as proper nouns, IELTS topic vocabulary, and common misheard phrases; hints must not grammar-correct or polish learner speech
+   - 2026-05-22 regression guardrail: transcript UI should remain one editable transcript box; browser/audio/raw transcript details stay secondary and must not become competing editors
+   - 2026-05-22 regression guardrail: audio transcription sends Speaking part, current question, cue-card text/bullets, topic/tags, compact generic IELTS hints, and the rough browser transcript as weak timing/word context only
+   - 2026-05-22 non-scope: no personal glossary, user-specific vocabulary memory, grammar correction, real-time correction, pronunciation scoring, or complex transcript comparison UI
+   - provider note: Gemini can perform real audio transcription in local Gemini mode or auto mode when a Gemini key/quota is available; DeepSeek does not claim audio transcription; Mock returns a clearly labeled mock transcript only for development UI flow and cannot be used as real analysis input
+   - future scope: pronunciation scoring, real-time speech correction, persistent audio storage, and production/SaaS transcription provider policy remain separate later work
+   - non-scope: no provider routing, scoring logic, target validation, Task 1, Task 2, Part 1 topic-thread, or Part 3 discussion-thread changes
+
+Older completed notes below are historical context unless explicitly selected as a new scoped task.
+
+## Future Task - PDF Folder Speaking-Bank Import Pipeline + SaaS-Ready Active Bank Publishing Flow
+
+- status: future scope only
+- Local-first workflow first:
+  - PDFs go into `tools/speaking-bank-import/inbox`.
+  - Extraction generates draft JSON plus `extraction-report.md`.
+  - AI should filter out non-mainland topics, answer/sample paragraphs, translations, guides, Q&A, QR/promo text, page headers/footers, OCR garbage, and low-confidence fragments.
+  - Multiple PDFs should be merged as a mainland active-bank union unless items are clearly non-mainland, obsolete, incomplete, or low-confidence.
+  - User reviews the report summary, not every question.
+  - Apply step updates the active mainland speaking bank.
+- SaaS-ready direction:
+  - The same pipeline can later move behind an admin upload/review/publish page.
+  - Active practice bank can be overwritten by season.
+  - Practice history should preserve question snapshots separately from the active bank.
+  - API key/provider/cost policy for SaaS will be decided later, not in this slice.
+- Non-scope now:
+  - No PDF parsing, OCR, LLM extraction, backend/admin page, or database migration.
+
+## Completed History - High-Band Boundary State and Speaking Part 2 Feedback Cleanup
+
+- **Done 2026-05-22 follow-up**: Unified Speaking visible scoring and target certification through blind `speaking_score_only`.
+  - Superseded 2026-05-23 by the simpler Speaking target-answer rollback: normal learner flow no longer uses blind score-only target certification or Band 8 confirmation to decide whether to show the target answer.
+  - Speaking Part 1/2/3 visible current estimates now lock to one blind text-based score-only pass.
+  - Generated Speaking targets are certified by re-scoring the target text blindly and comparing scores locally; the scorer is not told target floor/layer/original score/candidate status.
+  - Band 8+ targets require an extra blind consistency confirmation before the verified label is allowed.
+  - If Gemini authoritative scoring/certification is unavailable in auto mode, DeepSeek is not treated as an equivalent certifier; target labels fall back to not-yet-verified.
+  - Low/mid-band feedback remains layered rather than sparse, and Writing Task 2 / Task 1 target consistency remain future separate audits.
 
 - **Done 2026-05-20**: Unified target-state semantics and cleaned the Speaking Part 2 feedback pattern.
   - Shared target states now apply across Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2: `needs_repair`, `generated_target`, `target_failed_or_borderline`, `high_band_boundary`, and `high_band_stable`.
@@ -10,10 +89,12 @@ _Last updated: 2026-05-20_
   - Speaking Part 2 feedback now uses consistent uppercase module headers, removes generic UI guidance, keeps Chinese explanations only where useful, and reserves `STANDARD ANSWER` for 8.0+ / stable answers.
   - Idea & Expression Upgrade items are evidence-gated; if an item cannot be tied to the learner's actual wording/material, it is omitted.
   - Markdown export mirrors target-state labels and avoids Risk note / empty replacement-answer artifacts.
+  - 2026-05-22 follow-up guardrail: target-answer labels must not overclaim beyond validation support. Generated targets and stable standards are separate states; `STANDARD ANSWER` remains reserved for high-band stable 8.0+ outputs.
+  - 2026-05-22 regression-sensitive area: a displayed Band 7.0+ / Band 8+ Speaking target must survive the independent target-validation floor with margin; borderline/failed validation must render/export as not yet cleanly successful.
   - Task 1 full visual cleanup remains future work; current Task 1 target output stays conservative and generated-only unless future validation is added.
   - Plugin/notranslate remains solved and should not be reopened without a direct regression.
 
-## Latest Slice - Target Loop Edge Cases and Feedback Readability
+## Completed History - Target Loop Edge Cases and Feedback Readability
 
 - **Done 2026-05-19 follow-up 3**: Repaired remaining target-loop edge cases and cleaned feedback readability without redesigning the UI.
   - High-band stability no longer requires `upgradedAnswer` / `modelAnswer`; empty replacement output is valid only in `high_band_stability`.
@@ -26,7 +107,7 @@ _Last updated: 2026-05-20_
   - Web Speech auto-resume remains a regression requirement.
   - Task 1 target calibration remains future work and needs real Task 1 debug samples.
 
-## Previous Slice - Independent Target Validation Loop
+## Completed History - Independent Target Validation Loop
 
 - **Done 2026-05-19 follow-up 2**: Separated target generation from target validation for Speaking and Writing Task 2.
   - Same-response self-check is no longer enough to claim Band 7+ / Band 8+ target success.
@@ -38,7 +119,7 @@ _Last updated: 2026-05-20_
   - Mock provider demonstrates fail-then-repair target validation; advanced ASR remains future work.
   - Web Speech auto-resume after browser pause/end and page-level no-translate protection were also completed in this slice.
 
-## Previous Slice - Feedback Calibration and Target Integrity
+## Completed History - Feedback Calibration and Target Integrity
 
 - **Done 2026-05-19 follow-up**: Closed the Speaking / Writing Task 2 target-answer scoring loop.
   - Generated target answers/models now require self-scores against the same visible scoring layer before they can claim the target.
@@ -214,6 +295,14 @@ _Last updated: 2026-05-20_
 - Do not implement full inline editor yet.
 
 ### 5) Speaking Improvements
+- **Done 2026-05-22**: Speaking low/mid-band feedback depth and target linkage guardrails added.
+  - Low-noise feedback means layered and readable, not sparse.
+  - 5.0-6.0 Speaking answers should receive enough high-impact fixes across MUST FIX and phrase-fix cards when the transcript contains stable material.
+  - Original phrase problems should not disappear just because the target answer rewrites or omits them.
+  - Low/mid-band `naturalnessHints` should render as high-impact phrase fixes, not Optional Polish.
+  - Corrections should link to the target answer when useful, and target answers should visibly apply the important fixes while preserving personal material.
+  - Target validation request floor is authoritative; provider-returned `targetFloor` must not silently lower Band 7+/8+ validation.
+  - Band 7+/8+ target consistency remains regression-sensitive; borderline or failed validation must not render/export as a clean successful target, and `STANDARD ANSWER` remains high-band stable 8.0+ only.
 - **Done minimal V1.1**: cleaner pre-analysis layout and wider post-analysis feedback layout.
 - **Done minimal V1.1**: Change Question works across Parts 1/2/3 when alternatives exist.
 - **Done minimal V1.1**: Practice This Question Again starts a fresh attempt for the same prompt without re-calling AI.

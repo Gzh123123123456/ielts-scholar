@@ -1,6 +1,8 @@
 import {
   AIProvider,
+  SpeakingAudioTranscriptionRequest,
   SpeakingAnalysisRequest,
+  SpeakingScoreOnlyRequest,
   SpeakingTargetValidationRequest,
   WritingAnalysisRequest,
   WritingFrameworkCoachRequest,
@@ -11,8 +13,11 @@ import {
 import {
   ProviderDiagnostic,
   FatalError,
+  NaturalnessHint,
+  SpeakingAudioTranscriptionResult,
   SpeakingFeedback,
   SpeakingPart,
+  SpeakingScoreOnlyResult,
   SpeakingTargetAnswerSelfScores,
   SpeakingTargetValidationResult,
   TargetAnswerLayer,
@@ -41,6 +46,8 @@ import {
 } from '../scoreLayer';
 
 type SpeakingRequest = SpeakingAnalysisRequest;
+type SpeakingTranscriptionRequest = SpeakingAudioTranscriptionRequest;
+type SpeakingScoreRequest = SpeakingScoreOnlyRequest;
 type WritingRequest = WritingAnalysisRequest;
 type WritingTask1Request = WritingTask1AnalysisRequest;
 type FrameworkCoachRequest = WritingFrameworkCoachRequest;
@@ -64,6 +71,56 @@ const countWords = (text: string): number =>
 const safeLearningText = (value: string, fallback = ''): string => {
   const cleaned = value.replace(/"{3,}/g, '').replace(/\s+/g, ' ').trim();
   return cleaned && !BLOCKED_LEARNING_CONTENT.test(cleaned) ? cleaned : fallback;
+};
+
+const SPEAKING_GRAMMAR_TAG_PATTERN =
+  /\b(grammar|tense|article|determiner|subject.?verb|sva|clause|clause.?form|sentence.?structure|word.?order|verb.?form|noun.?phrase)\b/i;
+
+const speakingIssueKey = (text: string): string =>
+  text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+const isExplicitSpeakingGrammarHint = (hint: NaturalnessHint): boolean =>
+  SPEAKING_GRAMMAR_TAG_PATTERN.test(`${hint.tag} ${hint.explanationZh}`);
+
+const fatalErrorCoversPhrase = (fatalErrors: FatalError[], phrase: string): boolean => {
+  const key = speakingIssueKey(phrase);
+  if (!key) return false;
+  return fatalErrors.some(error => {
+    const original = speakingIssueKey(error.original);
+    return original === key || original.includes(key) || key.includes(original);
+  });
+};
+
+const promoteGrammarTaggedSpeakingHints = (
+  fatalErrors: FatalError[],
+  naturalnessHints: NaturalnessHint[],
+  normalizedFields: string[],
+) => {
+  const promoted: FatalError[] = [];
+  const remainingHints: NaturalnessHint[] = [];
+
+  naturalnessHints.forEach(hint => {
+    if (!isExplicitSpeakingGrammarHint(hint) || fatalErrorCoversPhrase([...fatalErrors, ...promoted], hint.original)) {
+      remainingHints.push(hint);
+      return;
+    }
+
+    promoted.push({
+      original: hint.original,
+      correction: hint.better,
+      tag: hint.tag || 'grammar',
+      explanationZh: hint.explanationZh,
+    });
+  });
+
+  if (promoted.length > 0) {
+    normalizedFields.push('speakingGrammarHintRouting');
+  }
+
+  return {
+    fatalErrors: [...fatalErrors, ...promoted],
+    naturalnessHints: remainingHints,
+  };
 };
 
 const insufficientSampleMessageZh = (moduleLabel: string, minimumWords: number) =>
@@ -110,6 +167,54 @@ const buildInsufficientSpeakingTransformation = (part: SpeakingPart): string => 
 
 const isProviderIncompleteSpeakingAnswer = (text: string): boolean =>
   /provider returned incomplete feedback|please retry analysis|malformed or incomplete/i.test(text);
+
+const normalizeSpeakingBandEstimateRange = (
+  value: unknown,
+  headline: number,
+  hasQualityCap: boolean,
+  normalizedFields: string[],
+) => {
+  if (hasQualityCap) return undefined;
+  const stringRange = typeof value === 'string'
+    ? value.match(/(\d(?:\.\d)?)\s*[-–]\s*(\d(?:\.\d)?)/)
+    : null;
+  const source = isRecord(value)
+    ? value
+    : stringRange
+      ? {
+        lower: Number(stringRange[1]),
+        upper: Number(stringRange[2]),
+      }
+      : null;
+  if (!source) return undefined;
+  const lower = roundToHalfBand(typeof source.lower === 'number' ? source.lower : 0);
+  const upper = roundToHalfBand(typeof source.upper === 'number' ? source.upper : 0);
+  if (
+    !Number.isFinite(lower) ||
+    !Number.isFinite(upper) ||
+    lower <= 0 ||
+    upper <= lower ||
+    Math.round((upper - lower) * 2) !== 1 ||
+    lower < 1 ||
+    upper > 9
+  ) {
+    normalizedFields.push('bandEstimateRange');
+    return undefined;
+  }
+  const roundedHeadline = roundToHalfBand(headline);
+  if (roundedHeadline !== lower && roundedHeadline !== upper) {
+    normalizedFields.push('bandEstimateRange');
+    return undefined;
+  }
+  if (stringRange) {
+    normalizedFields.push('bandEstimateRange:string');
+  }
+  return {
+    lower,
+    upper,
+    rationaleZh: isRecord(value) ? optionalSafeString(value.rationaleZh) : undefined,
+  };
+};
 
 const splitSentences = (text: string): string[] =>
   text
@@ -539,7 +644,19 @@ const isProviderUnavailableError = (parseError?: string): boolean => {
   ].some(marker => normalized.includes(marker));
 };
 
+const isProviderUnsupportedError = (parseError?: string): boolean => {
+  if (!parseError) return false;
+  const normalized = parseError.toLowerCase();
+  return [
+    'unsupported',
+    'does not implement',
+    'does not support',
+    'audio transcription is not supported',
+  ].some(marker => normalized.includes(marker));
+};
+
 const getFailureKind = (parseError: string | undefined, validationErrors: string[]) => {
+  if (isProviderUnsupportedError(parseError)) return 'unsupported' as const;
   if (isProviderUnavailableError(parseError)) return 'provider_unavailable' as const;
   if (parseError || validationErrors.length > 0) return 'parse_or_schema' as const;
   return undefined;
@@ -556,7 +673,11 @@ const redactSecrets = (value: unknown): unknown => {
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [
       key,
-      /key|secret|token|authorization/i.test(key) ? '[REDACTED]' : redactSecrets(item),
+      /key|secret|token|authorization/i.test(key)
+        ? '[REDACTED]'
+        : /audioBase64|base64Audio|audioData/i.test(key)
+          ? '[AUDIO_BASE64_REDACTED]'
+          : redactSecrets(item),
     ]));
   }
   return value;
@@ -575,6 +696,86 @@ const buildDiagnostic = (diagnostic: ProviderDiagnostic): ProviderDiagnostic => 
 
 const buildSpeakingObsidianMarkdown = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): string =>
   buildSpeakingTrainingMarkdown(feedback);
+
+const normalizeSpeakingAudioTranscription = (
+  value: unknown,
+  validationErrors: string[],
+): SpeakingAudioTranscriptionResult => {
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+  const transcript = optionalSafeString(source.transcript) || '';
+  if (!transcript) validationErrors.push('transcript missing or invalid string');
+
+  return {
+    module: 'speaking',
+    operation: 'speaking_audio_transcription',
+    transcript,
+    uncertaintyNotes: optionalSafeStringArray(source.uncertaintyNotes) || [],
+    providerDiagnostic: optionalSafeString(source.providerDiagnostic),
+  };
+};
+
+const normalizeSpeakingScoreOnly = (
+  value: unknown,
+  request: SpeakingScoreRequest,
+  validationErrors: string[],
+): SpeakingScoreOnlyResult => {
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+  const scoresSource = isRecord(source.scores) ? source.scores : {};
+  if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
+  const part = asSpeakingPart(source.part, request.part, validationErrors);
+  const transcriptWords = countWords(request.transcript || '');
+  const visibleScores = {
+    fluencyCoherence: normalizeHalfBandScore(applySpeakingLengthCap(
+      asNumber(scoresSource.fluencyCoherence, 'scores.fluencyCoherence', validationErrors),
+      transcriptWords,
+      part,
+    )),
+    lexicalResource: normalizeHalfBandScore(applySpeakingLengthCap(
+      asNumber(scoresSource.lexicalResource, 'scores.lexicalResource', validationErrors),
+      transcriptWords,
+      part,
+    )),
+    grammaticalRangeAccuracy: normalizeHalfBandScore(applySpeakingLengthCap(
+      asNumber(scoresSource.grammaticalRangeAccuracy, 'scores.grammaticalRangeAccuracy', validationErrors),
+      transcriptWords,
+      part,
+    )),
+  };
+  const headline = normalizeHalfBandScore(applySpeakingLengthCap(
+    asNumber(source.bandEstimateExcludingPronunciation, 'bandEstimateExcludingPronunciation', validationErrors),
+    transcriptWords,
+    part,
+  ));
+  const minimumVisibleScore = Math.min(
+    visibleScores.fluencyCoherence,
+    visibleScores.lexicalResource,
+    visibleScores.grammaticalRangeAccuracy,
+  );
+  const normalizedHeadline = headline > 0 && minimumVisibleScore > 0 && headline < minimumVisibleScore
+    ? minimumVisibleScore
+    : headline;
+  const boundary = source.boundaryStatus === 'borderline_7' ||
+    source.boundaryStatus === 'borderline_8' ||
+    source.boundaryStatus === 'insufficient_sample' ||
+    source.boundaryStatus === 'clear'
+    ? source.boundaryStatus
+    : undefined;
+
+  return {
+    module: 'speaking',
+    operation: 'speaking_score_only',
+    part,
+    scores: {
+      ...visibleScores,
+      pronunciation: null,
+    },
+    bandEstimateExcludingPronunciation: normalizedHeadline,
+    rationaleZh: optionalSafeString(source.rationaleZh) || 'Authoritative blind score-only pass completed.',
+    boundaryStatus: boundary,
+  };
+};
 
 const normalizeSpeakingFeedback = (
   value: unknown,
@@ -641,6 +842,12 @@ const normalizeSpeakingFeedback = (
   if (shouldNormalizeSpeakingScore) {
     normalizedFields.push('speakingScoreConsistency');
   }
+  const bandEstimateRange = normalizeSpeakingBandEstimateRange(
+    source.bandEstimateRange,
+    normalizedHeadline,
+    hasQualityCap || Boolean(promptMismatchWarning),
+    normalizedFields,
+  );
   const expectedSpeakingTargetLayer = speakingTargetLayerForEstimate(normalizedHeadline);
   const providerSpeakingTargetLayer = normalizeTargetAnswerLayer(source.targetAnswerLayer);
   const speakingTargetAnswerLayer = expectedSpeakingTargetLayer;
@@ -666,20 +873,12 @@ const normalizeSpeakingFeedback = (
   const targetAnswerStatus: TargetAnswerStatus = (() => {
     if (currentAnswerIsHighBand) return 'meets_target';
     if (!hasTargetAnswer || limitTransformation) return 'not_generated';
-    if (speakingTargetScoresBelowFloor(targetAnswerSelfScores, speakingTargetFloor)) {
-      return providerTargetAnswerStatus === 'failed' ? 'failed' : 'borderline';
-    }
-    if (providerTargetAnswerStatus === 'failed' || providerTargetAnswerStatus === 'borderline') {
-      return providerTargetAnswerStatus;
-    }
-    if (speakingTargetScoresMeetFloor(targetAnswerSelfScores, speakingTargetFloor)) return 'borderline';
-    return 'borderline';
+    return 'meets_target';
   })();
   if (
-    providerTargetAnswerStatus !== targetAnswerStatus ||
-    (speakingTargetAnswerLayer !== 'high_band_stability' && !targetAnswerSelfScores) ||
-    speakingTargetScoresBelowFloor(targetAnswerSelfScores, speakingTargetFloor) ||
-    (speakingTargetAnswerLayer === 'band_8_plus' && targetAnswerStatus === 'borderline')
+    providerTargetAnswerStatus &&
+    providerTargetAnswerStatus !== targetAnswerStatus &&
+    targetAnswerStatus !== 'meets_target'
   ) {
     normalizedFields.push('targetAnswerIntegrity');
   }
@@ -703,6 +902,7 @@ const normalizeSpeakingFeedback = (
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     transcript: asString(source.transcript, request.transcript || FALLBACK_TEXT, 'transcript', validationErrors),
     bandEstimateExcludingPronunciation: normalizedHeadline,
+    bandEstimateRange,
     estimateRationaleZh: optionalSafeString(source.estimateRationaleZh),
     targetBandFloor: speakingTargetFloor,
     targetLayer: currentAnswerIsHighBand
@@ -720,7 +920,7 @@ const normalizeSpeakingFeedback = (
     targetAnswerValidationRationaleZh: optionalSafeString(source.targetAnswerValidationRationaleZh),
     targetAnswerRationaleZh: optionalSafeString(source.targetAnswerRationaleZh),
     targetAnswerRepairFocusZh: optionalSafeString(source.targetAnswerRepairFocusZh) ||
-      (targetAnswerStatus === 'borderline' || targetAnswerStatus === 'failed'
+      (false
         ? '继续加强答案的内容推进、具体例子、自然口语组织和语法稳定度；不要只替换高级词。'
         : undefined),
     highBandStabilityZh: optionalSafeString(source.highBandStabilityZh) ||
@@ -847,37 +1047,48 @@ const normalizeSpeakingFeedback = (
   const feedbackWithTargetState: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     ...feedbackWithoutMarkdown,
     targetState: resolvedSpeakingTargetState,
-    targetValidationZh: resolvedSpeakingTargetState === 'high_band_boundary'
-      ? HIGH_BAND_BOUNDARY_ZH
-      : feedbackWithoutMarkdown.targetValidationZh,
+    targetLayer: resolvedSpeakingTargetState === 'high_band_stable'
+      ? feedbackWithoutMarkdown.targetLayer
+      : normalizedHeadline >= 7
+        ? 'Band 7+ Target Answer'
+        : 'Band 7 Target Answer',
+    targetValidationZh: resolvedSpeakingTargetState === 'high_band_stable'
+      ? feedbackWithoutMarkdown.targetValidationZh
+      : '',
     highBandStabilityZh: resolvedSpeakingTargetState === 'high_band_stable'
       ? feedbackWithoutMarkdown.highBandStabilityZh || HIGH_BAND_STABLE_ZH
       : feedbackWithoutMarkdown.highBandStabilityZh,
-    targetAnswerRepairFocusZh: resolvedSpeakingTargetState === 'high_band_boundary'
-      ? undefined
-      : feedbackWithoutMarkdown.targetAnswerRepairFocusZh,
+    targetAnswerRepairFocusZh: undefined,
   };
+
+  const sanitizedFatalErrors = feedbackWithTargetState.fatalErrors
+    .map(item => ({
+      ...item,
+      original: safeLearningText(item.original),
+      correction: safeLearningText(item.correction),
+      tag: safeLearningText(item.tag, 'speaking_issue'),
+      explanationZh: safeLearningText(item.explanationZh),
+    }))
+    .filter(item => item.original && item.correction && item.explanationZh);
+  const sanitizedNaturalnessHints = feedbackWithTargetState.naturalnessHints
+    .map(item => ({
+      ...item,
+      original: safeLearningText(item.original),
+      better: safeLearningText(item.better),
+      tag: safeLearningText(item.tag, 'naturalness'),
+      explanationZh: safeLearningText(item.explanationZh),
+    }))
+    .filter(item => item.original && item.better && item.explanationZh);
+  const routedSpeakingIssues = promoteGrammarTaggedSpeakingHints(
+    sanitizedFatalErrors,
+    sanitizedNaturalnessHints,
+    normalizedFields,
+  );
 
   const sanitizedFeedback: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
     ...feedbackWithTargetState,
-    fatalErrors: feedbackWithTargetState.fatalErrors
-      .map(item => ({
-        ...item,
-        original: safeLearningText(item.original),
-        correction: safeLearningText(item.correction),
-        tag: safeLearningText(item.tag, 'speaking_issue'),
-        explanationZh: safeLearningText(item.explanationZh),
-      }))
-      .filter(item => item.original && item.correction && item.explanationZh),
-    naturalnessHints: feedbackWithTargetState.naturalnessHints
-      .map(item => ({
-        ...item,
-        original: safeLearningText(item.original),
-        better: safeLearningText(item.better),
-        tag: safeLearningText(item.tag, 'naturalness'),
-        explanationZh: safeLearningText(item.explanationZh),
-      }))
-      .filter(item => item.original && item.better && item.explanationZh),
+    fatalErrors: routedSpeakingIssues.fatalErrors,
+    naturalnessHints: routedSpeakingIssues.naturalnessHints,
     band9Refinements: feedbackWithTargetState.band9Refinements
       .map(item => ({
         observation: safeLearningText(item.observation),
@@ -2247,7 +2458,11 @@ const normalizeSpeakingTargetValidation = (
   if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
   const scoresSource = isRecord(source.scores) ? source.scores : {};
   if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
-  const targetFloor = normalizeHalfBandScore(asNumber(source.targetFloor, 'targetFloor', validationErrors, request.targetFloor));
+  const targetFloor = normalizeHalfBandScore(request.targetFloor);
+  const providerTargetFloor = asOptionalHalfBand(source.targetFloor);
+  if (providerTargetFloor !== undefined && providerTargetFloor !== targetFloor) {
+    normalizedFields.push(`targetFloorOverride:${providerTargetFloor.toFixed(1)}->${targetFloor.toFixed(1)}`);
+  }
   const scores: SpeakingTargetAnswerSelfScores = {
     fluencyCoherence: asOptionalHalfBand(scoresSource.fluencyCoherence),
     lexicalResource: asOptionalHalfBand(scoresSource.lexicalResource),
@@ -2289,7 +2504,11 @@ const normalizeWritingTargetValidation = (
   if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
   const scoresSource = isRecord(source.scores) ? source.scores : {};
   if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
-  const targetFloor = normalizeHalfBandScore(asNumber(source.targetFloor, 'targetFloor', validationErrors, request.targetFloor));
+  const targetFloor = normalizeHalfBandScore(request.targetFloor);
+  const providerTargetFloor = asOptionalHalfBand(source.targetFloor);
+  if (providerTargetFloor !== undefined && providerTargetFloor !== targetFloor) {
+    normalizedFields.push(`targetFloorOverride:${providerTargetFloor.toFixed(1)}->${targetFloor.toFixed(1)}`);
+  }
   const scores: WritingTargetAnswerSelfScores = {
     taskResponse: asOptionalHalfBand(scoresSource.taskResponse),
     coherenceCohesion: asOptionalHalfBand(scoresSource.coherenceCohesion),
@@ -2360,6 +2579,96 @@ export const safeAnalyzeSpeaking = async (
       fallbackUsed,
       failureKind,
       normalizedFields,
+      timestamp: new Date().toISOString(),
+    }),
+  };
+};
+
+export const safeTranscribeSpeakingAudio = async (
+  provider: AIProvider,
+  providerName: string,
+  requestPayload: SpeakingTranscriptionRequest,
+): Promise<SafeAnalyzeResult<SpeakingAudioTranscriptionResult>> => {
+  let rawResponse: unknown = null;
+  let parsedJson: unknown = null;
+  let parseError: string | undefined;
+  const validationErrors: string[] = [];
+
+  try {
+    if (!provider.transcribeSpeakingAudio) {
+      throw new Error('Provider does not implement speaking audio transcription');
+    }
+
+    rawResponse = await provider.transcribeSpeakingAudio(requestPayload);
+    const parsed = parseRawResponse(rawResponse);
+    parsedJson = parsed.parsedJson;
+    parseError = parsed.parseError;
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const feedback = normalizeSpeakingAudioTranscription(parsedJson, validationErrors);
+  const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
+
+  return {
+    feedback,
+    diagnostic: buildDiagnostic({
+      module: 'speaking',
+      operation: 'speaking_audio_transcription',
+      providerName,
+      requestPayload,
+      rawResponse,
+      parsedJson,
+      parseError,
+      validationErrors,
+      fallbackUsed,
+      failureKind,
+      timestamp: new Date().toISOString(),
+    }),
+  };
+};
+
+export const safeScoreSpeakingOnly = async (
+  provider: AIProvider,
+  providerName: string,
+  requestPayload: SpeakingScoreRequest,
+): Promise<SafeAnalyzeResult<SpeakingScoreOnlyResult>> => {
+  let rawResponse: unknown = null;
+  let parsedJson: unknown = null;
+  let parseError: string | undefined;
+  const validationErrors: string[] = [];
+
+  try {
+    if (!provider.scoreSpeakingOnly) {
+      throw new Error('Provider does not implement scoreSpeakingOnly');
+    }
+
+    rawResponse = await provider.scoreSpeakingOnly(requestPayload);
+    const parsed = parseRawResponse(rawResponse);
+    parsedJson = parsed.parsedJson;
+    parseError = parsed.parseError;
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const feedback = normalizeSpeakingScoreOnly(parsedJson, requestPayload, validationErrors);
+  const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
+
+  return {
+    feedback,
+    diagnostic: buildDiagnostic({
+      module: 'speaking',
+      operation: 'speaking_score_only',
+      providerName,
+      requestPayload,
+      rawResponse,
+      parsedJson,
+      parseError,
+      validationErrors,
+      fallbackUsed,
+      failureKind,
       timestamp: new Date().toISOString(),
     }),
   };

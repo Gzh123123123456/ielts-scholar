@@ -2,7 +2,9 @@ import { AIProvider } from './base';
 import {
   frameworkCoachSchemaInstruction,
   frameworkSchemaInstruction,
+  speakingFeedbackDepthInstruction,
   speakingPromptCalibration,
+  speakingScoreOnlySchemaInstruction,
   speakingSchemaInstruction,
   speakingTargetValidationSchemaInstruction,
   strictJsonInstruction,
@@ -20,7 +22,7 @@ export class DeepSeekProvider implements AIProvider {
     private baseUrl = 'https://api.deepseek.com/v1',
   ) {}
 
-  private async generateJson(prompt: string): Promise<string> {
+  private async generateJson(prompt: string, temperature = 0.2): Promise<string> {
     const response = await fetch(`${normalizeBaseUrl(this.baseUrl)}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -37,7 +39,7 @@ export class DeepSeekProvider implements AIProvider {
           { role: 'user', content: prompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.2,
+        temperature,
       }),
     });
 
@@ -60,6 +62,16 @@ export class DeepSeekProvider implements AIProvider {
     part: number;
     question: string;
     transcript: string;
+    authoritativeScore?: {
+      bandEstimateExcludingPronunciation: number;
+      scores: {
+        fluencyCoherence: number;
+        lexicalResource: number;
+        grammaticalRangeAccuracy: number;
+        pronunciation: null;
+      };
+      rationaleZh: string;
+    };
     targetRepairFocus?: string;
     targetAttempt?: number;
     priorTargetAnswer?: string;
@@ -77,16 +89,44 @@ Assess transcript-based speaking only. Do not provide a pronunciation score; pro
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 ${speakingPromptCalibration}
+${speakingFeedbackDepthInstruction}
 If the transcript is extremely short, nonsensical, or too thin for the part, return conservative insufficient-sample feedback.
-Feedback must be target-uplift training feedback. The current score is a conservative single-question training estimate, excluding pronunciation, not an official complete IELTS Speaking band. If evidence sits between two bands, prefer the lower visible estimate.
-For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice direction aim at a natural Band 7.0+ training target, not merely a minimal correction. If the learner is 7.0-7.5, upgradedAnswer must become a meaningfully stronger Band 8+ examiner-friendly answer rather than another ordinary Band 7 answer, and targetAnswerSelfScores must show at least 8.0 in FC, LR, and GRA. If the learner is already 8.0+, switch to high-band stability instead of generating a fake higher answer; upgradedAnswer may be an empty string in that state, and highBandStabilityZh/nextStepZh should carry the guidance. Do not label output as Band 9.
+Feedback must be target-uplift training feedback. The current score is a conservative single-question training estimate, excluding pronunciation, not an official complete IELTS Speaking band. If evidence genuinely sits between two adjacent half-bands, return bandEstimateRange as an object with lower, upper, and rationaleZh in this same analysis pass; otherwise return a single estimate only and omit bandEstimateRange or set it to null. Do not return bandEstimateRange as a string. Do not return placeholder range objects, identical lower/upper values, or ranges wider than one adjacent half-band step.
+For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice direction aim at a natural Band 7 training target with a small safety margin, not merely a minimal correction. If the learner's lower bound is 7.0 or above, upgradedAnswer must become a meaningfully stronger Band 7+ answer rather than another ordinary Band 7 answer. Do not describe the target as Band 8+, Advanced, Verified, Not Verified, or certified. If the learner is already high-band-stable, switch to high-band stability instead of generating a fake higher answer; upgradedAnswer may be an empty string in that state, and highBandStabilityZh/nextStepZh should carry the guidance. Do not label output as Band 9.
 If the transcript clearly answers a different prompt, add fatalErrors tag "prompt_mismatch" with explanationZh "这段回答似乎没有回答当前题目，请确认是否选错题目。", and do not treat the problem only as grammar or vocabulary.
 Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
-In preservedStyle, include concrete expansionZh, sampleNextStep, transferQuestions, partUseZh, and riskNoteZh grounded in the learner transcript. If detail is missing, ask for the kind of real detail to add instead of inventing one.
+In preservedStyle, include concrete expansionZh, sampleNextStep, transferQuestions, and partUseZh grounded in the learner transcript. If detail is missing, ask for the kind of real detail to add instead of inventing one.
 For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
-If targetRepairFocus and priorTargetAnswer are provided, this is a retry after independent validation failed. Do not repeat the prior answer; repair the specific weakness while keeping the current score honest.
+Do not run or describe target certification, independent validation, verifier status, or repair loops in normal Speaking feedback.
+If authoritativeScore is provided in the input, treat it as the locked visible current score. Return the same bandEstimateExcludingPronunciation and the same FC/LR/GRA scores; use it only to choose feedback depth and target layer.
 
 ${speakingSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`, 0.1);
+  }
+
+  async scoreSpeakingOnly(params: {
+    part: number;
+    question: string;
+    transcript: string;
+  }): Promise<string> {
+    const partRules = params.part === 1
+      ? 'Part 1: short, direct, natural, personal detail; do not penalize appropriate brevity.'
+      : params.part === 2
+        ? 'Part 2: sustained long-turn story spine with setting, scene, concrete action, challenge/change, feeling shift, and meaning.'
+        : 'Part 3: spoken discussion with position, reasoning, example or contrast, consequence; not essay prose.';
+
+    return this.generateJson(`${strictJsonInstruction}
+
+You are the authoritative blind IELTS Speaking text scorer for a local-first training app.
+Score only the submitted transcript against the question. Do not infer whether it is a learner answer, generated target, or retest.
+Do not use target floors, target labels, original scores, candidate status, or target certification wording.
+This is a text-based single-question training estimate excluding pronunciation. Pronunciation must be null.
+Use the same strict FC/LR/GRA rubric for every submitted text. If evidence sits on a boundary, prefer the lower visible estimate. Do not relax the score because the answer is polished or generated. Do not apply an extra penalty just because it is one question.
+${partRules}
+
+${speakingScoreOnlySchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);
@@ -95,10 +135,8 @@ ${JSON.stringify(params, null, 2)}`);
   async validateSpeakingTarget(params: {
     part: number;
     question: string;
-    candidateTargetAnswer: string;
+    transcript: string;
     targetFloor: number;
-    originalCurrentScore?: number;
-    targetLayer?: string;
   }): Promise<string> {
     const partRules = params.part === 1
       ? 'Part 1: short, direct, natural, one concrete personal detail; no fake academic vocabulary.'
@@ -109,7 +147,7 @@ ${JSON.stringify(params, null, 2)}`);
     return this.generateJson(`${strictJsonInstruction}
 
 You are an independent IELTS Speaking target-answer validator. Scoring-only operation.
-Do not generate a new target answer or teaching report. Score candidateTargetAnswer only.
+Do not generate a new target answer or teaching report. Score transcript only.
 Use strict IELTS Speaking visible criteria: fluency/coherence, lexical resource, grammar range/accuracy. Pronunciation is null.
 Mirror normal speaking_analysis criteria; validation may be slightly stricter than generation, but it must never be looser. Do not pass a target that normal analysis would clearly score as 7.0 or 7.5.
 Do not apply a blanket single-question penalty to a complete target answer. Do not inflate scores or treat 7.5 as 8.0.

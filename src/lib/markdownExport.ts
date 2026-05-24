@@ -1,4 +1,4 @@
-import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from './bands';
+﻿import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from './bands';
 import type { SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
 import type { WritingTask1AcademicPrompt } from '../data/questions/bank';
 import type { WritingTask1QuickPlan } from './practiceRecords';
@@ -177,9 +177,6 @@ const isMeaningfulShortAnswer = (feedback: Omit<SpeakingFeedback, 'obsidianMarkd
 
 const isHighBandSpeakingStable = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
   (feedback.targetState || resolveSpeakingTargetState(feedback)) === 'high_band_stable';
-
-const hasUnstableSpeakingTarget = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
-  ['needs_repair', 'target_failed_or_borderline'].includes(feedback.targetState || resolveSpeakingTargetState(feedback));
 
 const isHighBandWritingStable = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>) =>
   (feedback.targetState || resolveWritingTargetState(feedback)) === 'high_band_stable';
@@ -598,20 +595,12 @@ const reviewCardTransferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianM
 
 const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
   const state = feedback.targetState || resolveSpeakingTargetState(feedback);
-  if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. BAND 7.0+ TARGET ANSWER';
+  const lowerBound = feedback.bandEstimateRange?.lower ?? feedback.bandEstimateExcludingPronunciation;
+  if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. BAND 7 TARGET ANSWER';
   if (isSpeakingInsufficient(feedback)) return '## 4. NEEDS REPAIR';
   if (state === 'high_band_stable') return '## 4. STANDARD ANSWER';
-  if (state === 'high_band_boundary') return '## 4. HIGH-BAND BOUNDARY';
-  if (state === 'target_failed_or_borderline') return '## 4. TARGET ANSWER NEEDS REPAIR';
-  if (feedback.bandEstimateExcludingPronunciation < 7) return '## 4. BAND 7.0+ TARGET ANSWER';
-  if (feedback.bandEstimateExcludingPronunciation < 8) return '## 4. BAND 8+ TARGET ANSWER';
-
-  if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. 起步目标答案';
-  if (isSpeakingInsufficient(feedback)) return '## 4. 请先重录一个完整答案';
-  if (isHighBandSpeakingStable(feedback)) return '## 4. 高分稳定检查';
-  if (hasUnstableSpeakingTarget(feedback)) return '## 4. 目标答案待加强';
-  if (feedback.targetAnswerStatus !== 'meets_target') return '## 4. 目标答案尚未完成校验';
-  return `## 4. ${feedback.targetLayer || getTargetLabel(feedback.bandEstimateExcludingPronunciation, 'answer')}｜${getTargetLabelZh(feedback.bandEstimateExcludingPronunciation, 'answer')}`;
+  if (lowerBound < 7) return '## 4. BAND 7 TARGET ANSWER';
+  return '## 4. BAND 7+ TARGET ANSWER';
 };
 
 const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
@@ -632,11 +621,9 @@ const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown
 
   const targetLabel = isHighBandSpeakingStable(feedback)
     ? '目标层级已达到。下一步重点是自然输出、时间控制和迁移练习。'
-    : hasUnstableSpeakingTarget(feedback)
-      ? '这版目标答案还没有稳定达到目标层级，需要继续强化。'
-      : feedback.bandEstimateExcludingPronunciation >= 7
-    ? '目标训练方向：Band 8+ Examiner-Friendly Answer，表达更自然、逻辑更清楚，但不要写成作文。'
-    : '目标训练方向：Band 7.0+ Target Answer，保持自然口语，不写成作文。';
+    : (feedback.bandEstimateRange?.lower ?? feedback.bandEstimateExcludingPronunciation) >= 7
+    ? '目标训练方向：Band 7+ Target Answer，表达更自然、逻辑更清楚，但不要写成作文。'
+    : '目标训练方向：Band 7 Target Answer，保持自然口语，不写成作文。';
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) {
     return `${targetLabel}\n\n${starterTargetAnswer(feedback)}\n\n请把方括号里的内容替换成你的真实细节。`;
   }
@@ -652,16 +639,9 @@ const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown
       '本次没有必要的可选微调。',
     ]).join('\n\n');
   }
-  if (hasUnstableSpeakingTarget(feedback) || feedback.targetAnswerStatus !== 'meets_target') {
-    return cleanLines([
-      targetLabel,
-      feedback.targetAnswerRepairFocusZh || feedback.targetAnswerValidationRationaleZh || feedback.targetValidationZh,
-      '未通过独立校验的目标答案不作为成功目标展示。',
-    ]).join('\n\n');
-  }
   return cleanLines([
     targetLabel,
-    feedback.targetAnswerRepairFocusZh || feedback.highBandStabilityZh || feedback.targetAnswerRationaleZh,
+    feedback.highBandStabilityZh || feedback.targetAnswerRationaleZh,
     cleanLearningText(feedback.upgradedAnswer) || '请先重录一个完整答案。',
   ]).join('\n\n');
 };
@@ -757,12 +737,15 @@ export const buildSpeakingTrainingMarkdown = (
   const rows = reviewCardRows(feedback)
     .map(item => `| ${item.original} | ${item.correction} | ${item.note} |`)
     .join('\n');
-  const estimateLine = `- 当前单题训练估计：${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右，不含发音；样本短或证据有限时按保守值处理。`;
+  const range = feedback.bandEstimateRange;
+  const estimateText = range && Number.isFinite(range.lower) && Number.isFinite(range.upper)
+    ? `${formatConservativeBandEstimate(range.lower)}-${formatConservativeBandEstimate(range.upper)}`
+    : `${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右`;
+  const estimateLine = `- 当前单题训练估计：${estimateText}，不含发音；样本短或证据有限时按保守值处理。`;
   const estimateNotes = cleanLines([
     feedback.scoreConsistencyNoteZh && `- Score consistency: ${feedback.scoreConsistencyNoteZh}`,
+    range?.rationaleZh && `- Boundary rationale: ${range.rationaleZh}`,
     feedback.estimateRationaleZh && `- Estimate rationale: ${feedback.estimateRationaleZh}`,
-    feedback.targetUpgradeFocusZh && `- Target focus: ${feedback.targetUpgradeFocusZh}`,
-    feedback.targetValidationZh && `- Target validation: ${feedback.targetValidationZh}`,
   ]).join('\n');
   const transferTitle = feedback.part === 1
     ? '## 6. 可能追问｜Possible follow-ups'

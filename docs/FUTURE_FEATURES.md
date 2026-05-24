@@ -1,5 +1,7 @@
 # Future Features (Deferred to Local Development)
 
+> Historical reference only. Do not use this as current source of truth. For current work, read `HANDOFF_NEXT_CHAT`, `CURRENT_STATE`, `PROJECT_BACKLOG`, `ROADMAP`, `PRODUCT_DESIGN_PRINCIPLES`, `AGENT_WORKFLOW`, and `CODEBASE_MAP`.
+
 1. **Real AI Integration**: Transition from `MockProvider` to `GeminiProvider` using `@google/genai`.
 2. **Audio Waveform**: Visual feedback for audio volume and potential pauses.
 3. **Advanced RAG**: Indexing user-provided IELTS PDF materials for context-aware feedback.

@@ -1,6 +1,20 @@
 # Handoff for Next Chat
 
-_Last updated: 2026-05-20_
+_Last updated: 2026-05-24_
+
+## Current Snapshot
+
+- Codex is currently the primary implementation agent for scoped product slices.
+- Claude Code, if used, is only an optional verifier/docs/status helper unless explicitly approved.
+- No active product feature is currently in progress unless the user gives a new scoped task.
+- Branch state must be verified by `git status` / `git log`, not by stale commit hashes in docs.
+- Task 2 annotated essay overlay baseline is implemented; do not rebuild from scratch.
+- Speaking 2026 May-Aug mainland active bank runtime is integrated through the active-bank adapter with V1 fallback.
+- Speaking transcript flow has one editable transcript box plus audio-backed transcription, but audio transcription reliability remains a known limitation and can still fall back.
+- Task 1 calibration remains future work and needs real Task 1 samples.
+- Do not merge/push unless the user explicitly asks for daily closeout.
+- Do not change provider routing, server/auth/database/RAG, advanced ASR, or pronunciation scoring unless explicitly scoped.
+- For quick code orientation, read `docs/CODEBASE_MAP.md`.
 
 ## Repo
 
@@ -16,13 +30,23 @@ https://github.com/Gzh123123123456/ielts-scholar
 
 ## Current Development Environment
 
-Primary temporary environment: local Claude Code.
+Primary implementation environment: Codex for scoped product/product-code slices.
 
-Claude Code currently uses a DeepSeek Anthropic-compatible endpoint, mapped to `deepseek-v4-pro[1m]`.
+Claude Code, if used, is an optional verifier/docs/status helper unless explicitly approved for a specific task.
 
-Codex may resume later. GitHub is the shared sync point between local Claude Code and Codex.
+GitHub remains the shared sync point between Codex, Claude Code, and future ChatGPT sessions.
 
 ## Recent Events
+
+- **2026-05-24 Speaking runtime and feedback stabilization closeout**:
+  - Speaking active mainland seasonal bank runtime is now connected through `src/data/speaking/activeSpeakingBank.ts`; old V1 prompts remain fallback data and saved records preserve question snapshots.
+  - Normal Speaking analysis keeps a structured provider contract with local markdown/export generation; provider-generated `obsidianMarkdown` and learner-facing Band 8+/certification/self-score target fields remain out of ordinary `speaking_analysis`.
+  - Valid adjacent half-band ranges from one normal analysis pass now render in the learner score display; verified runtime evidence showed `5.5-6.0 ESTIMATED RANGE`.
+  - Generated target answers display as learning resources when available. The accepted lower-band Part 2 result showed a complete `BAND 7 TARGET ANSWER`.
+  - Debug target state for normal successful Speaking analysis is neutral: `targetState:generated_target` and `final generated_target`, not `needs_repair` or `target_failed_or_borderline`.
+  - Low/mid-band Speaking feedback has shared coverage/classification guardrails for genuine high-impact issues; the family-album Part 2 answer is regression evidence only, not production-specific logic.
+  - Audio-backed transcription exists but can still fail or fall back; do not treat audio transcription reliability as completed.
+  - Part 1 topic-thread and Part 3 discussion-thread flow remain future work, and Writing Task 1 / Task 2 runtime behavior was not changed by the Speaking closeout.
 
 - **2026-05-20 high-band boundary + Speaking Part 2 feedback cleanup slice**:
   - Added a shared final target-state vocabulary across all five modules: Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2.
@@ -33,6 +57,14 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
   - Markdown export mirrors the semantic labels and avoids Risk note / empty replacement artifacts.
   - Task 1 remains visually conservative and not redesigned; it uses the shared target-state vocabulary and marks generated target reports as generated rather than independently validated.
   - Plugin/notranslate remains considered solved and should not be reopened unless a direct regression appears.
+
+- **2026-05-23 Speaking response-contract cleanup slice**:
+  - Normal Speaking analysis provider JSON is structured feedback only; Gemini/DeepSeek/Mock are no longer asked to generate `obsidianMarkdown`.
+  - Speaking markdown/export remains available because the app builds it locally after successful parsing.
+  - Normal Speaking provider output no longer requests Band 8+/certification/self-score target fields or `riskNoteZh`.
+  - Boundary ranges remain active, and target headings stay local: lower bound below 7.0 -> `BAND 7 TARGET ANSWER`; lower bound at or above 7.0 -> `BAND 7+ TARGET ANSWER`; high-band-stable -> `STANDARD ANSWER`.
+  - Low/mid-band Speaking feedback depth remains active across Parts 1/2/3, including MUST FIX, HIGH-IMPACT PHRASE FIXES, and PERSONAL MATERIAL & IDEA EXPANSION where the transcript supports them.
+  - Speaking transcription/audio behavior, the one-box transcript UI, seasonal Speaking bank runtime, Writing Task 1, and Writing Task 2 runtime behavior were not changed.
 
 - **2026-05-19 target-loop edge-case repair slice**: Remaining target-answer loop edge cases and feedback readability issues were repaired.
   - High-band stability no longer requires `upgradedAnswer` / `modelAnswer`; empty replacement text in this state is valid and should not trigger parse/schema fallback.
@@ -94,7 +126,7 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
   - Future bank updates should keep stable `id`, topic/type/category fields, and tags populated so filters and practice-count matching remain accurate.
 - **2026-05-16**: Global IELTS training target policy calibration completed.
   - Current estimates remain conservative and separate from generated targets.
-  - All Speaking, Writing Task 2, and Writing Task 1 target answers/reports/models now use the two-layer policy: below Band 7.0 -> Band 7.0+ target; Band 7.0 or above -> Band 8+ examiner-friendly upgrade.
+  - Historical target policy at the time: all Speaking, Writing Task 2, and Writing Task 1 target answers/reports/models used a two-layer Band 7.0+ / Band 8+ training policy. Superseded for normal Speaking on 2026-05-23: Speaking now uses `BAND 7 TARGET ANSWER`, `BAND 7+ TARGET ANSWER`, or `STANDARD ANSWER` headings without learner-facing Band 8+, certification, VERIFIED / NOT VERIFIED, or target self-score flow.
   - Removed learner-facing intermediate targets such as Target Band 7.5 / 7.5-8.0 and default Band 9 wording.
   - Speaking feedback now renders Idea & Expression Upgrade plus Personal Material & Idea Expansion instead of treating retained ideas as a shallow preserved-style note.
   - Speaking/Writing markdown exports keep current estimate and target layer separate.
@@ -146,43 +178,48 @@ Codex may resume later. GitHub is the shared sync point between local Claude Cod
 
 ## Current Priority
 
-Current closeout state: question-bank picker modals, picker UI polish, and completed Speaking reliability / markdown / global target-policy work are consolidated into local `main`.
+Current closeout state: Speaking active bank runtime, transcript review/audio-backed transcription path, structured normal Speaking feedback, local Speaking markdown export, simplified generated-target display, valid boundary range rendering, and shared low/mid-band feedback coverage are consolidated into local `main`.
 
-No new product feature is in progress. The next task should be selected from the backlog after this closeout.
+No new product feature is in progress. The next immediate task is a separate project audit package for workflow/docs/skills optimization; do not begin that audit implementation unless explicitly scoped.
 
 Global hard standard for all future feedback-loop work:
 - Current estimate is conservative.
-- Training target is minimum Band 7.0+.
-- If current estimate is 7.0 or above, the next answer/report/model/refinement targets Band 8+.
+- Speaking current answer display is an estimated single-question training band or adjacent half-band range from one ordinary analysis pass.
+- Speaking target answers are practice resources, not certified score guarantees; show `upgradedAnswer` whenever generation succeeds.
+- Speaking target headings: lower bound below 7.0 -> `BAND 7 TARGET ANSWER`; lower bound at or above 7.0 -> `BAND 7+ TARGET ANSWER`; high-band-stable -> `STANDARD ANSWER`.
 - Do not use Band 9 as a default learner-facing label.
 - Do not use Target Band 7.5 or 7.5-8.0 intermediate labels.
 - Do not inflate current score to match the target.
-- Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
+- Do not show Speaking `BAND 8+ TARGET ANSWER`, `ADVANCED TARGET ANSWER`, VERIFIED / NOT VERIFIED, target-certification failure, or raw provider method errors in the normal learner UI.
 - Target outputs must apply feedback, idea-development advice, and retained useful learner material.
 - Part 1 future remains topic-thread practice.
 - Part 2 remains single long-turn practice.
 - Part 3 future remains discussion-thread practice.
 - Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
+- Audio transcription reliability remains future dedicated work; the existing path can still fail or fall back.
 
 Remaining future scoring work, if needed, belongs to a larger scoring calibration task. Do not reopen scoring/provider routing unless explicitly scoped.
 
 ## Agent Role Boundaries
 
-### Claude Code — current scope only
+### Codex — current implementation scope
+
+- Primary implementation agent for scoped product/product-code slices.
+- Work only from scoped prompts.
+- Before implementation, follow `docs/CODEBASE_MAP.md`, `docs/AGENT_WORKFLOW.md`, `docs/PRODUCT_DESIGN_PRINCIPLES.md`, and the relevant task-specific source files.
+- Keep changes small, task-scoped, and verifiable.
+- Do not merge or push unless this is daily closeout or explicitly approved.
+
+### Claude Code — optional helper scope
 
 - Documentation updates
 - Git status checks
 - Lint / build verification if requested
+- Optional verification/status support unless explicitly approved for more
 - **No** product UI / information architecture implementation
 - **No** "small UI fix" unless explicitly approved
 
-### Codex — future scope
-
-- Main UI / product implementation
-- Product implementation and future annotated essay interaction
-- React implementation based on documented product principles
-
-GitHub remains the sync point between Claude Code, Codex, and future ChatGPT sessions. Merge/push should happen only during daily closeout or when explicitly approved. Future implementation prompts should include plain-language verification steps.
+GitHub remains the sync point between Codex, Claude Code, and future ChatGPT sessions. Merge/push should happen only during daily closeout or when explicitly approved. Future implementation prompts should include plain-language verification steps.
 
 ## Before Product/UI Work
 
@@ -239,8 +276,8 @@ Only for inputs that are:
 
 ## V1.3 Step 2 — Interactive Annotated Essay Overlay
 
-- **Next planned product task**, but not started in the 2026-05-13 closeout.
-- Documented in backlog/roadmap only.
+- Baseline implemented on 2026-05-14 for Task 2 Phase 3.
+- Future work should be polish/consolidation only unless explicitly scoped; do not rebuild from scratch.
 
 ## Development Rules
 
@@ -248,5 +285,5 @@ Only for inputs that are:
 - Before code changes, read `docs/AGENT_WORKFLOW.md`.
 - Keep changes small and task-scoped.
 - Do not merge or push unless this is daily closeout.
-- Do not implement V1.3 Step 2 interactive annotation unless explicitly scoped.
+- Do not rebuild Task 2 annotated essay overlay unless explicitly scoped.
 - Do not edit `.env.local`.

@@ -31,7 +31,7 @@ const scoresMeetFloor = (scores: number[], floor: number) =>
   scores.length > 0 && scores.every(score => score >= floor);
 
 const scoresBelowFloor = (scores: number[], floor: number) =>
-  scores.length > 0 && scores.every(score => score < floor);
+  scores.length > 0 && scores.some(score => score < floor);
 
 const hasIndependentValidation = (
   scores?: SpeakingTargetAnswerSelfScores | WritingTargetAnswerSelfScores,
@@ -43,11 +43,11 @@ const targetStatusFailed = (status?: TargetAnswerStatus) =>
 const targetFloorForLayer = (layer?: TargetAnswerLayer, fallback = 8) =>
   layer === 'band_7_to_7_5' ? 7 : fallback;
 
-const hasSpeakingBlocker = (feedback: Pick<SpeakingFeedback, 'fatalErrors'>) =>
+const hasSpeakingHardBlocker = (feedback: Pick<SpeakingFeedback, 'fatalErrors'>) =>
   feedback.fatalErrors.some(error =>
     error.tag === 'prompt_mismatch' ||
     error.tag === 'insufficient_sample' ||
-    /mismatch|under|insufficient|off.?topic|nonsense/i.test(`${error.tag} ${error.original} ${error.correction}`),
+    /mismatch|insufficient|off.?topic|nonsense/i.test(`${error.tag} ${error.original} ${error.correction}`),
   );
 
 const hasWritingBlocker = (feedback: Pick<WritingFeedback, 'essayLevelWarnings' | 'frameworkFeedback'>) =>
@@ -64,6 +64,7 @@ export const averageWritingScore = (feedback: Pick<WritingFeedback, 'scores'>) =
 interface ResolveTargetStateInput {
   currentScore: number;
   targetLayer?: TargetAnswerLayer;
+  targetFloor?: number;
   targetStatus?: TargetAnswerStatus;
   validationScores?: SpeakingTargetAnswerSelfScores | WritingTargetAnswerSelfScores;
   selfScores?: SpeakingTargetAnswerSelfScores | WritingTargetAnswerSelfScores;
@@ -74,6 +75,7 @@ interface ResolveTargetStateInput {
 export const resolveTargetState = ({
   currentScore,
   targetLayer,
+  targetFloor,
   targetStatus,
   validationScores,
   selfScores,
@@ -85,7 +87,7 @@ export const resolveTargetState = ({
   if (targetStatusFailed(targetStatus)) return 'target_failed_or_borderline';
   if (!hasTargetText && targetLayer !== 'high_band_stability') return 'needs_repair';
 
-  const floor = targetFloorForLayer(targetLayer, currentScore >= 7 ? 8 : 7);
+  const floor = targetFloor || targetFloorForLayer(targetLayer, currentScore >= 7 ? 8 : 7);
   const validationValues = scoreValues(validationScores as Record<string, unknown> | undefined);
   const selfValues = scoreValues(selfScores as Record<string, unknown> | undefined);
   const hasValidation = hasIndependentValidation(validationScores);
@@ -103,21 +105,19 @@ export const resolveTargetState = ({
   return 'generated_target';
 };
 
-export const resolveSpeakingTargetState = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): TargetState =>
-  resolveTargetState({
-    currentScore: feedback.bandEstimateExcludingPronunciation,
-    targetLayer: feedback.targetAnswerLayer,
-    targetStatus: feedback.targetAnswerStatus,
-    validationScores: feedback.targetAnswerValidationScores,
-    selfScores: feedback.targetAnswerSelfScores,
-    hasTargetText: Boolean(feedback.upgradedAnswer.trim()),
-    hasFatalBlocker: hasSpeakingBlocker(feedback),
-  });
+export const resolveSpeakingTargetState = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): TargetState => {
+  if (hasSpeakingHardBlocker(feedback)) return 'needs_repair';
+  if (feedback.bandEstimateExcludingPronunciation >= 8) return 'high_band_stable';
+  if (targetStatusFailed(feedback.targetAnswerStatus)) return 'target_failed_or_borderline';
+  if (feedback.upgradedAnswer.trim()) return 'generated_target';
+  return 'needs_repair';
+};
 
 export const resolveWritingTargetState = (feedback: Omit<WritingFeedback, 'obsidianMarkdown'>): TargetState =>
   resolveTargetState({
     currentScore: averageWritingScore(feedback),
     targetLayer: feedback.targetAnswerLayer,
+    targetFloor: feedback.targetAnswerFloor,
     targetStatus: feedback.targetAnswerStatus,
     validationScores: feedback.targetAnswerValidationScores,
     selfScores: feedback.targetAnswerSelfScores,
@@ -137,4 +137,3 @@ export const isHighBandStableState = (state?: TargetState) => state === 'high_ba
 export const isHighBandBoundaryState = (state?: TargetState) => state === 'high_band_boundary';
 export const isRepairState = (state?: TargetState) =>
   state === 'needs_repair' || state === 'target_failed_or_borderline';
-

@@ -3,6 +3,8 @@ export type IELTSMode = 'practice' | 'mock';
 export type SpeakingPart = 1 | 2 | 3;
 export type WritingTask = 'task1' | 'task2';
 export type ProviderOperation =
+  | 'speaking_audio_transcription'
+  | 'speaking_score_only'
   | 'speaking_analysis'
   | 'writing_analysis'
   | 'writing_task1_analysis'
@@ -10,7 +12,7 @@ export type ProviderOperation =
   | 'writing_framework_extraction'
   | 'speaking_target_validation'
   | 'writing_target_validation';
-export type ProviderFailureKind = 'provider_unavailable' | 'parse_or_schema';
+export type ProviderFailureKind = 'provider_unavailable' | 'parse_or_schema' | 'unsupported';
 
 export interface ProviderDiagnostic {
   module: IELTSModule;
@@ -73,6 +75,27 @@ export interface SpeakingTargetAnswerSelfScores {
   pronunciation?: null;
 }
 
+export interface BandEstimateRange {
+  lower: number;
+  upper: number;
+  rationaleZh?: string;
+}
+
+export interface SpeakingScoreOnlyResult {
+  module: 'speaking';
+  operation: 'speaking_score_only';
+  part: SpeakingPart;
+  scores: {
+    fluencyCoherence: number;
+    lexicalResource: number;
+    grammaticalRangeAccuracy: number;
+    pronunciation: null;
+  };
+  bandEstimateExcludingPronunciation: number;
+  rationaleZh: string;
+  boundaryStatus?: 'clear' | 'borderline_7' | 'borderline_8' | 'insufficient_sample';
+}
+
 export interface WritingTargetAnswerSelfScores {
   taskResponse?: number;
   coherenceCohesion?: number;
@@ -88,6 +111,14 @@ export interface SpeakingTargetValidationResult {
   scores: SpeakingTargetAnswerSelfScores;
   rationaleZh: string;
   repairFocusZh: string;
+}
+
+export interface SpeakingAudioTranscriptionResult {
+  module: 'speaking';
+  operation: 'speaking_audio_transcription';
+  transcript: string;
+  uncertaintyNotes?: string[];
+  providerDiagnostic?: string;
 }
 
 export interface WritingTargetValidationResult {
@@ -117,6 +148,7 @@ export interface SpeakingFeedback {
   question: string;
   transcript: string;
   bandEstimateExcludingPronunciation: number;
+  bandEstimateRange?: BandEstimateRange;
   estimateRationaleZh?: string;
   targetBandFloor?: number;
   targetLayer?: string;

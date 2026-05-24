@@ -1,5 +1,7 @@
 # V1 Scope
 
+> Historical reference only. Do not use this as current source of truth. For current work, read `HANDOFF_NEXT_CHAT`, `CURRENT_STATE`, `PROJECT_BACKLOG`, `ROADMAP`, `PRODUCT_DESIGN_PRINCIPLES`, `AGENT_WORKFLOW`, and `CODEBASE_MAP`.
+
 ## Implemented
 - **Navigation**: Home, Speaking Entry, Writing Entry, Progress, Debug.
 - **Speaking Practice**:

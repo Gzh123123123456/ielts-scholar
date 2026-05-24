@@ -14,7 +14,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const scoreLine = (diagnostic: ProviderDiagnostic) => {
   const parsed = isRecord(diagnostic.parsedJson) ? diagnostic.parsedJson : {};
   const scores = isRecord(parsed.scores) ? parsed.scores : {};
-  if (diagnostic.operation === 'speaking_analysis') {
+  if (diagnostic.operation === 'speaking_analysis' || diagnostic.operation === 'speaking_score_only') {
     return typeof parsed.bandEstimateExcludingPronunciation === 'number'
       ? `score ${parsed.bandEstimateExcludingPronunciation.toFixed(1)}`
       : 'score n/a';
@@ -37,6 +37,11 @@ const scoreLine = (diagnostic: ProviderDiagnostic) => {
   return validationScores.length ? validationScores.join(' ') : 'score n/a';
 };
 
+const normalizedTargetState = (diagnostic: ProviderDiagnostic) =>
+  diagnostic.normalizedFields
+    ?.map(item => item.match(/^targetState:(.+)$/)?.[1])
+    .find(Boolean);
+
 const targetLine = (diagnostic: ProviderDiagnostic) => {
   const parsed = isRecord(diagnostic.parsedJson) ? diagnostic.parsedJson : {};
   const request = isRecord(diagnostic.requestPayload) ? diagnostic.requestPayload : {};
@@ -46,15 +51,29 @@ const targetLine = (diagnostic: ProviderDiagnostic) => {
     : typeof request.originalCurrentScore === 'number'
       ? request.originalCurrentScore
       : undefined;
-  const finalTargetState = typeof parsed.targetState === 'string'
-    ? parsed.targetState
-    : typeof currentScore === 'number'
+  const normalizedState = normalizedTargetState(diagnostic);
+  const finalTargetState = (() => {
+    if (typeof parsed.targetState === 'string') return parsed.targetState;
+    if (normalizedState) return normalizedState;
+    if (
+      diagnostic.operation === 'speaking_analysis' &&
+      typeof parsed.upgradedAnswer === 'string' &&
+      parsed.upgradedAnswer.trim()
+    ) {
+      return 'generated_target';
+    }
+    return typeof currentScore === 'number'
       ? resolveTargetState({
           currentScore,
           targetLayer: typeof parsed.targetAnswerLayer === 'string'
             ? parsed.targetAnswerLayer as never
             : typeof request.targetLayer === 'string'
               ? request.targetLayer as never
+              : undefined,
+          targetFloor: typeof parsed.targetAnswerFloor === 'number'
+            ? parsed.targetAnswerFloor
+            : typeof request.targetFloor === 'number'
+              ? request.targetFloor
               : undefined,
           targetStatus: typeof parsed.status === 'string'
             ? parsed.status as never
@@ -65,7 +84,9 @@ const targetLine = (diagnostic: ProviderDiagnostic) => {
           hasTargetText: true,
         })
       : undefined;
+  })();
   const parts = [
+    diagnostic.operation === 'speaking_score_only' && 'blind score-only',
     typeof parsed.targetAnswerLayer === 'string' && `layer ${parsed.targetAnswerLayer}`,
     typeof parsed.targetAnswerStatus === 'string' && `target ${parsed.targetAnswerStatus}`,
     typeof parsed.status === 'string' && `status ${parsed.status}`,

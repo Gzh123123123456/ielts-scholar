@@ -27,7 +27,6 @@
     "dist",
     "node_modules",
     "_debug-*",
-    "branch-audit-*.txt",
     ".claude"
   ]
 }

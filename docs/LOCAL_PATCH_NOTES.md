@@ -1,5 +1,7 @@
 # Local Patch Notes
 
+> Historical reference only. Do not use this as current source of truth. For current work, read `HANDOFF_NEXT_CHAT`, `CURRENT_STATE`, `PROJECT_BACKLOG`, `ROADMAP`, `PRODUCT_DESIGN_PRINCIPLES`, `AGENT_WORKFLOW`, and `CODEBASE_MAP`.
+
 ## 1. Summary
 
 This project was exported from Google AI Studio as a React + TypeScript + Vite IELTS training app. Local fixes were applied to make Speaking Practice and Writing Task 2 Practice work reliably in a local Chrome browser before connecting any real AI provider.

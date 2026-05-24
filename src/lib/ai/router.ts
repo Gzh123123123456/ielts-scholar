@@ -3,7 +3,9 @@ import { GeminiProvider } from './providers/geminiProvider';
 import { DeepSeekProvider } from './providers/deepseekProvider';
 import {
   AIProvider,
+  SpeakingAudioTranscriptionRequest,
   SpeakingAnalysisRequest,
+  SpeakingScoreOnlyRequest,
   WritingAnalysisRequest,
   WritingFrameworkCoachRequest,
   WritingFrameworkRequest,
@@ -14,7 +16,9 @@ import {
 import {
   ProviderDiagnostic,
   ProviderOperation,
+  SpeakingAudioTranscriptionResult,
   SpeakingFeedback,
+  SpeakingScoreOnlyResult,
   WritingFeedback,
   WritingFrameworkCoachFeedback,
   WritingFrameworkSummary,
@@ -32,6 +36,8 @@ import {
 } from './usage';
 import {
   safeAnalyzeSpeaking,
+  safeScoreSpeakingOnly,
+  safeTranscribeSpeakingAudio,
   safeAnalyzeWriting,
   safeAnalyzeWritingTask1,
   safeCoachWritingFramework,
@@ -155,12 +161,40 @@ const makeMock = (reason: string): RouteChoice => ({
   learnerReason: reason,
 });
 
+const makeUnsupported = (reason: string): RouteChoice => ({
+  provider: {} as AIProvider,
+  providerName: 'unsupported',
+  model: 'none',
+  tier: 'mock',
+  debugReason: reason,
+  learnerReason: reason,
+  fallbackReason: reason,
+});
+
 const isCooldownActive = () => {
   const until = getRouterState().geminiCooldownUntil;
   return until ? new Date(until).getTime() > Date.now() : false;
 };
 
-const estimatedText = (payload: unknown) => JSON.stringify(payload);
+const usageEstimatePayload = (operation: ProviderOperation, payload: unknown) => {
+  if (operation !== 'speaking_audio_transcription') return payload;
+  const request = payload as Partial<SpeakingAudioTranscriptionRequest>;
+  return {
+    part: request.part,
+    question: request.question,
+    topic: request.topic,
+    tags: request.tags,
+    cueCard: request.cueCard,
+    roughBrowserTranscript: request.roughBrowserTranscript,
+    transcriptionHints: request.transcriptionHints,
+    mimeType: request.mimeType,
+    audioBase64: '[AUDIO_BASE64_REDACTED]',
+    audioBase64Length: typeof request.audioBase64 === 'string' ? request.audioBase64.length : undefined,
+  };
+};
+
+const estimatedText = (operation: ProviderOperation, payload: unknown) =>
+  JSON.stringify(usageEstimatePayload(operation, payload));
 
 const canUseGemini = (reserveRequired: boolean) => {
   if (!hasGemini() || isCooldownActive()) return false;
@@ -170,6 +204,11 @@ const canUseGemini = (reserveRequired: boolean) => {
   if (usage.requestsLastMinute >= limits.rpm) return false;
   if (usage.estimatedInputTokensLastMinute >= limits.tpm) return false;
   return reserveRequired ? remaining > limits.reserve : remaining > 0;
+};
+
+export const canUseRealAudioTranscriptionProvider = () => {
+  const mode = configuredProvider();
+  return (mode === 'gemini' || mode === 'auto') && hasGemini() && canUseGemini(false);
 };
 
 const proAllowedNow = () => {
@@ -252,6 +291,42 @@ const chooseRoute = (
   return chooseDeepSeekFallback(operation);
 };
 
+const chooseAudioTranscriptionRoute = (): RouteChoice => {
+  const mode = configuredProvider();
+  if (mode === 'mock') return makeMock('Mock audio transcription used for local UI flow.');
+  if (mode === 'gemini') {
+    if (!hasGemini()) return makeUnsupported('Gemini audio transcription is unavailable because VITE_GEMINI_API_KEY is not configured.');
+    return canUseGemini(false)
+      ? makeGemini()
+      : makeUnsupported('Gemini audio transcription is unavailable because local quota or cooldown limits are active.');
+  }
+  if (mode === 'auto') {
+    if (!hasGemini()) return makeUnsupported('Audio transcription needs Gemini audio input; DeepSeek does not support this operation.');
+    return canUseGemini(false)
+      ? makeGemini()
+      : makeUnsupported('Gemini audio transcription is unavailable because local quota or cooldown limits are active.');
+  }
+  return makeUnsupported('Audio transcription provider is unavailable.');
+};
+
+const chooseAuthoritativeSpeakingScoreRoute = (): RouteChoice => {
+  const mode = configuredProvider();
+  if (mode === 'mock') return makeMock('Mock Provider is the default score-only judge in mock mode.');
+  if (mode === 'gemini') {
+    if (!hasGemini()) return makeUnsupported('Gemini authoritative Speaking scorer is unavailable because VITE_GEMINI_API_KEY is not configured.');
+    return canUseGemini(false)
+      ? makeGemini()
+      : makeUnsupported('Gemini authoritative Speaking scorer is unavailable because local quota or cooldown limits are active.');
+  }
+  if (mode === 'auto') {
+    if (!hasGemini()) return makeUnsupported('Authoritative Speaking scoring requires Gemini in auto mode; DeepSeek is not used as an equivalent judge.');
+    return canUseGemini(false)
+      ? makeGemini()
+      : makeUnsupported('Gemini authoritative Speaking scorer is unavailable because local quota or cooldown limits are active; DeepSeek certification is not used.');
+  }
+  return makeUnsupported('Authoritative Speaking scorer is unavailable.');
+};
+
 async function runWithRoute<T>(
   operation: ProviderOperation,
   payload: unknown,
@@ -263,12 +338,12 @@ async function runWithRoute<T>(
     ...result.diagnostic,
     modelName: route.model,
   };
-  const estimatedInputTokens = estimateTokensFromText(estimatedText(payload));
+  const estimatedInputTokens = estimateTokensFromText(estimatedText(operation, payload));
   recordApiCall({
     provider: route.providerName,
     model: route.model,
     operation,
-    success: !isProviderUnavailable(diagnostic),
+    success: !diagnostic.failureKind,
     status: diagnostic.failureKind || 'ok',
     estimatedInputTokens,
   });
@@ -329,13 +404,62 @@ export const routedAnalyzeSpeaking = (
     safeAnalyzeSpeaking(provider, providerName, request));
 };
 
+export const routedTranscribeSpeakingAudio = (
+  request: SpeakingAudioTranscriptionRequest,
+): Promise<RoutedResult<SpeakingAudioTranscriptionResult>> => {
+  const route = chooseAudioTranscriptionRoute();
+  return runWithRoute('speaking_audio_transcription', request, route, (provider, providerName) =>
+    safeTranscribeSpeakingAudio(provider, providerName, request));
+};
+
+export const routedScoreSpeakingOnly = (
+  request: SpeakingScoreOnlyRequest,
+): Promise<RoutedResult<SpeakingScoreOnlyResult>> => {
+  const route = chooseAuthoritativeSpeakingScoreRoute();
+  return runWithRoute('speaking_score_only', request, route, (provider, providerName) =>
+    safeScoreSpeakingOnly(provider, providerName, request));
+};
+
 export const routedValidateSpeakingTarget = (
   request: SpeakingTargetValidationRequest,
-): Promise<RoutedResult<SpeakingTargetValidationResult>> => {
-  const route = chooseRoute('speaking_target_validation', request, { reserveGemini: true });
-  return runWithGeminiRetry('speaking_target_validation', request, route, (provider, providerName) =>
-    safeValidateSpeakingTarget(provider, providerName, request));
-};
+): Promise<RoutedResult<SpeakingTargetValidationResult>> => routedScoreSpeakingOnly({
+  part: request.part,
+  question: request.question,
+  transcript: request.transcript,
+}).then(result => {
+  const floor = request.targetFloor;
+  const scores = result.feedback.scores;
+  const meets = result.feedback.bandEstimateExcludingPronunciation >= floor &&
+    scores.fluencyCoherence >= floor &&
+    scores.lexicalResource >= floor &&
+    scores.grammaticalRangeAccuracy >= floor;
+  const farBelow = [
+    result.feedback.bandEstimateExcludingPronunciation,
+    scores.fluencyCoherence,
+    scores.lexicalResource,
+    scores.grammaticalRangeAccuracy,
+  ].some(score => score < floor - 0.5);
+
+  return {
+    ...result,
+    feedback: {
+      module: 'speaking',
+      operation: 'speaking_target_validation',
+      targetFloor: floor,
+      status: meets ? 'meets_target' : farBelow ? 'failed' : 'borderline',
+      scores: {
+        fluencyCoherence: scores.fluencyCoherence,
+        lexicalResource: scores.lexicalResource,
+        grammaticalRangeAccuracy: scores.grammaticalRangeAccuracy,
+        pronunciation: null,
+      },
+      rationaleZh: `Backward-compatible speaking_target_validation redirected to blind speaking_score_only. ${result.feedback.rationaleZh}`,
+      repairFocusZh: meets
+        ? ''
+        : 'Blind score-only judge did not certify this answer at the requested floor.',
+    },
+  };
+});
 
 export const routedAnalyzeWriting = (
   request: WritingAnalysisRequest,

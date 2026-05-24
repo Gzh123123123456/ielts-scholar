@@ -45,7 +45,9 @@ export interface SpeakingPracticeRecord extends PracticeRecordBase {
   questionData?: SpeakingQuestion;
   transcript: string;
   rawTranscript?: string;
+  audioTranscript?: string;
   transcriptOrigin: 'speech' | 'manual';
+  transcriptSource?: 'speech' | 'audio' | 'manual' | 'reviewed';
   feedback?: SpeakingFeedback;
 }
 
@@ -150,6 +152,11 @@ const asTargetState = (value: unknown) =>
 
 const asStatus = (value: unknown): PracticeRecordStatus =>
   value === 'analyzed' || value === 'provider_failed' || value === 'draft' ? value : 'draft';
+
+const asTranscriptSource = (value: unknown): SpeakingPracticeRecord['transcriptSource'] =>
+  value === 'speech' || value === 'audio' || value === 'manual' || value === 'reviewed'
+    ? value
+    : undefined;
 
 const asSpeakingPart = (value: unknown): 1 | 2 | 3 =>
   value === 2 || value === 3 ? value : 1;
@@ -383,6 +390,15 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     bandEstimateExcludingPronunciation: typeof value.bandEstimateExcludingPronunciation === 'number'
       ? value.bandEstimateExcludingPronunciation
       : 0,
+    bandEstimateRange: isObject(value.bandEstimateRange) &&
+      typeof value.bandEstimateRange.lower === 'number' &&
+      typeof value.bandEstimateRange.upper === 'number'
+      ? {
+          lower: value.bandEstimateRange.lower,
+          upper: value.bandEstimateRange.upper,
+          rationaleZh: asOptionalString(value.bandEstimateRange.rationaleZh),
+        }
+      : undefined,
     estimateRationaleZh: asOptionalString(value.estimateRationaleZh),
     targetBandFloor: typeof value.targetBandFloor === 'number' ? value.targetBandFloor : undefined,
     targetLayer: asOptionalString(value.targetLayer),
@@ -454,7 +470,9 @@ const sanitizeSpeakingRecord = (value: unknown): SpeakingPracticeRecord | null =
     analyzedAt: asOptionalString(value.analyzedAt),
     transcript: asString(value.transcript),
     rawTranscript: asOptionalString(value.rawTranscript),
+    audioTranscript: asOptionalString(value.audioTranscript),
     transcriptOrigin: value.transcriptOrigin === 'speech' ? 'speech' : 'manual',
+    transcriptSource: asTranscriptSource(value.transcriptSource),
     feedback: sanitizeSpeakingFeedback(value.feedback),
     obsidianMarkdown: asOptionalString(value.obsidianMarkdown),
   };
