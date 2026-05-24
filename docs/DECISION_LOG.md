@@ -1,5 +1,15 @@
 # Decision Log
 
+## [2026-05-24] Workflow Simplification and Codex Skills Baseline
+- **Decision**: Separate workflow/docs optimization from product behavior and make ordinary future work shorter to request.
+- **Implemented**:
+  - Current docs now distinguish active product truth from historical decisions and superseded Speaking architectures.
+  - Ordinary scoped implementation should use `$ielts-implement`.
+  - Explicit daily closeout should use `$ielts-closeout`.
+  - User-provided questions, answers, screenshots, transcripts, and Debug Panel output are regression evidence, not production content.
+  - Ordinary feature work should not automatically expand durable docs before user/runtime verification; confirmed current-state changes can be synced after acceptance or during closeout.
+- **Explicitly unchanged**: no app runtime behavior, provider behavior, Speaking behavior, Writing behavior, scoring behavior, export behavior, storage behavior, package/config files, merge, push, or commit changed as part of this workflow decision.
+
 ## [2026-05-24] Speaking Runtime and Feedback Stabilization Closeout
 - **Decision**: Close the current Speaking stabilization checkpoint as a product baseline, while leaving workflow/docs/skills optimization and deeper Speaking interaction flows for separate future work.
 - **Implemented**:

@@ -1,161 +1,67 @@
-# Agent Workflow — IELTS Scholar
+# Agent Workflow - IELTS Scholar
 
-## Project Identity
+## Purpose
 
-Project: IELTS Scholar — Local-First Training Agent  
-Repo: https://github.com/Gzh123123123456/ielts-scholar  
-Local path: `D:\Personal\Desktop\ielts-scholar_-local-first-training-agent`
+This workflow reduces prompt length and user burden. The user should not need to manage complex thread strategy, document selection, git rituals, or repeated safety boilerplate.
 
-This is a local-first React + TypeScript + Vite IELTS training app.
+## Mode 1: Ordinary Implementation Slice
 
-## Source of Truth Order
+Use this for scoped product or bug-fix work.
 
-Use this order:
+1. The user describes the task and may include screenshots, transcript text, Debug Panel output, or runtime observations.
+2. ChatGPT turns that into a short scoped task with:
+   - Task
+   - Evidence
+   - Preserve
+   - Done when
+3. Codex uses `$ielts-implement`.
+4. Codex reads `AGENTS.md`, then only the docs and files needed for the task.
+5. Codex performs minimal git preflight, keeps edits scoped, validates, and reports plain-language verification.
+6. No commit, merge, or push happens by default.
 
-1. Current source code
-2. `docs/HANDOFF_NEXT_CHAT.md`
-3. `docs/CURRENT_STATE.md`
-4. `docs/DECISION_LOG.md`
-5. `docs/PROJECT_BACKLOG.md`
-6. `docs/ROADMAP.md`
-7. Chat messages
+Ordinary implementation should not reread the full handoff, backlog, roadmap, and decision history unless the task actually needs them.
 
-Do not rely on old chat memory when repo docs or source code are available.
+## Mode 2: Visual / Manual Verification
 
-## Start-of-Work Checklist
+Use this when the user checks the actual product.
 
-Before changing code, run:
+- The user can report what they see on the page and send screenshots or Debug Panel output when relevant.
+- Do not require a project package for ordinary UI observations.
+- Request a code/project audit package only when evidence is insufficient, reports conflict with runtime, or a full audit is intentionally needed.
+- User-provided questions, answers, screenshots, transcripts, and Debug Panel output are regression evidence, not production content.
 
-```bash
-git status --short
-git status
-git branch --show-current
-git remote -v
-git fetch origin
-git status -sb
-git log --oneline -5
-```
+When one sample exposes a bug:
 
-Then report:
+- locate and fix the shared runtime, provider, rendering, or workflow cause;
+- do not hardcode the topic, answer, phrase, screenshot, transcript, or one regression example into production behavior;
+- use the original sample as a regression check;
+- verify at least one unrelated affected scenario where practical;
+- if the fix affects shared Speaking behavior, smoke-test another relevant Part where practical;
+- never claim Writing is fixed by a Speaking-only change.
 
-- current branch
-- whether working tree is clean
-- whether local branch is ahead/behind/diverged from origin
-- latest commit
-- untracked files
+## Mode 3: Daily Closeout
 
-If the branch is diverged, stop and ask the user.
+Use this only when the user explicitly requests daily closeout.
 
-If local is behind origin/main and working tree is clean, use:
+1. Codex uses `$ielts-closeout`.
+2. It checks the full accumulated worktree, branch state, ahead/behind counts, untracked files, and secret/temp risks.
+3. It syncs only necessary current-state documentation after validated product work.
+4. It runs required validation.
+5. It stages only intended files.
+6. It commits and pushes only if safe and within the explicit closeout authorization.
 
-```bash
-git pull --ff-only origin main
-```
+If work is already on `main`, do not manufacture a merge. Never force push.
 
-Do not merge manually unless explicitly requested.
+## Thread Guidance
 
-## Agent Role Boundary
+- Continue the same Codex conversation while completing the same unresolved feature slice.
+- Start a new Codex task when moving to a genuinely separate workstream or after a heavily superseded experimental thread has been closed.
+- The user should not have to manage this alone; future prompts should explicitly state whether to continue the same task or open a new one.
 
-- Codex is the primary implementation agent when the user is using Codex, but it should still work only from scoped prompts and repo docs/source.
-- Claude Code should **not** perform product UI / information architecture patches unless explicitly approved.
-- For product / UI design work, first consult `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
-- Claude Code remains an optional verification/docs/status helper unless explicitly approved for more.
+## Documentation Timing
 
-## Normal Development Rules
-
-- Keep changes small and task-scoped.
-- Do not start unrelated feature work.
-- Do not change provider routing unless explicitly requested.
-- Do not edit `.env.local` or expose API keys.
-- Do not add a database, server, auth, RAG, or production key management unless explicitly scoped.
-- Preserve the local-first prototype architecture.
-- Preserve the warm academic paper UI unless the task is a redesign task.
-
-## Writing Task 2 Phase 3 Rules
-
-Current priority may involve Phase 3 feedback logic.
-
-Allowed in Phase 3 content logic repair:
-
-- Feedback schema / normalization updates
-- Provider prompt updates
-- Mock provider updates
-- Phase 3 rendering updates
-- Markdown export alignment
-- Docs/backlog updates
-
-Do not implement unless explicitly scoped:
-
-- inline underlines
-- solid problem dots
-- click overlays
-- source-text annotation popovers
-- interactive correction mapping UI
-- collapsing old correction cards
-- new provider routing
-- merge or push
-
-## Documentation Rule
-
-If a future idea is discussed but not implemented, record it in one of:
-
-- `docs/PROJECT_BACKLOG.md`
-- `docs/ROADMAP.md`
-- `docs/DECISION_LOG.md`
-- `docs/HANDOFF_NEXT_CHAT.md`
-
-Do not leave important future scope only in chat.
-
-## Completion Checklist for a Small Slice
-
-After code changes, run:
-
-```bash
-npm run lint
-npm run build
-git status --short
-git diff --stat
-```
-
-Then report in plain language:
-
-- what changed
-- which files changed
-- whether lint passed
-- whether build passed
-- how the user can verify the result in the UI
-- whether any docs/backlog were updated
-
-Committing is allowed after a completed slice if the user’s current workflow allows it.
-
-Do not push unless it is a daily closeout or the user explicitly requests push.
-
-## Daily Closeout Rules
-
-Only during daily closeout:
-
-1. Run git status checks.
-2. Confirm branch.
-3. Confirm ahead/behind/diverged state.
-4. Run lint.
-5. Run build.
-6. Confirm `.env.local` and API key files are not staged.
-7. Commit clearly related tracked changes.
-8. Push only if:
-   - working tree is clean
-   - lint/build pass
-   - local main is ahead of origin/main
-   - branch is not diverged
-   - user requested closeout
-
-Never force push.
-
-## Final Response Format
-
-For every completed coding task, explain:
-
-1. What changed
-2. Why it changed
-3. How to verify
-4. What was intentionally not changed
-5. Whether commit/push was done
+- Product implementation first.
+- User/runtime verification next.
+- Durable current-state documentation mainly after acceptance or during closeout.
+- Do not turn experimental attempts into current truth.
+- During ordinary feature work, update docs only when the user asks or when a confirmed durable rule/current-state fact would otherwise become false.

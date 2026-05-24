@@ -29,8 +29,8 @@ This is a navigation map for Codex and future agents. It is not a product spec, 
 - Speaking recording now runs browser Web Speech and MediaRecorder audio capture in parallel where available. Audio blobs are kept in page memory for explicit transcription requests and are not written to localStorage.
 - Speaking transcript review centers one editable transcript box for analysis. Browser and audio transcripts remain secondary/collapsed details and internal record/debug fields. Only the visible transcript is sent to `routedAnalyzeSpeaking`.
 - Provider route status should stay in `src/components/ui/DebugPanel.tsx` and `src/components/ui/ApiStatusPanel.tsx`, not as a main Speaking learner banner. Local transcript status may still say whether audio or browser transcription was used.
-- Current runtime imports V1 bank arrays from `src/data/questions/bank.ts`: `speakingPart1`, `speakingPart2`, and `speakingPart3`.
-- Old V1 speaking bank data lives in `src/data/questions/bank.ts`.
+- Current Speaking runtime uses the active mainland adapter in `src/data/speaking/activeSpeakingBank.ts`.
+- Old V1 speaking bank arrays in `src/data/questions/bank.ts` are preserved as fallback data.
 - 2026 May-Aug seasonal bank data lives in `src/data/speaking/speakingBank2026MayAug.ts`, with shared types in `src/data/speaking/speakingPromptTypes.ts` and helpers in `src/data/speaking/speakingBankIndex.ts`.
 - Active Speaking practice bank exports live in `src/data/speaking/activeSpeakingBank.ts`.
 - The active adapter converts mainland-only 2026 May-Aug seasonal `SpeakingPrompt` data into the V1 `SpeakingQuestion` runtime shape and preserves V1 fallback arrays from `src/data/questions/bank.ts`.
@@ -46,22 +46,23 @@ Before changing Speaking feedback, inspect:
 - Provider prompts and fixtures: `src/lib/ai/providers/mockProvider.ts`, `src/lib/ai/providers/geminiProvider.ts`, `src/lib/ai/providers/deepseekProvider.ts`, and `src/lib/ai/providers/base.ts`.
 - Routing: `src/lib/ai/router.ts`.
 - Safety normalization: `src/lib/ai/safety.ts`.
-- Independent target validation: `src/lib/ai/targetValidation.ts`.
+- Target-validation helpers: `src/lib/ai/targetValidation.ts`. For normal Speaking, remaining target-validation or score-only helpers are dormant/compatibility/future-audit territory, not the learner-facing display gate.
 - Shared target state: `src/lib/scoreLayer.ts`.
 - Rendering/runtime: `src/pages/SpeakingPractice.tsx`.
 - Export: `src/lib/markdownExport.ts`.
 - Diagnostics: `src/components/ui/DebugPanel.tsx` if diagnostic fields or pipeline steps change.
 - Audio transcription operation: `speaking_audio_transcription` is routed through `src/lib/ai/router.ts`, normalized in `src/lib/ai/safety.ts`, and exposed in provider diagnostics. Gemini implements real audio transcription through inline audio input; DeepSeek intentionally does not implement it; Mock returns a clearly labeled development transcript.
 - Audio transcription context hints are built in `src/lib/ai/transcriptionHints.ts`. Keep the hint list compact and use it only for ASR disambiguation, not grammar correction. Do not add personal glossary or user-specific vocabulary memory.
-- Speaking target display is intentionally simple in the normal learner flow: generated `upgradedAnswer` is shown when generation succeeds, without learner-facing certification gating.
-- Normal Speaking provider responses should contain structured feedback only. Do not ask providers to generate `obsidianMarkdown`, Band 8+/certification/self-score target fields, or `riskNoteZh` for ordinary `speaking_analysis`; `src/lib/ai/safety.ts` / `src/lib/markdownExport.ts` build markdown locally after parsing.
+- Speaking target display is intentionally simple in the normal learner flow: generated `upgradedAnswer` is shown when generation succeeds, without learner-facing validation gating.
+- Normal Speaking provider responses should contain structured feedback only. Do not ask providers to generate `obsidianMarkdown`, higher-band validation/self-score target fields, or `riskNoteZh` for ordinary `speaking_analysis`; `src/lib/ai/safety.ts` / `src/lib/markdownExport.ts` build markdown locally after parsing.
 - Speaking Part 1 / Part 2 / Part 3 share the same score and target display principles: current answer shows either an estimated single-question band or an adjacent half-band boundary range from the ordinary `speaking_analysis` pass.
 - Speaking low/mid-band feedback depth is regression-sensitive: low-noise means layered, high-impact, readable feedback, not sparse feedback. For 5.0-6.0 answers, prompts should surface enough major phrase and language fixes across `fatalErrors` and `naturalnessHints`, link them to the target answer when useful, and keep `STANDARD ANSWER` reserved for high-band stable 8.0+ outputs.
 - Valid adjacent half-band ranges are normalized in `src/lib/ai/safety.ts` and displayed by `src/pages/SpeakingPractice.tsx`; provider prompts should return the active schema shape, not placeholder ranges.
 - `src/components/ui/DebugPanel.tsx` should show neutral `generated_target` diagnostics for normal successful Speaking target answers.
-- Normal Speaking flow does not use `speaking_score_only` as a target display gate. Any remaining score-only helpers must stay dormant/dev-only unless a future scoped scoring audit reintroduces them.
-- Speaking target labels are pedagogical, not certified: current lower bound below 7.0 shows `BAND 7 TARGET ANSWER`, current lower bound at or above 7.0 shows `BAND 7+ TARGET ANSWER`, and existing high-band-stable output may show `STANDARD ANSWER`.
-- Provider diagnostics may stay in Debug Panel / API Status, but certification provider failures must not appear in the normal learner target-answer area.
+- Normal Speaking flow does not use `speaking_score_only` or target validation as a target display gate. Any remaining score-only or target-validation helpers must stay dormant/compatibility/dev-only unless a future scoped scoring audit reintroduces them.
+- Speaking target labels are pedagogical: current lower bound below 7.0 shows `BAND 7 TARGET ANSWER`, current lower bound at or above 7.0 shows `BAND 7+ TARGET ANSWER`, and existing high-band-stable output may show `STANDARD ANSWER`.
+- Provider diagnostics may stay in Debug Panel / API Status, but validation provider failures must not appear in the normal learner target-answer area.
+- If one answer exposes a bug, inspect the shared provider, safety, rendering, or workflow path rather than editing data or behavior for that exact sample.
 
 ## Writing Task 2 map
 
@@ -77,7 +78,7 @@ Relevant layers:
 - Provider prompts and mock fixtures: `src/lib/ai/providers/*`.
 - Routing: `src/lib/ai/router.ts`.
 - Safety normalization: `src/lib/ai/safety.ts`.
-- Independent target validation: `src/lib/ai/targetValidation.ts`.
+- Target validation helpers: `src/lib/ai/targetValidation.ts`.
 - Shared target state: `src/lib/scoreLayer.ts`.
 - Page rendering: `src/pages/WritingTask2Practice.tsx`.
 - Sentence corrections, Language Bank, target model answer, and annotated essay overlay are rendered in `src/pages/WritingTask2Practice.tsx` from `WritingFeedback`.
@@ -92,7 +93,7 @@ Important: the Task 2 annotated essay overlay baseline is already implemented. F
 - Task 1 prompt data lives in `writingTask1Academic` inside `src/data/questions/bank.ts`.
 - Task 1 feedback uses `WritingTask1Feedback` in `src/lib/ai/schemas.ts`, provider support in `src/lib/ai/providers/*`, safety normalization in `src/lib/ai/safety.ts`, target-state resolution in `src/lib/scoreLayer.ts`, and export support in `src/lib/markdownExport.ts`.
 - Task 1 target output is conservative/generated.
-- Task 1 does not yet have the same independent target validation maturity as Speaking and Writing Task 2.
+- Task 1 does not yet have the same target-validation maturity as Speaking and Writing Task 2.
 - Full Task 1 calibration needs real Task 1 debug samples and should not be done blindly.
 
 ## AI provider / feedback contract map
@@ -103,7 +104,7 @@ The linked layers are:
 - `src/lib/ai/providers/*`: provider implementations, prompts, and mock fixtures.
 - `src/lib/ai/router.ts`: provider selection and fallback routing.
 - `src/lib/ai/safety.ts`: parsing, fallback objects, normalization, score/target consistency safeguards.
-- `src/lib/ai/targetValidation.ts`: independent target validation loops for Speaking and Task 2.
+- `src/lib/ai/targetValidation.ts`: target-validation loops for Speaking and Task 2.
 - `src/lib/scoreLayer.ts`: shared target-state semantics.
 - UI rendering in `src/pages/SpeakingPractice.tsx`, `src/pages/WritingTask2Practice.tsx`, and `src/pages/WritingTask1Placeholder.tsx`.
 - `src/lib/markdownExport.ts`: learner-facing markdown notes.

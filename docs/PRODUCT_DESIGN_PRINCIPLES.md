@@ -1,192 +1,104 @@
 # Product Design Principles
 
-_Last updated: 2026-05-20_
+_Last updated: 2026-05-24_
 
-This document is the long-term product design source of truth for IELTS Scholar.
-It applies to all modules, all phases, and all future implementation work.
+This file records durable product principles for IELTS Scholar. It is not an implementation diary.
 
----
+## Low-Noise Feedback UI
 
-## A. Low-noise Feedback UI
+IELTS Scholar feedback pages already ask the learner to read a lot. Prefer structure over explanation.
 
-IELTS Scholar feedback pages already require the learner to read a lot.
-Every line of explanatory module text is potential UI noise.
+- Use grouping, labels, hierarchy, spacing, and content shape to communicate purpose.
+- Avoid long module-level explanatory copy when the interface can make the section's role obvious.
+- Feedback should feel like a calm revision workspace, not a raw AI dump, documentation page, or warning panel.
 
-**Rule:** Prefer structure over explanation.
-
-- Prefer layout, grouping, labels, arrows, hierarchy, and content format to communicate what a section is for.
-- If a module needs a long sentence to explain its purpose, first suspect weak information architecture.
-- Do not use module-level explanatory copy as the first solution.
-
-**Rejected example:**
-> "Expression bank for this essay — for revision and future reuse, not another correction list."
-
-This sentence was rejected because it explains the design instead of letting the design express itself.
-The section title, grouping, and content shape should make the purpose obvious without narration.
-
----
-
-## B. Interface Should Feel Like a Calm Revision Workspace
-
-The product should feel like:
-
-- a calm IELTS training workspace
-- a strict but helpful teacher's revision desk
-- **not** a raw AI output dump
-- **not** a documentation page
-- **not** a page full of warnings and disclaimers
-
-Feedback UI should help the learner revise, not feel like reading a system report.
-
----
-
-## C. Chinese Guidance + English Learning Material
+## Chinese Guidance + English Learning Material
 
 IELTS Scholar is designed for Chinese-native IELTS learners.
 
-**Rule:**
+- Chinese is for guidance, strategy, reasoning, explanations, and why-it-matters notes.
+- English is for IELTS prompts, learner output, upgraded expressions, sentence frames, target answers, and vocabulary to imitate.
+- Functional UI labels and commands should remain English-only.
 
-| Language | Used for |
-|----------|----------|
-| Chinese (中文) | Guidance, strategy, reasoning, explanations, why-it-matters notes |
-| English | IELTS prompts, user output, upgraded expressions, sentence frames, model excerpts, vocabulary to memorize or imitate |
+## Meaningful Empty States
 
-- Chinese guidance helps the learner understand safely.
-- English content is where the learner enters output / input / memorization mode.
-- Do not force all guidance into English when it harms comprehension.
-- Functional UI labels and commands should remain English-only; Chinese belongs in AI feedback, analysis, learning guidance, and explanations.
+An empty feedback state should appear only when the input is unrelated, meaningless, corrupted, too short to analyze, or blocked by a provider/parser failure.
 
----
+If the learner provides even one serious related complete sentence, the system should give useful feedback where possible: a wording upgrade, a logic reminder, a sentence-level correction, or topic vocabulary.
 
-## D. Empty States Must Be Rare and Meaningful
+## Vocabulary And Expression Upgrades
 
-An empty feedback state should **only** appear when:
+Vocabulary and expression areas are reusable learning banks, not duplicate correction lists.
 
-1. the user input is not even one related complete sentence;
-2. the user input is meaningless, random, or corrupted;
-3. the user input is completely unrelated to the task;
-4. there is a technical / provider / parser failure — in which case the UI should show a retry/failure state, not pretend there is "nothing to extract."
+Confirmed groups:
 
-If the learner writes even **one serious, related, complete sentence**, the system should provide feedback where possible.
-
-Even one sentence can support:
-
-- Topic Vocabulary
-- one wording upgrade
-- one logic reminder
-- one sentence-level correction
-
-**Do not show** cold empty text like:
-> "No expression bank items for this attempt."
-
-For invalid / too-short input, Chinese empty-state text is acceptable, for example:
-> 本次回答太短，暂时无法提取稳定的表达积累。请先写出至少一句与题目相关的完整句子。
-
----
-
-## E. Vocabulary & Expression Upgrade Principles
-
-### Section Title Groups (Confirmed)
-
-```
+```text
 Topic Vocabulary
 From Your Essay
 Collocations
 Argument Frames
 ```
 
-### Principles
+- `From Your Essay` must be phrase-level.
+- Topic vocabulary should visibly connect to the task topic.
+- Universal academic phrases are acceptable in small, relevant doses.
+- Production logic must remain topic-agnostic. Mock/demo examples must not become hardcoded product behavior.
 
-- Vocabulary & Expression Upgrade is a **reusable expression takeaway area**.
-- It is **not** a second sentence correction list.
-- It should **not** display full sentence correction duplicates.
-- `From Your Essay` must be **phrase-level**.
-- Universal academic essay phrases can exist, but only in small numbers and only when strongly relevant.
-- Generic filler should not dominate.
-- Topic vocabulary should be **visibly connected to the task topic**.
-- Topic Vocabulary should remain topic-specific and should not become writing strategy.
-- Expression Upgrade should focus on phrase/frame upgrades and avoid repeated generic explanations.
-- Production logic should remain topic-agnostic. Topic examples in mock/demo fixtures must not become hardcoded product logic.
-- Normal relevant responses should **not** produce an empty vocabulary section.
+## Logic Review Quality
 
-### Universal Phrases
+Logic review should be a revision roadmap.
 
-Universal academic phrases are **not banned**. They are acceptable as "seasoning," not the main dish.
-A few well-chosen reusable frames are fine. A list of generic template sentences is not.
+Each major issue should make clear:
 
----
+- what the issue is;
+- why it affects IELTS performance;
+- what to add, remove, or rewrite.
 
-## F. Logic Review Principles
+Prefer task-specific advice over generic rewrite instructions.
 
-Logic & Structure Review should be a **revision roadmap**, not just a problem list.
+## Overlay Principles
 
-Each major logic issue should help the learner understand:
+For annotated writing overlays:
 
-1. **what** the issue is;
-2. **why** it affects IELTS performance;
-3. **what** to add, remove, or rewrite.
+- My Essay source marking should use problem/grey or strikethrough-style marking for original issues.
+- Target Model Answer highlights are a different visual language for recommended repairs and expressions.
+- Phrase-level issues should mark only the exact phrase when reliable.
+- Whole-sentence rewrite should be reserved for sentence-level logic/function issues or cases where no reliable phrase-level source exists.
+- Overlay content must remain meaningful; do not weaken feedback just to make the overlay compact.
 
-**Avoid generic fixes** like:
-> "Rewrite the whole essay around one clear idea with support."
+## Target Answers
 
-**Prefer task-specific guidance**, e.g.:
-- If the essay only discusses advantages when the task asks for advantages/disadvantages, tell the learner to add a short disadvantages side before defending the final position.
+Target answers are training resources, not official IELTS guarantees.
 
----
+- Current estimates must stay conservative and describe the learner's current answer, essay, or report.
+- Do not inflate current scores to match the target layer.
+- Target answers should preserve useful learner material while applying important corrections and idea-development advice.
+- Do not use learner-facing Band 9 as the default target label.
+- Do not use intermediate Target Band 7.5 or 7.5-8.0 labels.
 
-## G. Overlay Future Principle
+### Current Speaking Target Policy
 
-After V1.3 annotated essay overlay is implemented:
+Speaking scores are conservative single-question training estimates or valid adjacent half-band ranges. Speaking target answers are pedagogical practice resources, not certified guarantees.
 
-- My Essay source marking should use grey/problem marking or strikethrough-style source marking for original problems.
-- Target Model Answer learning highlights are a different visual language: they show recommended expressions / repairs used in the final answer.
-- Phrase-level issues should mark only the exact problematic phrase when possible.
-- Whole-sentence rewrite should be reserved for cases where no reliable phrase-level source exists or the sentence-level logic/function is the issue.
-- Old large Sentence-level Correction cards may become **default-collapsed**.
-- Long-term direction: old large correction cards may eventually be **removed**.
-- However, overlay content must **not** be compressed or weakened just to look neat.
-- Overlay must satisfy layout aesthetics while preserving **meaningful feedback depth**.
+- Current lower bound below 7.0 -> `BAND 7 TARGET ANSWER`.
+- Current lower bound at or above 7.0, unless high-band-stable -> `BAND 7+ TARGET ANSWER`.
+- High-band-stable only -> `STANDARD ANSWER`.
+- Normal Speaking learner flow has no learner-facing higher-band target promise, advanced-target label, validation badge, or validation-failure state.
+- Speaking single-question estimates exclude pronunciation unless a future real pronunciation-scoring path is explicitly implemented.
 
-Overlay should be a lightweight but complete correction panel, not a tiny tooltip that cuts learning value.
+Do not assume this simplified Speaking policy has fixed Writing. Writing Task 2 target/score/feedback consistency remains a future separate audit. Writing Task 1 calibration remains future scoped work and requires real samples.
 
-## H. Target Model Answer Principles
+## Regression Evidence Must Generalize
 
-- Global training target policy:
-  - Current estimate is conservative and must describe the user's current answer, essay, or report.
-  - Training targets are always upward: below Band 7.0 gets a Band 7.0+ target answer/report/model; Band 7.0 or above gets a Band 8+ examiner-friendly upgrade.
-  - Do not inflate current scores to match the target layer.
-  - Do not use Band 9 as the default learner-facing label.
-  - Do not use intermediate Target Band 7.5 or 7.5-8.0 labels.
-  - Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
-  - Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
-  - Target answers must apply feedback, idea-development advice, and retained useful learner material, not merely paraphrase the original.
-- High-band target-state policy:
-  - A 7.5/8.0 split between normal analysis and independent validation is a high-band boundary, not a deterministic contradiction.
-  - Boundary feedback should say the answer is close to target and needs stable natural reproducibility, not more decorative advanced wording.
-  - `STANDARD ANSWER` is only for 8.0+ / high-band stable outputs. Below-8 attempts should use Band 7.0+ target, Band 8+ target, boundary target, or repair labels.
-  - Generated targets without independent validation must be described as generated, not validated.
-  - Upgrade items must be grounded in the learner's original answer; do not render generic upgrade content just to fill a section.
-  - Speaking Part 2 is the first visual cleanup pattern. Task 1 full visual cleanup remains future work, while shared target-state logic must remain compatible with it.
-- Target Model Answer should be a full training target answer, not a short excerpt.
-- Acceptable target length is about 280-350 words.
-- It should preserve the learner's position, fix the highest-priority Logic Review issue, and integrate Language Bank / Expression Upgrade / key corrections.
-- It should not be presented as an official IELTS guarantee.
-- Highlight explanation should stay low-noise. If moved later, use a small `高亮说明` label near the model answer body rather than a large legend/table or many colors.
+User-provided questions, answers, screenshots, transcripts, and Debug Panel output are regression evidence, not product fixtures.
 
----
+- Runtime behavior must remain topic-agnostic.
+- Do not hardcode a reported example into production.
+- Fixes should apply through shared logic and be checked beyond the reported sample where practical.
+- Never claim another module is fixed by a change that only touched one module.
 
-## I. Agent Role Boundary
+## Agent Role Boundary
 
-### Claude Code — current role
-
-- Documentation updates
-- Git status checks
-- Lint / build verification if requested
-- **No** product UI / information architecture implementation
-- **No** "small UI fix" unless explicitly approved
-
-### Codex — future role
-
-- Main UI / product implementation
-- Writing Task 2 Phase 3 product information architecture repair
-- React implementation based on documented product principles and specific prompts
+- Codex is the current primary implementation agent for scoped product work.
+- Claude Code remains an optional docs/status/verification helper unless explicitly approved for more.
+- Product/UI/feedback behavior changes should follow `AGENTS.md`, `docs/CURRENT_STATE.md`, this file, and the relevant source/runtime evidence.

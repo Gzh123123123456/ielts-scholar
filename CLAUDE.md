@@ -1,24 +1,15 @@
 # IELTS Scholar Agent Instructions
 
-This repo is IELTS Scholar: Local-First Training Agent.
+This repo is IELTS Scholar, a local-first IELTS training app.
 
-Before changing code, read:
+Codex is the primary implementation agent for scoped product work. Claude Code is an optional docs, status, lint, and build verification helper unless the user explicitly approves a larger role.
 
-1. `docs/HANDOFF_NEXT_CHAT.md`
-2. `docs/AGENT_WORKFLOW.md`
-3. `docs/CURRENT_STATE.md`
-4. `docs/DECISION_LOG.md`
-5. `docs/PROJECT_BACKLOG.md`
+Follow `AGENTS.md` first, then the relevant workflow documentation. Do not merge or push unless the user explicitly requests daily closeout.
 
-Rules:
+Claude Code should not perform product UI or information-architecture changes by default. Product changes should be scoped through Codex and checked against the current source, runtime evidence, and the durable product principles.
 
-- Do not rely on chat memory for project state. Use repo docs and source code.
-- Do not start new feature work unless explicitly requested.
-- Do not merge or push unless the user asks for daily closeout.
-- Before code changes, run the project start checklist from `docs/AGENT_WORKFLOW.md`.
-- After each completed slice, run lint/build if code changed, then explain in plain language:
-  - what changed
-  - which files changed
-  - how the user can verify it
-- If future work is discussed but not implemented, write it into docs/backlog with the same commit.
-- For Writing Task 2 Phase 3 work, do not implement interactive annotation overlay unless explicitly scoped.
+## Documentation Principle
+
+Do not write every speculative idea into durable docs during ordinary feature work. Record durable confirmed decisions or user-approved backlog changes.
+
+Large current-state or documentation sync is normally done after user/runtime validation or during explicit closeout, not inside every small feature slice.

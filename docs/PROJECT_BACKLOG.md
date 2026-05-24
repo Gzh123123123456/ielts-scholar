@@ -2,526 +2,141 @@
 
 _Last updated: 2026-05-24_
 
-## Next Candidate Tasks
-
-0. **Project workflow/docs/skills audit package**
-   - status: next immediate task after this stable Speaking checkpoint is pushed
-   - purpose: prepare a complete audit package for document simplification, durable sample/regression rules, minimal Codex skills for normal implementation and daily closeout, and shorter future bootstrap prompts
-   - non-scope now: do not create skills or restructure the documentation system during the Speaking closeout commit
-
-1. **Speaking target-answer certification rollback**
-   - status: completed for normal Speaking response contract and accepted closeout runtime
-   - decision: learner-facing Speaking target answers are practice resources, not self-certified score guarantees
-   - normal flow: always show `upgradedAnswer` when generation succeeds
-   - current score display: estimated single-question band or adjacent half-band range from one ordinary `speaking_analysis` pass; verified lower-band Part 2 runtime rendered `5.5-6.0 ESTIMATED RANGE`
-   - headings: current lower bound below 7.0 -> `BAND 7 TARGET ANSWER`; current lower bound at or above 7.0 -> `BAND 7+ TARGET ANSWER`; existing high-band-stable -> `STANDARD ANSWER`
-   - debug state: normal successful generated targets use neutral `generated_target` semantics, not `needs_repair` / `target_failed_or_borderline`
-   - guardrail: no Band 8+ learner target, no VERIFIED / NOT VERIFIED labels, no internal certification errors, and no target-certification gate in the learner flow
-   - contract cleanup: normal Speaking provider JSON is structured feedback only; provider-generated `obsidianMarkdown`, Band 8+/certification/self-score target fields, and `riskNoteZh` are no longer requested
-   - export behavior: Speaking markdown is built locally after successful parsing; old saved records with markdown remain readable
-   - feedback coverage: low/mid-band substantial answers should surface genuine high-impact grammar/phrase/task issues through shared Speaking logic; the family-album sample is regression evidence only, not hardcoded product behavior
-   - preserve: low/mid-band layered feedback, part-specific Speaking feedback style, transcript UI/audio path, active seasonal bank runtime
-   - future separate audits: Writing Task 2 target consistency and Writing Task 1 calibration
-
-2. **Documentation hygiene / CODEBASE_MAP.md**
-   - status: navigation map added; broader docs/workflow simplification is deferred to the separate audit package above
-   - purpose: improve Codex navigation and reduce repeated guessing
-
-3. **Speaking 2026 May-Aug seasonal bank runtime integration**
-   - status: active adapter implemented; future work is source-quality expansion and publishing workflow
-   - key rule: use adapter, preserve V1 fallback, derive Part 3 from followUps where appropriate, preserve stable IDs
-   - non-scope: no scoring/provider/recording/export changes
-   - source-quality gap as of 2026-05-21: repo source material does not include complete mainland Part 1 entries for Music, Scenery, Building, Childhood activities, Views, or Life stages; Sports team, Reading, and Typing remain intentionally partial because the extracted source only provides partial question lists.
-   - source-quality gap as of 2026-05-21: repo source material does not include complete mainland cue cards/follow-ups for the requested retained/old topics such as bicycle/motorcycle/car travel, quick-witted problem solver, self-studying friend, unenjoyed music activity, recently enjoyed movie, interesting building, imagination, helpful person, over-budget item, encouraging a reluctant person, nature protector, famous/interesting city, or visited-and-liked city. Do not add these until a traceable source is available.
-
-4. **Task 1 source/UI text audit and calibration preparation**
-   - status: future precheck
-   - key rule: full Task 1 calibration requires real Task 1 debug samples
-   - non-scope: no blind scoring rewrite
-
-5. **Speaking transcript fidelity**
-   - status: audio-backed verbatim transcription v1 implemented; 2026-05-22 polish tightened context hints
-   - principle: do not silently grammar-correct learner speech; preserve the raw browser transcript separately from the analyzed transcript
-   - current baseline: Transcript Fidelity v1 review checkpoint is implemented; analysis uses the user-reviewed editable transcript only, with compact local review hints for likely browser ASR artifacts
-   - done 2026-05-21: Audio-backed verbatim transcription v1 records in-memory MediaRecorder audio beside browser Web Speech and keeps one main editable transcript box for analysis
-   - UX rule: audio transcription is the preferred quality path when Gemini is available; browser transcript is the fallback and browser/audio/raw details are secondary/collapsed
-   - accuracy rule: compact context/keyword hints help Gemini resolve likely ASR ambiguity such as proper nouns, IELTS topic vocabulary, and common misheard phrases; hints must not grammar-correct or polish learner speech
-   - 2026-05-22 regression guardrail: transcript UI should remain one editable transcript box; browser/audio/raw transcript details stay secondary and must not become competing editors
-   - 2026-05-22 regression guardrail: audio transcription sends Speaking part, current question, cue-card text/bullets, topic/tags, compact generic IELTS hints, and the rough browser transcript as weak timing/word context only
-   - 2026-05-22 non-scope: no personal glossary, user-specific vocabulary memory, grammar correction, real-time correction, pronunciation scoring, or complex transcript comparison UI
-   - provider note: Gemini can perform real audio transcription in local Gemini mode or auto mode when a Gemini key/quota is available; DeepSeek does not claim audio transcription; Mock returns a clearly labeled mock transcript only for development UI flow and cannot be used as real analysis input
-   - future scope: pronunciation scoring, real-time speech correction, persistent audio storage, and production/SaaS transcription provider policy remain separate later work
-   - non-scope: no provider routing, scoring logic, target validation, Task 1, Task 2, Part 1 topic-thread, or Part 3 discussion-thread changes
-
-Older completed notes below are historical context unless explicitly selected as a new scoped task.
-
-## Future Task - PDF Folder Speaking-Bank Import Pipeline + SaaS-Ready Active Bank Publishing Flow
-
-- status: future scope only
-- Local-first workflow first:
-  - PDFs go into `tools/speaking-bank-import/inbox`.
-  - Extraction generates draft JSON plus `extraction-report.md`.
-  - AI should filter out non-mainland topics, answer/sample paragraphs, translations, guides, Q&A, QR/promo text, page headers/footers, OCR garbage, and low-confidence fragments.
-  - Multiple PDFs should be merged as a mainland active-bank union unless items are clearly non-mainland, obsolete, incomplete, or low-confidence.
-  - User reviews the report summary, not every question.
-  - Apply step updates the active mainland speaking bank.
-- SaaS-ready direction:
-  - The same pipeline can later move behind an admin upload/review/publish page.
-  - Active practice bank can be overwritten by season.
-  - Practice history should preserve question snapshots separately from the active bank.
-  - API key/provider/cost policy for SaaS will be decided later, not in this slice.
-- Non-scope now:
-  - No PDF parsing, OCR, LLM extraction, backend/admin page, or database migration.
-
-## Completed History - High-Band Boundary State and Speaking Part 2 Feedback Cleanup
-
-- **Done 2026-05-22 follow-up**: Unified Speaking visible scoring and target certification through blind `speaking_score_only`.
-  - Superseded 2026-05-23 by the simpler Speaking target-answer rollback: normal learner flow no longer uses blind score-only target certification or Band 8 confirmation to decide whether to show the target answer.
-  - Speaking Part 1/2/3 visible current estimates now lock to one blind text-based score-only pass.
-  - Generated Speaking targets are certified by re-scoring the target text blindly and comparing scores locally; the scorer is not told target floor/layer/original score/candidate status.
-  - Band 8+ targets require an extra blind consistency confirmation before the verified label is allowed.
-  - If Gemini authoritative scoring/certification is unavailable in auto mode, DeepSeek is not treated as an equivalent certifier; target labels fall back to not-yet-verified.
-  - Low/mid-band feedback remains layered rather than sparse, and Writing Task 2 / Task 1 target consistency remain future separate audits.
-
-- **Done 2026-05-20**: Unified target-state semantics and cleaned the Speaking Part 2 feedback pattern.
-  - Shared target states now apply across Speaking Part 1, Speaking Part 2, Speaking Part 3, Writing Task 1 Academic, and Writing Task 2: `needs_repair`, `generated_target`, `target_failed_or_borderline`, `high_band_boundary`, and `high_band_stable`.
-  - 7.5 normal analysis plus 8.0 target validation is treated as a high-band boundary: close to target, not failure, not a fake stable Band 8+ claim.
-  - Speaking Part 2 feedback now uses consistent uppercase module headers, removes generic UI guidance, keeps Chinese explanations only where useful, and reserves `STANDARD ANSWER` for 8.0+ / stable answers.
-  - Idea & Expression Upgrade items are evidence-gated; if an item cannot be tied to the learner's actual wording/material, it is omitted.
-  - Markdown export mirrors target-state labels and avoids Risk note / empty replacement-answer artifacts.
-  - 2026-05-22 follow-up guardrail: target-answer labels must not overclaim beyond validation support. Generated targets and stable standards are separate states; `STANDARD ANSWER` remains reserved for high-band stable 8.0+ outputs.
-  - 2026-05-22 regression-sensitive area: a displayed Band 7.0+ / Band 8+ Speaking target must survive the independent target-validation floor with margin; borderline/failed validation must render/export as not yet cleanly successful.
-  - Task 1 full visual cleanup remains future work; current Task 1 target output stays conservative and generated-only unless future validation is added.
-  - Plugin/notranslate remains solved and should not be reopened without a direct regression.
-
-## Completed History - Target Loop Edge Cases and Feedback Readability
-
-- **Done 2026-05-19 follow-up 3**: Repaired remaining target-loop edge cases and cleaned feedback readability without redesigning the UI.
-  - High-band stability no longer requires `upgradedAnswer` / `modelAnswer`; empty replacement output is valid only in `high_band_stability`.
-  - Target validators for Speaking and Writing Task 2 are documented in prompts as no looser than normal analysis; uncertain or borderline targets must not pass as `meets_target`.
-  - DebugPanel now shows compact target pipeline diagnostics across initial analysis, validation attempts, repair retry, final status, provider, and fallback.
-  - The UI/export only present final validated targets as successful. Failed, borderline, or unvalidated targets use compact “not yet successful” messaging.
-  - Speaking and Writing Task 2 add a clear wrong-question / prompt-mismatch warning when the answer appears to belong to another prompt.
-  - Feedback readability cleanup is limited to labels, high-band stability noise, quote artifacts, and target-status clarity; no full redesign was done.
-  - No-translate protection is narrowed so browser/plugins can still select, copy, and translate answer text, target text, examples, and reusable expressions.
-  - Web Speech auto-resume remains a regression requirement.
-  - Task 1 target calibration remains future work and needs real Task 1 debug samples.
-
-## Completed History - Independent Target Validation Loop
-
-- **Done 2026-05-19 follow-up 2**: Separated target generation from target validation for Speaking and Writing Task 2.
-  - Same-response self-check is no longer enough to claim Band 7+ / Band 8+ target success.
-  - Generated target answers/models now run through scoring-only validation operations before UI/export can present them as validated target-layer output.
-  - Current <7.0 -> target floor 7.0; current 7.0-7.5 -> target floor 8.0; current >=8.0 -> high-band stability with no replacement pressure.
-  - If a 7.0-7.5 answer receives a generated target that independently scores 7.0 or 7.5, the app must not call it Band 8+.
-  - Failed validation retries target generation once with the validator repair focus; persistent failure remains borderline/failed with compact UI messaging.
-  - No score inflation is allowed; current user scores remain conservative and independent from target-answer quality.
-  - Mock provider demonstrates fail-then-repair target validation; advanced ASR remains future work.
-  - Web Speech auto-resume after browser pause/end and page-level no-translate protection were also completed in this slice.
-
-## Completed History - Feedback Calibration and Target Integrity
-
-- **Done 2026-05-19 follow-up**: Closed the Speaking / Writing Task 2 target-answer scoring loop.
-  - Generated target answers/models now require self-scores against the same visible scoring layer before they can claim the target.
-  - 7.0-7.5 answers must generate real Band 8+ targets with self-scores at 8.0+, or the target is marked borderline/failed instead of relabeled.
-  - Validation/status is a safeguard; the primary fix is stronger target content plus same-rubric self-check.
-  - High-band answers switch to stability, timed delivery, transfer, review, or a new question rather than default Band 9 advice.
-  - Writing Task 2 framework summaries adapt section labels to prompt type; causes-solutions prompts use Cause Analysis / Solution Plan.
-  - Task 1 target-answer calibration remains future work and needs a dedicated pass with real Task 1 debug samples.
-
-- **Done 2026-05-18**: Repaired Speaking and Writing Task 2 feedback calibration so score, diagnosis, target layer, target output, UI rationale, markdown export, and saved records stay aligned.
-- Target answers must keep a safety margin:
-  - current answer below 7.0 -> stable Band 7.0-7.5 target;
-  - current answer 7.0-7.5 -> Band 8+ examiner-friendly target;
-  - current answer around 8.0 -> Band 8+ refinement, not fake Band 9.
-- Score contradictions must not be fixed only by changing display text. Provider prompts, mock fixtures, safety normalization, feedback blockers, target validation fields, and exports all participate.
-- Browser Web Speech API remains the current transcription limit. Advanced ASR/audio transcription providers and pronunciation scoring are future separate slices.
-- Task 1 remains backward-compatible here and still needs a later dedicated calibration pass.
-
-## P0 — Provider Safety + API Readiness
-
-### 1) API / Provider Router (Optional, Mock still default)
-- Keep Mock Provider as default.
-- **Done in V1.1 Slice 1**: Add Gemini as an optional env-configured provider path for local development.
-- **Done in Provider Router v1**: Add `VITE_AI_PROVIDER=auto` for personal local development.
-- Gemini configuration:
-  - `VITE_AI_PROVIDER=gemini`
-  - `VITE_GEMINI_API_KEY=...`
-- Missing Gemini API key safely falls back to Mock Provider.
-- `VITE_GEMINI_API_KEY` is exposed to browser/client code and is suitable only for local/personal prototype use.
-- No production key management exists yet.
-- Auto-mode configuration includes Gemini local quota estimates and DeepSeek fallback env vars.
-- Gemini is quota-aware and used mainly for high-value final feedback.
-- DeepSeek V4 Flash is the cheap fallback and low-cost Task 2 framework coach / framework-extraction provider.
-- DeepSeek V4 Pro is the Task 2 high-quality fallback before `2026-05-31T15:59:00Z`; it is disabled after that unless `VITE_DEEPSEEK_ALLOW_PRO_AFTER_DISCOUNT=true`.
-- API Status panel shows local estimates only; official Gemini remaining quota must be checked in Google AI Studio.
-- API Status distinguishes auto mode from Gemini-only mode, and reports DeepSeek fallback unavailable when auto/config is missing.
-- Vite env changes require restarting the local dev server.
-- **Done in V1.1 scaffolding**: provider safety wrappers normalize malformed Speaking/Writing feedback and prevent invalid provider output from crashing feedback UI.
-- **Done in V1.1 scaffolding**: Debug Panel visibility for latest provider diagnostic:
-  - raw provider response
-  - parsed JSON
-  - parse error details
-  - validation errors
-  - fallback-used status
-- Ensure invalid JSON never crashes UI. *(Scaffolded via safe wrappers; real provider connection still pending.)*
-- Add resilient fallback path when provider output is malformed. *(Scaffolded for existing provider interface.)*
-- Still pending: UI provider toggle, browser-side key input decision, production-safe server-side key management, and future hidden OpenAI-compatible/OpenRouter UI.
-
-### 2) Framework Intelligence (Writing Task 2)
-- **Done mock-safe in V1.1**: Add **Generate Framework Summary** / **Extract Final Framework** action using Mock Provider by default.
-- **Done Provider Router v1 integration fix**: Add low-cost `writing_framework_coach` and route both coach/extraction to DeepSeek V4 Flash in auto mode when configured.
-- **Done Provider Router v1 integration fix**: Framework Summary is grounded in user notes, coach feedback/discussion, and unsent draft notes; missing decisions are marked rather than invented.
-- **Done Task 2 coach readiness flow**: Framework Coach returns `not_ready`, `almost_ready`, or `ready_to_write`; ready-to-write gates summary generation and stops the generic coaching loop.
-- **Done Task 2 coach readiness flow**: Enter inserts a newline, Ctrl/Cmd+Enter sends, Stop generating cancels/ignores late coach responses best-effort, and Delete last coach feedback removes only the latest coach item.
-- **Done Task 2 coach readiness flow**: Learners can skip framework discussion and start writing without an AI call.
-- Summary fields:
-  - Position
-  - View A
-  - View B
-  - My opinion
-  - Paragraph plan
-  - Possible example
-- Current summary UI now presents a bilingual editable learning structure rather than a full model answer.
-- **Done Task 2 UX repair**: Framework summary button states now distinguish not/almost ready, ready-without-summary, and generated-summary cases.
-- **Done Task 2 UX repair**: Framework summaries include reusable sentence frames/transitions and stay editable.
-- **Done Task 2 feedback hierarchy**: Phase 3 separates essay-level warnings, logic/structure review, sentence-level corrections, and vocabulary/expression upgrades.
-- **Done Task 2 feedback hierarchy**: under-length is treated as a global warning, pure lexical issues stay out of big-picture logic cards, and logic issues link to correction numbers when relevant.
-- **Done Task 2 feedback content refinement**: Vocabulary & Expression Upgrade is a compact learning bank; sentence corrections support primary issue, secondary issues, and micro upgrades; personalized model excerpts can use learner essay/framework context.
-- **Done Task 2 Phase 3 visual semantics polish**: Phase 3 is now a lower-noise revision workspace. Language Bank remains compact; Sentence Corrections use grey/problem source marking instead of model-answer learning highlights; Target Model Answer is a full answer in page flow with no inner scroll; Submit for Analysis locks the editor while analysis runs.
-- **Done Task 2 analysis lifecycle repair**: submitted essay snapshots are preserved; Phase 3 uses `feedback.essay` / submitted snapshot instead of mutable live editor text; stale provider responses are ignored through run-id protection; timeout/stop preserves essay text and avoids fake feedback; Practice this question again creates a fresh same-question attempt; New Question avoids the current prompt when alternatives exist.
-- **Done Task 2 annotated essay overlay**: My Essay source markers open a floating correction overlay with close/Escape/outside-click, drag, resize, mobile fallback, connector line, and safe Logic Review accordion linking. The temporary interaction lab and old visible Sentence Correction cards were removed from Phase 3.
-- **Done Task 2 score transparency polish**: score cards use clearer IELTS training dimension labels and show compact provider/fallback/normalization/under-length context. Visible Writing scores are conservative training estimates; under-length essays may show capped scores, and four equal 5.0 scores can come from mock provider output, under-length cap, or safety normalization.
-- Require user edit/confirm before moving to Phase 2.
-
-### 2b) Future UI Consistency Notes
-- **Done closeout**: Speaking Practice now uses the shared wide practice workspace consistently with Writing Task 1 / Task 2, while the Idea & Expression Upgrade text itself keeps a readable inner width.
-- **Done closeout**: global TopBar width is independent from medium/wide page content widths.
-- **Done closeout**: learner-facing feedback labels should render readable Chinese-first labels instead of provider/schema enum keys.
-- **Done basic V1.2**: Writing Task 1 Academic now inherits the Writing workspace design language in a minimal two-column practice page:
-  - wider desktop workspace
-  - prompt/chart context area
-  - writing editor
-  - feedback area
-  - reduced unnecessary vertical scrolling
-- Still pending for Task 1:
-  - General Training letters later
-  - data-driven chart rendering later, kept separate from current text-brief practice
-  - richer Task 1 data accuracy mapping later
-  - official-source review of topic taxonomy and prompt coverage
-  - optional AI tagging later, kept separate from static prep taxonomy
-
-## P1 — Learning Loop Depth
-
-### Global Feedback Target Policy
-- **Done 2026-05-16**: Speaking, Writing Task 2, and Writing Task 1 share one target standard.
-- Current estimates stay conservative and describe the user's current performance.
-- Target answers/reports/models are always at least Band 7.0+.
-- If the current estimate is 7.0 or above, the next generated target must be Band 8+ examiner-friendly.
-- Do not use default learner-facing Band 9 wording or intermediate Target Band 7.5 / 7.5-8.0 labels.
-- Do not inflate current scores to match target answers.
-- Band 8+ means stronger logic, precision, examples, naturalness, and examiner-friendly execution; it does not mean more formal or more essay-like language by default.
-- Speaking single-question estimates remain training estimates and exclude pronunciation when applicable.
-- Target outputs must apply corrections, idea-development advice, and retained useful learner material.
-
-### 2.4) Prompt Bank Depth
-- **Done minimal V1.1**: small original local-testing prompt bank:
-  - Speaking Part 1: 11 topics / 36 questions.
-  - Speaking Part 2: 12 cue cards.
-  - Speaking Part 3: 37 follow-up discussion questions.
-  - Writing Task 2: 22 prompts across common IELTS Task 2 types.
-- **Done 2026-05-17**: lightweight bank browsing and direct selection:
-  - Speaking **Browse Bank** replaces the visible **Read Prompt** control in practice.
-  - Speaking bank modal is current-Part only for Part 1, Part 2, or Part 3.
-  - Change Question remains the random-switch action.
-  - Speaking question cards show the current-Part bank count only.
-  - Writing landing cards expose bank counts, **Start Practice**, and **Browse Bank** modals for Task 1 and Task 2.
-  - Writing bank selections load the selected Task 1 / Task 2 prompt into the proper practice route.
-  - The bank modal uses a full-viewport backdrop; outside clicks do not close it, X closes it, and the list is scrollable.
-  - Counts and filter chips are derived from bank arrays and prompt metadata.
-  - Practice counts include only analyzed records with feedback; drafts, empty scratchpads, and provider-failed attempts do not count as practiced.
-  - New functional UI labels should remain English-only; Chinese remains for AI feedback and analysis content.
-  - Full browse page, search, favorites, mastery status, wrong-question notebook, Part 1 topic-thread practice, and Part 3 discussion-thread practice remain unimplemented.
-- **Done minimal V1.1**: static preparation topic metadata supports Progress topic coverage:
-  - Speaking: 12 preparation categories.
-  - Writing Task 2: 12 preparation categories.
-- Still pending:
-  - larger curated prompt bank
-  - richer topic taxonomy and difficulty metadata
-  - future bank data should keep stable `id`, topic/type/category, and `tags` fields populated for modal filters and practice-count matching
-  - stronger scoring calibration with real provider data and larger local attempt samples
-  - official-source review, source-quality review, and deduplication
-  - optional AI tagging later, clearly separated from static prep taxonomy and never treated as official syllabus coverage
-  - topic-filtered practice start from Progress or History
-  - prompt rotation analytics
-
-### 2.5) Practice Persistence and History Access
-- **Done minimal V1.1**: local-first active attempts and recent records for Speaking Practice and Writing Task 2 Practice.
-- **Done basic V1.2**: local-first active attempts and history recognition for Writing Task 1 Academic Practice.
-- **Done minimal V1.1**: Speaking records are filtered by current part and can be deleted individually.
-- **Done minimal V1.1**: empty Speaking question loads are not saved as noisy drafts.
-- Still pending:
-  - richer full history dashboard
-  - cross-attempt comparison
-  - session-level consolidated note export
-  - optional manual backup/export for local practice records before any future storage migration
-  - storage migration from localStorage to IndexedDB or a local file/database layer if records grow large
-  - optional backup/export before bulk local reset if reset becomes common
-
-### 3) Session-level Obsidian Notes
-- Current V1: attempt-level export only.
-- Future: **Finish Session / Export Session Note**.
-- Speaking session can include:
-  - multiple parts
-  - multiple questions
-  - repeated attempts
-- Writing session can include:
-  - framework discussion
-  - drafts
-  - feedback
-  - revisions
-- Session note should summarize:
-  - repeated error patterns
-  - improvements
-  - best upgraded answers
-  - reusable expressions
-  - review cards
-
-### 4) Sentence-level Feedback
-- Step 1: sentence numbering and correction-to-source mapping. *(Implemented.)*
-- Step 1b: sentence correction depth with primary issue, secondary issues, and micro upgrades. *(Implemented.)*
-- V1.3 Step 2 - Interactive Annotated Essay Overlay. *(Implemented for Phase 3: source markers, severity dots, floating overlay, tether line, mobile sheet fallback, and safe Logic Review linking.)*
-- Step 3: full inline annotation/editor refinements remain future work after overlay usage proves useful.
-- Do not implement full inline editor yet.
-
-### 5) Speaking Improvements
-- **Done 2026-05-22**: Speaking low/mid-band feedback depth and target linkage guardrails added.
-  - Low-noise feedback means layered and readable, not sparse.
-  - 5.0-6.0 Speaking answers should receive enough high-impact fixes across MUST FIX and phrase-fix cards when the transcript contains stable material.
-  - Original phrase problems should not disappear just because the target answer rewrites or omits them.
-  - Low/mid-band `naturalnessHints` should render as high-impact phrase fixes, not Optional Polish.
-  - Corrections should link to the target answer when useful, and target answers should visibly apply the important fixes while preserving personal material.
-  - Target validation request floor is authoritative; provider-returned `targetFloor` must not silently lower Band 7+/8+ validation.
-  - Band 7+/8+ target consistency remains regression-sensitive; borderline or failed validation must not render/export as a clean successful target, and `STANDARD ANSWER` remains high-band stable 8.0+ only.
-- **Done minimal V1.1**: cleaner pre-analysis layout and wider post-analysis feedback layout.
-- **Done minimal V1.1**: Change Question works across Parts 1/2/3 when alternatives exist.
-- **Done minimal V1.1**: Practice This Question Again starts a fresh attempt for the same prompt without re-calling AI.
-- **Done minimal V1.1, renamed 2026-05-16**: Idea & Expression Upgrade layer for already-strong answers.
-- **Done 2026-05-16**: Speaking provider prompts and attempt markdown export calibrated for concise spoken training notes.
-  - Part 1 stays short, natural, and conversation-oriented.
-  - Part 2 uses a spoken story spine for long turns.
-  - Part 3 uses natural spoken discussion logic rather than essay-style paragraphs.
-  - Export is now a minimal review card, not a Start Here / Mission / Ready checklist manual.
-  - Malformed provider/debug strings are filtered out of learning content.
-  - Incomplete provider feedback remains retryable instead of rendering as normal results.
-- Still pending:
-  - Future Speaking interaction model:
-    - Part 1 Topic Thread Practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, and one topic-level analysis. Focus: short natural answers, personal details, consistency, not memorized long answers.
-    - Part 2 Single Long Turn Practice: one cue card, one long-turn answer, and one analysis. Focus: story spine, detail, timing, and sustained fluency.
-    - Part 3 Discussion Thread Practice: one abstract topic cluster, 3-4 related follow-up questions, and one discussion-level analysis. Focus: position, reasoning, contrast, examples, consequences, and spoken discussion logic, not Writing Task 2 spoken aloud.
-    - Full Speaking Mock later: Part 1 topic thread + Part 2 long turn + Part 3 discussion thread.
-    - This is roadmap-only; no thread UI/session flow is implemented yet.
-  - richer repeated-attempt comparison views
-  - more advanced speaking structure coaching beyond the current prompt/schema layer
-  - broader transcript-based naturalness upgrades
-- Pronunciation remains not formally assessed until real audio scoring exists.
-- **Deferred (V1.2+) — Speaking Stuck-Point Assist / Chinese Idea Support**
-  - After Stop & Review, allow learner to optionally add a Chinese note for the idea they could not express in English.
-  - AI coach rewrites that idea into natural IELTS Speaking English.
-  - Return reusable expressions + a suggested continuation from the stuck point.
-  - Explicitly out of scope now: real-time bilingual speech recognition.
-  - Explicitly out of scope now: SpeechRecognition architecture changes.
-
-## P2 — Mock Exam Productization
-
-### 6) V2 Mock Exam
-- Starts after Speaking, Writing Task 1 Academic, and Writing Task 2 basic practice modules exist.
-- Strict timers.
-- Sequential Speaking Part 1/2/3 flow.
-- Writing Task 2 40-minute mock mode.
-- End-of-session report.
-- Practice mode and Mock mode must remain separate.
-
----
-
-## P1 Future — Writing Task 2 Phase 3 (Codex Priority)
-
-**Done 2026-05-13 (Codex implementation pass + daily closeout polish)**: learner-facing Phase 3 repair completed across UI rendering, feedback schema/normalization, provider prompts, Mock Provider output, markdown export, analysis lifecycle, and visual semantics.
-
-### Vocabulary & Expression Upgrade Redesign
-
-Implemented according to `docs/PRODUCT_DESIGN_PRINCIPLES.md`.
-
-- Use four confirmed groups:
-  - `Topic Vocabulary`
-  - `From Your Essay`
-  - `Collocations`
-  - `Argument Frames`
-- Avoid long module explanations.
-- Avoid duplicate sentence corrections.
-- `From Your Essay` must be phrase-level.
-- Universal academic phrases are allowed in small, strongly relevant doses.
-- Normal relevant input should not produce an empty vocabulary section.
-- Topic Vocabulary must remain topic-specific and must not become writing strategy.
-- Expression Upgrade should focus on phrase/frame upgrades and avoid repeated generic explanations.
-- Production logic must remain topic-agnostic. Remote-work examples are mock/demo fixtures only and must not become hardcoded UI/safety/provider-routing logic.
-
-### Logic Review — Revision Roadmap
-
-- Logic Review is now a revision roadmap with specific paragraph-level fixes.
-- Each major logic issue should explain what, why, and what to do.
-- Avoid generic fixes; prefer task-specific guidance.
-
-### Target Model Answer
-
-- Reworked from Target Model Excerpt / Revision Mission into Target Model Answer.
-- Target Model Answer should be a full answer, not a short excerpt.
-- Acceptable target length is about 280-350 words.
-- It should preserve the learner's position, fix the highest-priority Logic Review issue, and integrate Language Bank / Expression Upgrade / key corrections.
-- It is a training target model, not an official IELTS guarantee.
-- Known follow-up: the highlight explanation exists but is too easy to miss. Move it closer to the model answer body later and use a small low-noise `高亮说明` label. Do not add a large legend/table or many colors.
-
-### Sentence Corrections
-
-- Correction cards are lower-noise and should show one concise issue label by default.
-- Sentence Corrections and future My Essay annotation should use grey/problem marking or strikethrough-style source marking, not Target Model Answer learning-highlight styling.
-- Phrase-level issues should mark only the exact problematic phrase when possible.
-- Whole-sentence rewrite should be reserved for cases where no reliable phrase-level source exists or the sentence-level logic/function is the issue.
-- Preserve `sourceQuote`, `severity`, `issueType`, and `microUpgrades` for future annotation work.
-
----
-
-## P1 Future — V1.3 Annotated Essay Overlay
-
-- Annotated My Essay markers are implemented in Phase 3.
-- Source spans use grey/problem marking, small severity dots, phrase-level matching when reliable, and sentence-level fallback when needed.
-- Clicking a marker opens the floating correction overlay with original, corrected version, issues, micro upgrades, Chinese explanation, and transfer guidance.
-- The overlay supports close/Escape/outside-click, drag, resize, mobile bottom-sheet fallback, and a subtle connector line.
-- Logic Review accordion linking uses safe related correction IDs or safe paragraph/logic mapping; it does not fake a relation by falling back to Introduction/first group.
-- Old visible Sentence Correction card list and temporary interaction lab were removed from the Phase 3 UI.
-- Underlying sentenceFeedback data remains preserved for records, provider output, normalization, and markdown export.
-
----
-
-## P1 Future — Writing Task 2 Phase 1 Coach Upgrade
-
-- Framework Coach should be stronger than originally scoped.
-- It should not only organize a framework.
-- It should point out flawed claims, weak evidence, unsupported examples, imbalance, task-response gaps, and possible better argument directions.
-- It should use guided questions / suggestions to train the learner's thinking.
-- The stronger Coach is, the less Generate Framework Summary needs to invent.
-- Generate Framework Summary should organize already-discussed decisions, not think for the learner.
-
----
-
-## P1 Future — Speaking Note Standard & Export
-
-### Unified IELTS Speaking Note Standard *(standard finalized; product export now follows the minimal review-card direction)*
-- **Done 2026-05-13 (final handoff)**: `docs/IELTS_SPEAKING_NOTE_STANDARD.md` finalized. Do not create new versions.
-  - Single standard adapts by session size: Single Question (1 Q, no P0/P1/P2), Mini Session (2–4 Q, no P0/P1/P2), Topic Session (5+ Q, with P0/P1/P2).
-  - Part 1, Part 2, and Part 3 share one Attempt Block; only Answer Path and readiness criteria differ.
-  - Part 1 single-question practice includes Conversation Thread follow-ups.
-  - Part 2 includes Story Spine + long-turn retry. Part 3 includes Discussion Path + nuance training.
-  - Manual VSCode Claude and future product export use the same standard (only Source metadata differs).
-  - `/ielts-session` and `/ielts-export` commands updated for final handoff.
-  - Three local validation notes under `notes/ielts/speaking/final/` (Work, Accommodation, Hometown) — must not be committed/pushed.
-- **Still pending**:
-  - Implement session-level export aggregation.
-  - Add Part 1 Conversation Thread practice to product.
-  - Add Personal Material Bank / Error Pattern Bank / Filler Detox / Transfer Loop to product export gradually.
-- **Next**: extend from attempt-level review-card export toward session-level aggregation only after the interaction model is scoped.
-
-## P1 Closeout Notes - Branch Consolidation
-
-- **Done 2026-05-17**: `codex/speaking-reliability-uplift` was integrated into local `main`.
-- The question-bank picker commits (`3df306d`, `a7b2bef`) were preserved.
-- `codex/speaking-single-attempt-export` was inspected and marked superseded by the newer `src/lib/markdownExport.ts` architecture.
-- `codex/task2-command-feedback` was inspected and marked superseded because it conflicts with the newer global Band 7.0+ / Band 8+ target policy.
-- Older equivalent branches were not re-merged.
-
-## P1 Future — Speaking Seasonal Question Bank
-
-### Speaking 2026 May-August Seasonal Question Bank Data Scaffolding *(data files created; not connected to runtime)*
-- **Done 2026-05-12 (scaffolding pass)**: Created `src/data/speaking/` data folder with:
-  - `speakingPromptTypes.ts` — shared types for seasonal Speaking prompts (bank ID, season, region, new/reused/evergreen/non-mainland status, Part 1/2/3, topic, cue card, follow-ups, tags, priority, completeness).
-  - `speakingBank2026MayAug.ts` — structured 2026 May-August mainland and non-mainland prompt data.
-  - `speakingBankV1.ts` — re-export of existing V1 original prompt bank (no breakage).
-  - `speakingBankIndex.ts` — bank metadata, priority helpers, and part-filtered selectors (pure, side-effect-free).
-- **Done 2026-05-12 (completeness pass)**:
-  - Evergreen Part 1 (5 topics): replaced compressed questions with full source questions from `docs/source_materials/speaking/ielts-speaking-bank-2026-05-to-08.extracted.md`. Marked complete.
-  - Mainland reused Part 2&3 (26 topics): replaced all `p2Partial` placeholders with full `p2` entries including cue card, cue points, and complete follow-up questions from extracted markdown. Marked complete.
-  - New May Part 1 topics that remain `partial`: Sports team (1 question), Reading (3 questions), Typing (3 questions) — marked partial in the source.
-  - New May Part 2&3 topics all remain `partial` — source marks all follow-ups as 待补充/pending.
-- Existing `src/data/questions/bank.ts` preserved unchanged; all existing imports continue to work.
-- Priority order defined: latest mainland new > latest mainland reused > evergreen > V1 original > non-mainland.
-- Non-mainland topics stored as optional data with lower priority for mainland practice.
-- **Still pending**:
-  - Runtime selection integration — connect the new bank to Speaking Practice prompt selection behavior.
-  - PDF runtime parsing of question banks.
-  - User-uploaded bank UI.
-  - Speaking UI changes for bank selection.
-  - Deferred to a later Codex/product implementation step after Writing Task 2 Phase 3 is complete.
-- **Next slice** (after Task 2 Phase 3): "Speaking 2026 May-August seasonal question bank data integration."
-
-## P1 Future — Speaking Pre-Answer Coaching
-
-- Speaking should have pre-answer coaching / planning, especially for Part 2 and Part 3.
-- Training flow may become:
-  - get question
-  - plan answer structure / answer pattern
-  - then record
-  - then transcript + feedback
-- Part 2 needs story / cue-card structure support.
-- Part 3 needs abstract reasoning, comparison, cause/result, concession, example-building support.
-- Transcript fidelity is critical.
-- Do not use "smart correction" that silently fixes mispronounced words through context.
-- Raw transcript and possible intended word should be separated if better ASR is added.
-
----
-
-## P1 Future — History
-
-- History should eventually include all user practice data.
-- It should not be artificially light.
-- The key is clear arrangement, summaries, filters, restore / export paths.
-- History should become the learner's practice archive.
-
----
-
-## P1 Future — Progress
-
-- Progress can include reference band estimates.
-- Progress can use tables and data summaries.
-- Do not over-warn users that estimates are unofficial.
-- Present estimates calmly as training references.
-- Future progress can include trends, topic coverage, visual-type coverage, repeated issue statistics, practice frequency, and repeated-attempt comparisons.
-
----
-
-## P1 Future — Provider / API Direction
-
-- Mock Provider means no-key fallback / local fake feedback path.
-- The user's current local setup may call real Gemini / DeepSeek APIs and consume tokens.
-- These are not contradictory.
-- Future shared / open-source mode may support user-provided API keys before entering the app.
-- Website may recommend mainstream model providers.
-- Each user should ideally use their own API key instead of consuming the project owner's tokens.
-- Production-safe server-side proxy / account / encrypted storage is a later direction, not current priority.
-
----
-
-## P1 Future — Agent Workflow
-
-- Claude Code is not trusted for product UI / information architecture changes right now.
-- Claude Code should be used for docs, status checks, and verification only unless explicitly re-authorized.
-- Codex should handle main product / UI implementation once available.
-
----
-
-## Do Not Do Yet
-- Do not connect Gemini during UI polish.
-- Do not add RAG yet.
-- Do not add pronunciation scoring yet.
-- Do not implement full inline annotation editor yet.
-- Do not replace Mock Provider as default.
-- Do not rewrite app architecture.
+This is the current backlog. Completed implementation history belongs in `docs/DECISION_LOG.md`.
+
+## Ordered Active List
+
+### 0. Workflow / Docs / Skills Simplification
+
+Status: completed; this is now the workflow baseline.
+
+Why it matters: future ordinary work should not require huge repeated prompts or rereading all history. Current docs must distinguish active truth from superseded Speaking validation history.
+
+Minimum scope:
+
+- simplify durable workflow docs;
+- add repo-local `$ielts-implement` and `$ielts-closeout` skills;
+- add the generalization rule that user samples are regression evidence, not production content.
+
+Non-scope:
+
+- no product runtime code;
+- no source/config/package changes;
+- no commit, merge, or push unless a later explicit closeout is requested.
+
+### 1. Speaking Part 1 Topic Follow-Up Flow
+
+Status: next immediate product priority.
+
+Why it matters: Part 1 should train short natural answers across a topic thread, not isolated overlong single answers.
+
+Minimum scope:
+
+- one topic with 3-4 examiner-style questions;
+- one connected mini-conversation;
+- topic-level feedback focused on natural short answers, personal detail, consistency, and avoiding memorized long answers.
+
+Non-scope:
+
+- no full mock exam;
+- no session-level export unless separately scoped;
+- no scoring/provider architecture rewrite.
+
+### 2. Speaking Part 3 Discussion-Flow Refinement
+
+Status: follows after Part 1 topic-thread flow.
+
+Why it matters: Part 3 needs spoken abstract discussion training, not Writing Task 2 spoken aloud.
+
+Minimum scope:
+
+- clustered follow-up questions;
+- discussion-level analysis for position, reasoning, contrast, examples, consequences, and nuance;
+- preserve current single-question flow unless the new thread behavior is explicitly accepted.
+
+Non-scope:
+
+- no full Speaking mock;
+- no Writing behavior changes;
+- no pronunciation scoring.
+
+### 3. Audio Transcription Reliability
+
+Why it matters: audio-backed transcription exists but can still fail or fall back, so the editable transcript remains the safe path.
+
+Minimum scope:
+
+- improve reliability/diagnostics of `speaking_audio_transcription`;
+- preserve one editable transcript box;
+- keep browser/audio/raw details secondary.
+
+Non-scope:
+
+- no grammar correction during transcription;
+- no personal glossary or user-specific vocabulary memory;
+- no pronunciation score;
+- no persistent audio storage unless separately scoped.
+
+### 4. PDF Folder Import + Mainland Active-Bank Publishing + SaaS-Ready Bank Layer
+
+Why it matters: the active mainland seasonal bank needs a traceable update workflow and later admin publishing path.
+
+Minimum scope:
+
+- local-first PDF folder import concept;
+- extraction report for review;
+- mainland active-bank publishing flow;
+- preserve question snapshots in history.
+- current mainland seasonal bank is usable but still has source-completeness gaps/partial topics from the available extracted source;
+- future PDF import/publishing should improve traceable completeness rather than silently invent missing questions;
+- non-mainland material must remain excluded from default mainland practice.
+
+Non-scope:
+
+- no immediate SaaS backend unless separately scoped;
+- no unreviewed OCR/LLM output becoming active data;
+- no answer/sample paragraphs, translations, guides, Q&A, QR/promo text, page headers/footers, or low-confidence fragments in active bank data.
+
+### 5. Writing Task 2 Target / Score / Feedback Consistency Audit
+
+Why it matters: Speaking target-display simplification does not prove Writing consistency.
+
+Minimum scope:
+
+- audit Task 2 score, feedback blockers, target model answer, rendering, export, and Debug Panel alignment;
+- use real or user-provided samples as regression evidence, not hardcoded content.
+- pending polish: Target Model Answer highlight explanation exists but is too easy to miss; later move it closer to the model-answer body with a small low-noise `高亮说明` label, without adding a large legend/table or multiple colors.
+
+Non-scope:
+
+- no Speaking changes unless a shared bug is proven;
+- no redesign of the annotated essay overlay unless separately scoped.
+
+### 6. Writing Task 1 Calibration With Real Samples
+
+Why it matters: Task 1 target reports are conservative/generated and need real samples before calibration changes.
+
+Minimum scope:
+
+- collect representative Task 1 samples and Debug Panel evidence;
+- audit score/feedback/model report consistency.
+
+Non-scope:
+
+- no blind scoring rewrite;
+- no interactive chart system;
+- no General Training letters unless separately scoped.
+
+## Completed Baseline Pointer
+
+Speaking runtime and feedback stabilization is complete at the validated checkpoint:
+
+- active mainland seasonal bank runtime integrated with V1 fallback;
+- one editable transcript box plus audio-backed transcription path;
+- structured normal Speaking feedback;
+- local Speaking markdown/export generation;
+- simplified generated-target display;
+- valid adjacent range rendering;
+- low/mid-band feedback coverage guardrails.
+
+For historical details, read `docs/DECISION_LOG.md`.
