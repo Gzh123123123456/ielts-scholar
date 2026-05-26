@@ -1,6 +1,6 @@
 # Project Backlog
 
-_Last updated: 2026-05-24_
+_Last updated: 2026-05-26_
 
 This is the current backlog. Completed implementation history belongs in `docs/DECISION_LOG.md`.
 
@@ -26,7 +26,7 @@ Non-scope:
 
 ### 1. Speaking Part 1 Topic Follow-Up Flow
 
-Status: next immediate product priority.
+Status: development checkpoint implemented; pending post-reinstall browser acceptance.
 
 Why it matters: Part 1 should train short natural answers across a topic thread, not isolated overlong single answers.
 
@@ -35,6 +35,16 @@ Minimum scope:
 - one topic with 3-4 examiner-style questions;
 - one connected mini-conversation;
 - topic-level feedback focused on natural short answers, personal detail, consistency, and avoiding memorized long answers.
+
+Checkpoint implemented:
+
+- topic-thread practice with natural 3-4 question sets, multiple coherent sets for larger topics, and traceable supplements where source topics are incomplete;
+- annotated original answers, one cleaner retry answer per question, thread-level patterns, Material Bank, and Next Retry Plan;
+- clean-retry integrity, saved-result safeguards, annotation/transcript safety improvements, audio-transcript candidate gating, exact-thread retry, coverage-aware/fair Part 1 selection, and markdown/export cleanup.
+
+Pending acceptance:
+
+- post-reinstall browser checks for low-signal audio candidate adoption, exact-thread retry order, fair random/change-topic behavior, real-provider stance/tense/annotation behavior, no transcript-spelling/pronunciation repair, and corrected Part 1 markdown/export labels.
 
 Non-scope:
 
@@ -59,6 +69,10 @@ Non-scope:
 - no full Speaking mock;
 - no Writing behavior changes;
 - no pronunciation scoring.
+
+### Future Follow-up: Persistent Speaking Material Library
+
+After Part 1 Topic-Thread feedback is validated, add a later scoped slice that lets learners save selected items from `MY USABLE MATERIAL` and `REUSABLE SPOKEN LANGUAGE` across Part 1 / Part 2 / Part 3 sessions. Initial scope should use local-first storage with review, filter, and delete workflows.
 
 ### 3. Audio Transcription Reliability
 

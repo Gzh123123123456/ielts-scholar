@@ -45,6 +45,9 @@ const normalizedTargetState = (diagnostic: ProviderDiagnostic) =>
 const targetLine = (diagnostic: ProviderDiagnostic) => {
   const parsed = isRecord(diagnostic.parsedJson) ? diagnostic.parsedJson : {};
   const request = isRecord(diagnostic.requestPayload) ? diagnostic.requestPayload : {};
+  if (request.sessionKind === 'part1_topic_thread' || parsed.sessionKind === 'part1_topic_thread') {
+    return 'part1 topic-thread session analysis';
+  }
   const scores = isRecord(parsed.scores) ? parsed.scores : undefined;
   const currentScore = typeof parsed.bandEstimateExcludingPronunciation === 'number'
     ? parsed.bandEstimateExcludingPronunciation

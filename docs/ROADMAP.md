@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-24_
+_Last updated: 2026-05-26_
 
 This roadmap describes horizons, not implementation history.
 
@@ -16,16 +16,17 @@ This roadmap describes horizons, not implementation history.
   - high-band-stable -> `STANDARD ANSWER`;
   - no learner-facing higher-band target promise, advanced-target label, validation badge, or validation gate.
 - Task 2 annotated essay overlay baseline is implemented.
+- Speaking Part 1 topic-thread practice is implemented as a development checkpoint: natural 3-4 question sets, annotated original answers, one cleaner retry answer per question, thread-level patterns, Material Bank, Next Retry Plan, clean-retry/saved-result safeguards, runtime retry/fair-selection reliability, and Part 1 markdown/export cleanup. Latest browser acceptance remains pending after reinstall.
 
 ## Next Product Horizon
 
 Speaking interaction flow should move beyond isolated prompts.
 
-- Part 1 topic-thread practice: one topic, 3-4 short examiner-style questions, one connected mini-conversation, topic-level feedback.
+- Part 1 topic-thread checkpoint validation: verify low-signal audio candidate adoption, exact-thread retry, fair random/change-topic behavior, real-provider stance/tense/annotation behavior, no transcript-spelling/pronunciation repair, and corrected Part 1 markdown/export labels.
 - Part 3 discussion-flow refinement: clustered follow-up questions and discussion-level feedback for spoken reasoning, contrast, examples, consequences, and nuance.
 - Part 2 remains single long-turn practice focused on story spine, detail, timing, and sustained fluency.
 
-Explicitly not now: full Speaking mock, session-level Speaking export, pronunciation scoring, or Writing behavior changes.
+Explicitly not now: full Speaking mock, pronunciation scoring, or Writing behavior changes.
 
 ## Reliability / Data Horizon
 
@@ -54,4 +55,4 @@ Explicitly not now: full Speaking mock, session-level Speaking export, pronuncia
 - Do not add pronunciation scoring.
 - Do not replace Mock Provider as default.
 - Do not rewrite app architecture.
-- Do not implement PDF import, SaaS bank publishing, Writing audits, Part 1 topic-thread flow, or Part 3 discussion flow unless explicitly scoped.
+- Do not implement PDF import, SaaS bank publishing, Writing audits, Part 1 follow-up fixes, or Part 3 discussion flow unless explicitly scoped.

@@ -161,6 +161,16 @@ const getSpeakingTopic = (record: SpeakingPracticeRecord): SpeakingTopicCategory
   return matched?.topicCategory || fromQuestionText(record.question, speakingKeywordFallback);
 };
 
+const speakingRecordLabel = (record: SpeakingPracticeRecord) =>
+  record.sessionKind === 'part1_topic_thread'
+    ? `Speaking Part 1 / Topic Thread`
+    : `Speaking Part ${record.part}`;
+
+const speakingRecordPreview = (record: SpeakingPracticeRecord) =>
+  record.sessionKind === 'part1_topic_thread'
+    ? preview(record.topic || record.feedback?.topic || record.question)
+    : preview(record.question);
+
 const getWritingTask2Topic = (record: WritingTask2PracticeRecord): WritingTask2TopicCategory | null => {
   const metadataTopic = fromRecordMetadata(record, writingTask2TopicCategories);
   if (metadataTopic) return metadataTopic;
@@ -385,8 +395,8 @@ export default function Progress() {
             records={recentSpeakingScores.map(record => ({
               id: record.id,
               date: formatDate(getTimestamp(record)),
-              label: `Speaking Part ${record.part}`,
-              question: preview(record.question),
+              label: speakingRecordLabel(record),
+              question: speakingRecordPreview(record),
               score: getSpeakingScore(record),
             }))}
           />

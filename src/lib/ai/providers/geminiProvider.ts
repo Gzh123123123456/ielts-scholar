@@ -46,6 +46,98 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "reusableExample": { "example": "string", "canBeReusedFor": ["string"], "explanationZh": "string" }
 }`;
 
+export const speakingPart1TopicThreadSchemaInstruction = `The JSON object must match this exact key structure:
+{
+  "mode": "practice",
+  "module": "speaking",
+  "part": 1,
+  "sessionKind": "part1_topic_thread",
+  "topic": "string",
+  "threadId": "string",
+  "question": "Q1. ...\\nQ2. ...",
+  "transcript": "Q1/A1 mapped transcript",
+  "bandEstimateExcludingPronunciation": 0,
+  "bandEstimateRange": { "lower": 5.5, "upper": 6.0, "rationaleZh": "string" },
+  "estimateRationaleZh": "string",
+  "scores": {
+    "fluencyCoherence": 0,
+    "lexicalResource": 0,
+    "grammaticalRangeAccuracy": 0,
+    "pronunciation": null,
+    "pronunciationNote": "Pronunciation is not formally assessed in Part 1 topic-thread transcript practice."
+  },
+  "threadFeedback": {
+    "topic": "string",
+    "threadId": "string",
+    "questionCount": 4,
+    "annotations": [{
+      "id": "string",
+      "questionRef": "Q1",
+      "sourceQuote": "exact learner words copied from that answer transcript",
+      "combinedRepair": "complete better spoken version of this source span when local micro-repairs would still sound unnatural",
+      "layers": [{
+        "severity": "must_fix | better_spoken_choice | optional_polish",
+        "issueType": "string",
+        "original": "exact learner words",
+        "better": "corrected or more natural wording",
+        "explanationZh": "string",
+        "reuseGuidanceZh": "string"
+      }]
+    }],
+    "cleanRetryAnswers": [{ "questionRef": "Q1", "answer": "short natural retry answer preserving the learner's meaning", "noteZh": "optional short Chinese note only for meaningful compression or reorganisation" }],
+    "threadLevelPatterns": [{ "observationZh": "string", "whyItMattersZh": "string", "retryRule": "Direct answer -> one key detail -> stop." }],
+    "mustFix": [{ "questionRefs": ["Q1"], "learnerWording": "string", "betterVersion": "string", "explanationZh": "string", "recurring": false }],
+    "answerByAnswerCoaching": [],
+    "highImpactPhraseFixes": [{ "questionRefs": ["Q3"], "original": "string", "better": "string", "explanationZh": "string" }],
+    "materialBank": {
+      "myUsableMaterial": [{ "sourceWording": "string", "reusableVersion": "string", "reuseFor": ["string"], "explanationZh": "string" }],
+      "reusableSpokenLanguage": [{ "sourceWording": "string", "reusableVersion": "string", "reuseFor": ["string"], "explanationZh": "string" }]
+    },
+    "optionalPolish": [{ "questionRefs": ["Q1"], "original": "string", "better": "string", "explanationZh": "string" }],
+    "nextRetryPlan": { "priorityAccuracyPatternZh": "string", "answerLengthRuleZh": "string", "materialToTry": "string", "actions": ["string"] },
+    "nextRetryFocusZh": "string"
+  },
+  "upgradedAnswer": "",
+  "fatalErrors": [],
+  "naturalnessHints": [],
+  "band9Refinements": [],
+  "preservedStyle": [],
+  "reusableExample": null
+}`;
+
+export const speakingPart1TopicThreadInstruction = `This is Speaking Part 1 topic-thread practice, not a single-question target-answer task.
+Analyze the whole ordered topic session and preserve question-to-answer mapping through Q references.
+Do not generate a full target answer, target conversation, Band 7 target answer, Band 7+ target answer, Standard Answer, verifier state, certification wording, or target validation language.
+Return actionable topic-session feedback only:
+- ANNOTATIONS: anchor MUST FIX, BETTER SPOKEN CHOICE, and OPTIONAL POLISH directly to exact sourceQuote text copied from one learner answer. Each sourceQuote must appear verbatim in that answer. Use layers when the same quote has grammar plus spoken-choice issues. Prioritize real learner wording, not invented examples.
+- Treat ANNOTATED ANSWERS as the primary workspace. Scan every answer for all meaningful local, anchorable spoken-language issues supported by the transcript: missing articles, singular/plural errors, subject-verb agreement, tense, missing sentence components, wrong word forms, wrong prepositions/collocations, structurally broken phrases, and clearly unnatural spoken wording with a stable natural alternative. Do not impose an arbitrary cap, but do not invent issues for accurate phrases.
+- If a local repair is mentioned in coaching, retry advice, or a clean retry answer and can be grounded to exact learner wording, it must also appear as an annotation. Do not create a second duplicate annotation for the same original -> better repair.
+- For complex broken stretches where several issues interact, anchor one larger meaningful phrase or sentence instead of several isolated token swaps. Put the detailed local layers inside the same annotation, and use combinedRepair for the complete better spoken version of that span.
+- Severity rules: tense, article, determiner/pronoun choice, plurality/countability, preposition, agreement, missing verb/component, wrong word form, fixed-collocation error, or clearly broken structure = must_fix. A natural spoken alternative without an accuracy error = better_spoken_choice. Minor stylistic variation only = optional_polish.
+- Do not treat ASR casing, punctuation, spacing, capitalization, transcript spelling, or written-form cleanup as learner language errors. Do not recommend inflated, essay-like, or "more formal" Part 1 wording; prefer short, natural, direct spoken English.
+- Do not annotate or discuss transcript-only artifacts as learner errors anywhere in the result: capitalization, punctuation, spacing, ASR casing noise, spelling-only forms that cannot be confirmed in speech, or homophone spelling such as to/too when the spoken form is indistinguishable. If a span has a real structural issue plus casing/spelling cleanup, keep only the real structural issue and anchor only the real spoken-language problem.
+- Pronunciation is not assessed in this mode. Do not claim pronunciation problems, correct pronunciation, pronunciation score impact, or delivery issues in estimateRationaleZh, bandEstimateRange.rationaleZh, annotations, thread-level patterns, retry plan, or material bank.
+- Before returning every repair and every cleanRetryAnswers item, self-check: grammatical, natural spoken IELTS Part 1 English, intended meaning preserved, concise enough for Part 1, not more formal or inflated. Return one preferred repair, not slash-separated alternatives, in better/combinedRepair.
+- CLEAN RETRY ANSWERS: return exactly one cleanRetryAnswers item for every Q in the thread. This is the learner's own answer rebuilt for immediate re-recording, not a Band target answer, model answer, or target conversation. Preserve real personal material, repair important grammar/collocation/structure, compress overlong detail, and never invent personal facts. Use noteZh only when you substantially compress, reorganize the answer, or need to preserve uncertainty because the intended stance cannot be safely recovered.
+- Clean retry style: normally direct answer first, then one concise supporting detail or reason. Remove empty delay openers such as "That's an interesting question" or "That's a good question." Do not preserve unnecessary detours just because they appeared in the original. If several real details appear, choose the strongest one instead of copying all of them. If thread-level advice says the learner over-expanded, the clean retry answers must model shorter, more focused answers.
+- Clean retry semantic self-check: do not keep a sentence merely because it is grammatical if the idea remains awkward, vague, over-generalized, or unnatural for spoken Part 1. Prefer natural category relationships: a field or subject should not be rewritten as a skill when that sounds awkward; an isolated habit should not become an entire lifestyle unless the learner clearly meant that. Rebuild toward the likely intended habit, routine, preference, object, activity, field, or detail without inventing facts.
+- FINAL CLEAN-ANSWER STANCE CHECK: if the learner explicitly begins with a clear stance such as Yes, No, Not really, I would, or I wouldn't, do not silently reverse that stance merely because the supporting explanation is unclear or poorly phrased. Prefer repairing the supporting logic while preserving the stated position. If the answer contains a genuine contradiction and the intended stance cannot be recovered safely, preserve the uncertainty in noteZh or a feedback explanation rather than inventing a new personal preference. Do not use OPTIONAL POLISH to disguise a reversal of the learner's answer stance.
+- FINAL CLEAN-ANSWER QUESTION SATISFACTION CHECK: after drafting cleanRetryAnswers, reread each original question. Each clean retry answer must directly answer that exact question and include a complete reason or detail when the question asks for or naturally requires one. If the learner implies a useful reason but states it unclearly, preserve that meaning and make the relationship explicit without inventing facts. Do not output a grammatically improved answer that leaves a "yes/no" stance unsupported, internally contradictory, or unrelated to the question. Do not preserve unrelated background merely because it is true personal material.
+- FINAL GRAMMAR-TEACHING CONSISTENCY CHECK: when an annotation teaches a grammar repair also used in a clean retry answer, combinedRepair, explanationZh, and the clean retry answer must reflect the same grammatical meaning. For an experience extending from the past up to now, do not explain the correction as simple past if the clean retry answer uses present-perfect meaning.
+- FINAL ANNOTATION COVERAGE CHECK: compare every clean retry answer against the learner's original answer before returning JSON. Every important locally teachable grammar, collocation, pronoun/reference, agreement, tense, missing-component, article/determiner, singular/plural, preposition, or word-form repair used in the clean retry answer must also appear in annotations when it can be grounded to exact learner wording. Do not annotate deletion of filler, broad compression, or a rewritten sentence unless there is a genuine teachable local problem. Do not add duplicate repair cards, and do not create spelling, capitalization, punctuation, or pronunciation annotations during this check.
+- Only mark recurring when the same underlying error pattern appears across multiple answers.
+- This is transcript-based. Do not assert pause length/frequency, speed, pronunciation, or delivery quality unless the transcript itself shows visible fillers/repetition/broken structure.
+- MUST FIX: every important grammar, meaning, repeated low-level, word-form, collocation, or relevance/control issue. Do not cap meaningful items. Use questionRefs such as Q1 or Q1 / Q3.
+- THREAD-LEVEL PATTERNS: concise macro behavior only: answer length, buried direct answers, useful material that needs compression, written/lecture-like tone, or accuracy collapse during overextension. Each pattern needs observationZh, whyItMattersZh, and one retryRule. Do not duplicate grammar lists from annotations.
+- ANSWER-BY-ANSWER COACHING: return [] for new results. Per-question retry guidance belongs in cleanRetryAnswers.
+- HIGH-IMPACT PHRASE FIXES: separate useful spoken-language upgrades with question provenance.
+- SPEAKING MATERIAL BANK: be selective; sparse or empty is acceptable. myUsableMaterial must be grounded in learner ideas with real reuse value: concrete hobbies, routines, preferences, experiences, study/work goals, or distinctive personal examples. Do not collect weak generalized claims or awkward pseudo-factual assertions merely because they appear in the answer. Do not save material the clean retry answer should omit as conceptually distracting. Keep short concrete grounded material when useful. Never invent personal facts.
+- reusableSpokenLanguage should contain only short, natural, content-bearing expressions genuinely worth imitating or transferring, such as a useful collocation, compact sentence frame, or idiomatic phrase. Exclude generic starters/openers, bare affirmative responses such as "Yes, of course" or "Of course", bare "It depends", "I think", "I would say", "In my opinion", empty templates, unnecessarily formal wording, plain autobiographical facts already better captured in myUsableMaterial, and long model mini-answers. Each reuseFor item should explicitly name transfer use across Part 1 / Part 2 / Part 3 when applicable.
+- OPTIONAL POLISH: minor low-priority naturalness only; never put serious issues here.
+- NEXT RETRY PLAN: return concise grounded actions: one priority accuracy pattern, one answer-length/focus rule, and one useful expression or personal material item to try naturally next time. Do not advise more complexity when the problem is overexpansion.
+- NEXT RETRY FOCUS: keep as a compact legacy summary of nextRetryPlan.
+Current estimate is a low-key transcript-based topic-session practice estimate excluding pronunciation. If evidence genuinely straddles two adjacent half-bands, return a bandEstimateRange with exactly one half-band step, for example 4.5-5.0 or 5.0-5.5, never a wider range.`;
+
 export const speakingTargetValidationSchemaInstruction = `The JSON object must match this exact key structure:
 {
   "module": "speaking",
@@ -393,6 +485,10 @@ ${speakingAudioTranscriptionSchemaInstruction}`, params.audioBase64, params.mime
     part: number;
     question: string;
     transcript: string;
+    sessionKind?: 'single_question' | 'part1_topic_thread';
+    topic?: string;
+    threadId?: string;
+    threadAnswers?: { questionId: string; question: string; answer: string }[];
     authoritativeScore?: {
       bandEstimateExcludingPronunciation: number;
       scores: {
@@ -407,6 +503,19 @@ ${speakingAudioTranscriptionSchemaInstruction}`, params.audioBase64, params.mime
     targetAttempt?: number;
     priorTargetAnswer?: string;
   }): Promise<string> {
+    if (params.sessionKind === 'part1_topic_thread') {
+      return this.generateJson(`${strictJsonInstruction}
+
+You are an IELTS Speaking Part 1 topic-session feedback engine for a local-first practice app.
+Chinese is for diagnosis and explanations. English is for learner wording, corrections, phrase fixes, reusable versions, and short frames.
+${speakingPart1TopicThreadInstruction}
+
+${speakingPart1TopicThreadSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`);
+    }
+
     const partFocus = params.part === 1
       ? 'Part 1 focus: direct answer quality, naturalness, concise development, and whether the answer sounds spontaneous.'
       : params.part === 2

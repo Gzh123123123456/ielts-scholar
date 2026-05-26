@@ -56,12 +56,154 @@ export class MockProvider implements AIProvider {
     part: number;
     question: string;
     transcript: string;
+    sessionKind?: 'single_question' | 'part1_topic_thread';
+    topic?: string;
+    threadId?: string;
+    threadAnswers?: { questionId: string; question: string; answer: string }[];
     authoritativeScore?: SpeakingScoreOnlyResult;
     targetRepairFocus?: string;
     targetAttempt?: number;
     priorTargetAnswer?: string;
   }): Promise<SpeakingFeedback> {
     await new Promise(r => setTimeout(r, 1500));
+    if (params.sessionKind === 'part1_topic_thread') {
+      const answers = params.threadAnswers || [];
+      const transcript = answers.map((answer, index) => `Q${index + 1}: ${answer.question}\nA${index + 1}: ${answer.answer}`).join('\n\n') || params.transcript;
+      const quoteFromAnswer = (answer?: string) => {
+        const words = (answer || '').trim().split(/\s+/).filter(Boolean);
+        return words.slice(0, Math.min(words.length, 5)).join(' ') || 'my answer';
+      };
+      const mockAnnotations = answers.map((answer, index) => {
+        const questionRef = `Q${index + 1}`;
+        const quote = quoteFromAnswer(answer.answer);
+        const severity = index === 0 ? 'must_fix' : index === 1 ? 'better_spoken_choice' : 'optional_polish';
+        return {
+          id: `mock_p1_ann_${questionRef.toLowerCase()}`,
+          questionRef,
+          sourceQuote: quote,
+          combinedRepair: index === 0 ? `${quote} ...` : index === 1 ? 'a more natural spoken version' : 'a slightly cleaner spoken version',
+          layers: [
+            {
+              severity,
+              issueType: index === 0 ? 'grammar accuracy' : index === 1 ? 'spoken phrasing' : 'minor naturalness',
+              original: quote,
+              better: index === 0 ? `${quote} ...` : index === 1 ? 'a more natural spoken version' : 'a slightly cleaner spoken version',
+              explanationZh: index === 0
+                ? 'Mock 示例：这里代表需要优先修复的准确性问题。真实模型应覆盖每题中有证据的本地语言问题。'
+                : index === 1
+                  ? 'Mock 示例：这是自然口语表达升级，不是完整范文替换。'
+                  : 'Mock 示例：这是低优先级微调，不能替代真正的语法准确性修复。',
+              reuseGuidanceZh: index === 1 ? '可迁移到 Part 1 喜好、习惯或经历类问题。' : undefined,
+            },
+          ],
+        };
+      });
+      return {
+        mode: 'mock',
+        module: 'speaking',
+        part: 1,
+        sessionKind: 'part1_topic_thread',
+        topic: params.topic || 'Part 1 Topic',
+        threadId: params.threadId || 'mock_thread',
+        threadAnswers: answers,
+        question: answers.map((answer, index) => `Q${index + 1}. ${answer.question}`).join('\n'),
+        transcript,
+        bandEstimateExcludingPronunciation: 6.0,
+        estimateRationaleZh: 'Mock topic-thread estimate: answers are understandable, but several short-answer control and phrasing issues remain. Pronunciation is not formally scored.',
+        scores: {
+          fluencyCoherence: 6.0,
+          lexicalResource: 6.0,
+          grammaticalRangeAccuracy: 5.5,
+          pronunciation: null,
+          pronunciationNote: 'Pronunciation is not formally assessed in Part 1 topic-thread transcript practice.',
+        },
+        threadFeedback: {
+          topic: params.topic || 'Part 1 Topic',
+          threadId: params.threadId || 'mock_thread',
+          questionCount: answers.length,
+          annotations: mockAnnotations,
+          cleanRetryAnswers: answers.map((answer, index) => ({
+            questionRef: `Q${index + 1}`,
+            answer: index === 0
+              ? 'Yes, I do. I usually do it when I want to switch off after a busy day, and it helps me feel more relaxed.'
+              : index === 1
+                ? 'I normally keep it simple. I give a direct answer first, then add one small personal detail.'
+                : 'I think this topic is quite easy to talk about because it connects to my daily routine.',
+            noteZh: index === 0 ? '保留了你的核心意思，但压缩成更适合 Part 1 复录的短回答。' : undefined,
+          })),
+          threadLevelPatterns: [
+            {
+              observationZh: '回答里有可用的个人细节，但有时直接答案被背景解释盖住。',
+              whyItMattersZh: 'Part 1 更看重自然、直接、可追问的短回答，过多背景会让准确性变不稳。',
+              retryRule: 'Direct answer -> one key detail -> stop.',
+            },
+          ],
+          mustFix: [
+            {
+              questionRefs: ['Q1', answers.length >= 3 ? 'Q3' : 'Q2'].filter(Boolean),
+              learnerWording: 'I likes / people is',
+              betterVersion: 'I like / people are',
+              explanationZh: '这是基础主谓一致问题，重复出现会明显影响 GRA，需要优先修复。',
+              recurring: true,
+            },
+          ],
+          answerByAnswerCoaching: [
+          ],
+          highImpactPhraseFixes: [
+            {
+              questionRefs: ['Q1'],
+              original: 'very good',
+              better: 'genuinely relaxing',
+              explanationZh: '这个替换更像自然口语，也更容易迁移到其他 Part 1 喜好类问题。',
+            },
+          ],
+          materialBank: {
+            myUsableMaterial: [
+              {
+                sourceWording: answers[0]?.answer || 'my real daily habit',
+                reusableVersion: 'I usually do it when I want to switch off after a busy day.',
+                reuseFor: ['Part 1 hobbies', 'Part 2 relaxing activity', 'Part 3 daily routine examples'],
+                explanationZh: '保留你的真实习惯，但把表达压缩成可复用的口语素材。',
+              },
+            ],
+            reusableSpokenLanguage: [
+              {
+                reusableVersion: 'when I want to switch off',
+                reuseFor: ['relaxation topics', 'routine topics'],
+                explanationZh: '这是自然口语里的轻量表达，不是完整背诵答案。',
+              },
+            ],
+          },
+          optionalPolish: [
+            {
+              questionRefs: ['Q1'],
+              original: 'I think it is nice',
+              better: "I'd say it's quite nice",
+              explanationZh: '这是低优先级自然度微调，不影响主要意思。',
+            },
+          ],
+          nextRetryPlan: {
+            priorityAccuracyPatternZh: '先稳住基础动词形式和主谓一致，再扩展细节。',
+            answerLengthRuleZh: '每题控制在直接回答 + 一个细节 + 一个短原因。',
+            materialToTry: 'when I want to switch off after a busy day',
+            actions: [
+              'Open each answer with the direct answer.',
+              'Keep one real detail and delete extra background.',
+              'Reuse one natural expression from the material bank.',
+            ],
+          },
+          nextRetryFocusZh: '下次重复这个话题时，每题先用一句话直接回答，再补一个具体个人细节，避免每题都用同一个开头。',
+        },
+        fatalErrors: [],
+        naturalnessHints: [],
+        band9Refinements: [],
+        preservedStyle: [],
+        upgradedAnswer: '',
+        reusableExample: null,
+        targetAnswerStatus: 'not_applicable',
+        obsidianMarkdown: '',
+      } as SpeakingFeedback;
+    }
     const transcriptWords = params.transcript.trim().split(/\s+/).filter(Boolean).length;
     const isPowerCutDemo = params.part === 2
       && /\b(electricity|power)\b/i.test(params.transcript)

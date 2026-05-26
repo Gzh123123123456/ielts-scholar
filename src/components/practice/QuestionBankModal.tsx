@@ -12,6 +12,7 @@ export interface QuestionBankItem {
   module: PracticeRecord['module'];
   part?: 1 | 2 | 3;
   task?: 'task1' | 'task2';
+  matchKey?: string;
 }
 
 interface QuestionBankModalProps<T extends QuestionBankItem> {
@@ -49,6 +50,11 @@ const matchesBankItem = (record: PracticeRecord, item: QuestionBankItem) => {
   if (record.module !== item.module) return false;
   if (item.part && record.module === 'speaking' && record.part !== item.part) return false;
   if (item.task && 'task' in record && record.task !== item.task) return false;
+
+  if (item.matchKey && record.module === 'speaking') {
+    return record.sessionKind === 'part1_topic_thread' &&
+      (record.topicId === item.matchKey || record.threadId === item.id);
+  }
 
   if (item.id) return record.questionId === item.id;
   const text = item.questionText || item.title;

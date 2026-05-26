@@ -141,10 +141,110 @@ export interface SpeakingPreservedStyleItem {
   riskNoteZh?: string;
 }
 
+export interface SpeakingThreadAnswer {
+  questionId: string;
+  question: string;
+  answer: string;
+}
+
+export interface SpeakingThreadMustFixItem {
+  questionRefs: string[];
+  learnerWording: string;
+  betterVersion: string;
+  explanationZh: string;
+  recurring?: boolean;
+}
+
+export interface SpeakingThreadCoachingItem {
+  questionRefs: string[];
+  issue: string;
+  coachingZh: string;
+  exampleFrame?: string;
+}
+
+export interface SpeakingThreadPhraseFixItem {
+  questionRefs: string[];
+  original: string;
+  better: string;
+  explanationZh: string;
+}
+
+export type Part1AnnotationSeverity =
+  | 'must_fix'
+  | 'better_spoken_choice'
+  | 'optional_polish';
+
+export interface Part1AnswerAnnotationLayer {
+  severity: Part1AnnotationSeverity;
+  issueType: string;
+  original: string;
+  better: string;
+  explanationZh: string;
+  reuseGuidanceZh?: string;
+}
+
+export interface Part1AnswerAnnotation {
+  id: string;
+  questionRef: string;
+  sourceQuote: string;
+  layers: Part1AnswerAnnotationLayer[];
+  combinedRepair?: string;
+}
+
+export interface Part1CleanRetryAnswer {
+  questionRef: string;
+  answer: string;
+  noteZh?: string;
+}
+
+export interface SpeakingMaterialBankItem {
+  sourceWording?: string;
+  reusableVersion: string;
+  reuseFor: string[];
+  explanationZh?: string;
+}
+
+export interface SpeakingThreadLevelPattern {
+  observationZh: string;
+  whyItMattersZh: string;
+  retryRule: string;
+}
+
+export interface SpeakingNextRetryPlan {
+  priorityAccuracyPatternZh?: string;
+  answerLengthRuleZh?: string;
+  materialToTry?: string;
+  actions?: string[];
+}
+
+export interface SpeakingThreadFeedback {
+  topic: string;
+  threadId: string;
+  questionCount: number;
+  mustFix: SpeakingThreadMustFixItem[];
+  annotations?: Part1AnswerAnnotation[];
+  cleanRetryAnswers: Part1CleanRetryAnswer[];
+  threadLevelPatterns?: SpeakingThreadLevelPattern[];
+  answerByAnswerCoaching: SpeakingThreadCoachingItem[];
+  highImpactPhraseFixes: SpeakingThreadPhraseFixItem[];
+  materialBank: {
+    myUsableMaterial: SpeakingMaterialBankItem[];
+    reusableSpokenLanguage: SpeakingMaterialBankItem[];
+  };
+  optionalPolish: SpeakingThreadPhraseFixItem[];
+  nextRetryPlan?: SpeakingNextRetryPlan;
+  nextRetryFocusZh: string;
+}
+
 export interface SpeakingFeedback {
   mode: IELTSMode;
   module: 'speaking';
   part: SpeakingPart;
+  sessionKind?: 'single_question' | 'part1_topic_thread';
+  topic?: string;
+  threadId?: string;
+  threadAnswers?: SpeakingThreadAnswer[];
+  threadFeedback?: SpeakingThreadFeedback;
   question: string;
   transcript: string;
   bandEstimateExcludingPronunciation: number;

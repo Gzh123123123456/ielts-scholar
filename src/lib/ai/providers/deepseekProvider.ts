@@ -3,6 +3,8 @@ import {
   frameworkCoachSchemaInstruction,
   frameworkSchemaInstruction,
   speakingFeedbackDepthInstruction,
+  speakingPart1TopicThreadInstruction,
+  speakingPart1TopicThreadSchemaInstruction,
   speakingPromptCalibration,
   speakingScoreOnlySchemaInstruction,
   speakingSchemaInstruction,
@@ -62,6 +64,10 @@ export class DeepSeekProvider implements AIProvider {
     part: number;
     question: string;
     transcript: string;
+    sessionKind?: 'single_question' | 'part1_topic_thread';
+    topic?: string;
+    threadId?: string;
+    threadAnswers?: { questionId: string; question: string; answer: string }[];
     authoritativeScore?: {
       bandEstimateExcludingPronunciation: number;
       scores: {
@@ -76,6 +82,19 @@ export class DeepSeekProvider implements AIProvider {
     targetAttempt?: number;
     priorTargetAnswer?: string;
   }): Promise<string> {
+    if (params.sessionKind === 'part1_topic_thread') {
+      return this.generateJson(`${strictJsonInstruction}
+
+You are an IELTS Speaking Part 1 topic-session feedback engine for a local-first practice app.
+Chinese is for diagnosis and explanations. English is for learner wording, corrections, phrase fixes, reusable versions, and short frames.
+${speakingPart1TopicThreadInstruction}
+
+${speakingPart1TopicThreadSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`, 0.1);
+    }
+
     const partFocus = params.part === 1
       ? 'Part 1: concise natural spoken answers.'
       : params.part === 2

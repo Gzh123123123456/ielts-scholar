@@ -3,6 +3,7 @@ import {
   SpeakingAudioTranscriptionResult,
   SpeakingScoreOnlyResult,
   SpeakingTargetValidationResult,
+  SpeakingThreadAnswer,
   WritingFeedback,
   WritingFrameworkCoachFeedback,
   WritingFrameworkSummary,
@@ -14,6 +15,10 @@ export interface SpeakingAnalysisRequest {
   part: number;
   question: string;
   transcript: string;
+  sessionKind?: 'single_question' | 'part1_topic_thread';
+  topic?: string;
+  threadId?: string;
+  threadAnswers?: SpeakingThreadAnswer[];
   authoritativeScore?: SpeakingScoreOnlyResult;
   targetRepairFocus?: string;
   targetAttempt?: number;

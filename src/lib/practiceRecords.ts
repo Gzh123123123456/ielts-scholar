@@ -1,12 +1,14 @@
 import { SpeakingQuestion, WritingQuestion, WritingTask1AcademicPrompt } from '@/src/data/questions/bank';
 import {
   ProviderDiagnostic,
+  Part1AnswerAnnotationLayer,
   SpeakingFeedback,
   WritingFeedback,
   WritingFrameworkCoachFeedback,
   WritingFrameworkReadiness,
   WritingTask1Feedback,
 } from '@/src/lib/ai/schemas';
+import { validatePart1ThreadFeedbackIntegrity } from '@/src/lib/ai/part1ThreadIntegrity';
 
 export type PracticeRecordStatus = 'draft' | 'analyzed' | 'provider_failed';
 
@@ -42,6 +44,29 @@ interface PracticeRecordBase {
 export interface SpeakingPracticeRecord extends PracticeRecordBase {
   module: 'speaking';
   part: 1 | 2 | 3;
+  sessionKind?: 'single_question' | 'part1_topic_thread';
+  topicId?: string;
+  threadId?: string;
+  threadQuestions?: {
+    id: string;
+    question: string;
+    topic: string;
+    provenance?: 'active_bank_source' | 'product_supplement';
+    sourceQuestionId?: string;
+    supplementId?: string;
+  }[];
+  threadAnswers?: {
+    questionId: string;
+    question: string;
+    transcript: string;
+    rawTranscript?: string;
+    audioTranscript?: string;
+    transcriptOrigin: 'speech' | 'manual';
+    transcriptSource?: 'speech' | 'audio' | 'manual' | 'reviewed';
+    lockedAt: string;
+  }[];
+  activeThreadIndex?: number;
+  threadCompleted?: boolean;
   questionData?: SpeakingQuestion;
   transcript: string;
   rawTranscript?: string;
@@ -158,6 +183,9 @@ const asTranscriptSource = (value: unknown): SpeakingPracticeRecord['transcriptS
     ? value
     : undefined;
 
+const asSpeakingSessionKind = (value: unknown): SpeakingPracticeRecord['sessionKind'] =>
+  value === 'part1_topic_thread' ? 'part1_topic_thread' : value === 'single_question' ? 'single_question' : undefined;
+
 const asSpeakingPart = (value: unknown): 1 | 2 | 3 =>
   value === 2 || value === 3 ? value : 1;
 
@@ -179,6 +207,32 @@ const asStringArray = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined;
 
 const asRequiredStringArray = (value: unknown) => asStringArray(value) || [];
+
+const sanitizeThreadQuestions = (value: unknown): SpeakingPracticeRecord['threadQuestions'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      id: asString(item.id),
+      question: asString(item.question),
+      topic: asString(item.topic),
+      provenance: (item.provenance === 'product_supplement' ? 'product_supplement' : 'active_bank_source') as 'active_bank_source' | 'product_supplement',
+      sourceQuestionId: asOptionalString(item.sourceQuestionId),
+      supplementId: asOptionalString(item.supplementId),
+    })).filter(item => item.id && item.question)
+    : undefined;
+
+const sanitizeThreadAnswers = (value: unknown): SpeakingPracticeRecord['threadAnswers'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      questionId: asString(item.questionId),
+      question: asString(item.question),
+      transcript: asString(item.transcript),
+      rawTranscript: asOptionalString(item.rawTranscript),
+      audioTranscript: asOptionalString(item.audioTranscript),
+      transcriptOrigin: (item.transcriptOrigin === 'speech' ? 'speech' : 'manual') as 'speech' | 'manual',
+      transcriptSource: asTranscriptSource(item.transcriptSource),
+      lockedAt: asString(item.lockedAt, nowIso()),
+    })).filter(item => item.questionId && item.question)
+    : undefined;
 
 const sanitizeSpeakingPreservedStyle = (value: unknown): SpeakingFeedback['preservedStyle'] =>
   Array.isArray(value)
@@ -367,9 +421,210 @@ const asTask1QuickPlan = (value: unknown): WritingTask1QuickPlan => {
   };
 };
 
+const asPart1AnnotationSeverity = (value: unknown): Part1AnswerAnnotationLayer['severity'] =>
+  value === 'must_fix' || value === 'better_spoken_choice' || value === 'optional_polish'
+    ? value
+    : 'optional_polish';
+
+const sanitizeQuestionRefs = (value: unknown, maxCount = 0) => {
+  const allowed = new Set(Array.from({ length: maxCount }, (_, index) => `Q${index + 1}`));
+  return Array.isArray(value)
+    ? value
+      .filter((item): item is string => typeof item === 'string')
+      .map(item => item.trim())
+      .filter(item => !allowed.size || allowed.has(item))
+      .filter((item, index, items) => items.indexOf(item) === index)
+    : [];
+};
+
+const normalizeStoredPart1Text = (value: string) =>
+  value
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+const containsStoredPart1UnsupportedBoundaryClaim = (value: string | undefined) => {
+  const normalized = normalizeStoredPart1Text(value || '');
+  if (!normalized) return false;
+  const unsupportedTranscriptArea = /\b(spelling|spell|capitalization|uppercase|lowercase|punctuation|spacing|orthography|transcription|asr|homophone)\b|拼写|大小写|标点|空格|转写|同音/.test(normalized);
+  const hasPronunciationMention = /\b(pronunciation|pronounce|pronouncing)\b/.test(normalized);
+  const allowedPronunciationNote = /\b(not formally assessed|not assessed|excluding pronunciation)\b/.test(normalized);
+  const unsupportedPronunciation = hasPronunciationMention && !allowedPronunciationNote;
+  const unsupportedPronunciationZh = /发音/.test(normalized) && !/不正式评估|未评估|不评估/.test(normalized);
+  return unsupportedTranscriptArea || unsupportedPronunciation || unsupportedPronunciationZh;
+};
+
+const sanitizeStoredPart1FeedbackText = (value: string | undefined) =>
+  containsStoredPart1UnsupportedBoundaryClaim(value) ? '' : (value || '');
+
+const isStoredPart1FormatOnlyRepair = (original: string, better: string, issueType: string, explanationZh: string) => {
+  const normalizedOriginal = normalizeStoredPart1Text(original);
+  const normalizedBetter = normalizeStoredPart1Text(better);
+  if (!normalizedOriginal || !normalizedBetter) return false;
+  if (normalizedOriginal === normalizedBetter) return true;
+  if (normalizedOriginal.replace(/[^a-z]/g, '') === normalizedBetter.replace(/[^a-z]/g, '')) return true;
+  const evidence = normalizeStoredPart1Text(`${issueType} ${explanationZh}`);
+  const hasFormatOnlyEvidence = /\b(capitali[sz]ation|uppercase|lowercase|punctuation|spacing|spelling|spell|typo|orthograph|transcription|asr|homophone|pronunciation|pronounce)\b|拼写|大小写|标点|空格|转写|同音|发音/.test(evidence);
+  const hasSpokenLanguageEvidence = /\b(article|determiner|pronoun|plural|singular|countability|preposition|collocation|tense|agreement|verb|word form|missing|grammar|accuracy|structure|word choice|natural|phrasing|spoken|reference)\b/.test(evidence);
+  const originalWords = normalizedOriginal.split(/\s+/).filter(Boolean);
+  const betterWords = normalizedBetter.split(/\s+/).filter(Boolean);
+  return hasFormatOnlyEvidence && (!hasSpokenLanguageEvidence || (originalWords.length === 1 && betterWords.length === 1));
+};
+
+const sanitizePart1Annotations = (
+  value: unknown,
+  maxCount: number,
+): NonNullable<SpeakingFeedback['threadFeedback']>['annotations'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map((item, index) => {
+      const questionRef = asString(item.questionRef, `Q${index + 1}`);
+      const layers = Array.isArray(item.layers)
+        ? item.layers.filter(isObject).map(layer => ({
+          severity: asPart1AnnotationSeverity(layer.severity),
+          issueType: asString(layer.issueType),
+          original: asString(layer.original),
+          better: asString(layer.better ?? layer.correction),
+          explanationZh: sanitizeStoredPart1FeedbackText(asString(layer.explanationZh)),
+          reuseGuidanceZh: asOptionalString(layer.reuseGuidanceZh),
+        })).filter(layer => (
+          layer.original &&
+          layer.better &&
+          layer.explanationZh &&
+          !isStoredPart1FormatOnlyRepair(layer.original, layer.better, layer.issueType, layer.explanationZh)
+        ))
+        : [];
+      return {
+        id: asString(item.id, `p1_saved_ann_${index + 1}`),
+        questionRef,
+        sourceQuote: asString(item.sourceQuote ?? item.original),
+        combinedRepair: asOptionalString(item.combinedRepair),
+        layers,
+      };
+    }).filter(item => /^Q\d+$/.test(item.questionRef) && Number(item.questionRef.slice(1)) <= maxCount && item.sourceQuote && item.layers.length)
+    : [];
+
+const sanitizePart1PhraseItems = (
+  value: unknown,
+  maxCount: number,
+): NonNullable<SpeakingFeedback['threadFeedback']>['highImpactPhraseFixes'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      questionRefs: sanitizeQuestionRefs(item.questionRefs ?? item.affectedQuestions, maxCount),
+      original: asString(item.original ?? item.learnerWording),
+      better: asString(item.better ?? item.betterVersion),
+      explanationZh: sanitizeStoredPart1FeedbackText(asString(item.explanationZh)),
+    })).filter(item => item.questionRefs.length && item.original && item.better && item.explanationZh && !isStoredPart1FormatOnlyRepair(item.original, item.better, '', item.explanationZh))
+    : [];
+
+const sanitizePart1CoachingItems = (
+  value: unknown,
+  maxCount: number,
+): NonNullable<SpeakingFeedback['threadFeedback']>['answerByAnswerCoaching'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      questionRefs: sanitizeQuestionRefs(item.questionRefs, maxCount),
+      issue: sanitizeStoredPart1FeedbackText(asString(item.issue)),
+      coachingZh: sanitizeStoredPart1FeedbackText(asString(item.coachingZh)),
+      exampleFrame: asOptionalString(item.exampleFrame),
+    })).filter(item => item.questionRefs.length && item.issue && item.coachingZh)
+    : [];
+
+const sanitizePart1CleanRetryAnswers = (
+  value: unknown,
+  maxCount: number,
+): NonNullable<SpeakingFeedback['threadFeedback']>['cleanRetryAnswers'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      questionRef: asString(item.questionRef),
+      answer: asString(item.answer ?? item.cleanAnswer ?? item.retryAnswer),
+      noteZh: asOptionalString(item.noteZh),
+    })).filter(item => /^Q\d+$/.test(item.questionRef) && Number(item.questionRef.slice(1)) <= maxCount && item.answer.trim())
+      .filter((item, index, items) => items.findIndex(candidate => candidate.questionRef === item.questionRef) === index)
+    : [];
+
+const sanitizePart1MaterialItems = (value: unknown): NonNullable<SpeakingFeedback['threadFeedback']>['materialBank']['myUsableMaterial'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      sourceWording: asOptionalString(item.sourceWording ?? item.originalIdea),
+      reusableVersion: asString(item.reusableVersion ?? item.naturalReusableVersion),
+      reuseFor: asRequiredStringArray(item.reuseFor ?? item.whereItMayBeReused),
+      explanationZh: sanitizeStoredPart1FeedbackText(asOptionalString(item.explanationZh)),
+    })).filter(item => item.reusableVersion && item.reuseFor.length && !containsStoredPart1UnsupportedBoundaryClaim(item.reusableVersion))
+    : [];
+
+const sanitizePart1ThreadLevelPatterns = (
+  value: unknown,
+): NonNullable<SpeakingFeedback['threadFeedback']>['threadLevelPatterns'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      observationZh: sanitizeStoredPart1FeedbackText(asString(item.observationZh ?? item.observation)),
+      whyItMattersZh: sanitizeStoredPart1FeedbackText(asString(item.whyItMattersZh ?? item.whyItMatters)),
+      retryRule: sanitizeStoredPart1FeedbackText(asString(item.retryRule ?? item.rule)),
+    })).filter(item => item.observationZh && item.whyItMattersZh && item.retryRule)
+    : [];
+
+const sanitizePart1NextRetryPlan = (value: unknown): NonNullable<SpeakingFeedback['threadFeedback']>['nextRetryPlan'] => {
+  if (!isObject(value)) return undefined;
+  const actions = asStringArray(value.actions)?.map(sanitizeStoredPart1FeedbackText).filter(item => item.trim()).slice(0, 4);
+  const plan = {
+    priorityAccuracyPatternZh: sanitizeStoredPart1FeedbackText(asOptionalString(value.priorityAccuracyPatternZh)),
+    answerLengthRuleZh: sanitizeStoredPart1FeedbackText(asOptionalString(value.answerLengthRuleZh)),
+    materialToTry: sanitizeStoredPart1FeedbackText(asOptionalString(value.materialToTry)),
+    actions,
+  };
+  return plan.priorityAccuracyPatternZh || plan.answerLengthRuleZh || plan.materialToTry || plan.actions?.length
+    ? plan
+    : undefined;
+};
+
+const sanitizePart1ThreadFeedback = (
+  value: unknown,
+  maxCount: number,
+): SpeakingFeedback['threadFeedback'] | undefined => {
+  if (!isObject(value)) return undefined;
+  const materialBank = isObject(value.materialBank) ? value.materialBank : {};
+  return {
+    topic: asString(value.topic, 'Part 1 Topic'),
+    threadId: asString(value.threadId, 'part1_thread'),
+    questionCount: typeof value.questionCount === 'number' ? value.questionCount : maxCount,
+    mustFix: Array.isArray(value.mustFix)
+      ? value.mustFix.filter(isObject).map(item => ({
+        questionRefs: sanitizeQuestionRefs(item.questionRefs ?? item.affectedQuestions, maxCount),
+        learnerWording: asString(item.learnerWording ?? item.original),
+        betterVersion: asString(item.betterVersion ?? item.correction),
+        explanationZh: sanitizeStoredPart1FeedbackText(asString(item.explanationZh)),
+        recurring: Boolean(item.recurring),
+      })).filter(item => item.questionRefs.length && item.learnerWording && item.betterVersion && item.explanationZh && !isStoredPart1FormatOnlyRepair(item.learnerWording, item.betterVersion, 'must_fix', item.explanationZh))
+      : [],
+    annotations: sanitizePart1Annotations(value.annotations, maxCount),
+    cleanRetryAnswers: sanitizePart1CleanRetryAnswers(value.cleanRetryAnswers, maxCount),
+    threadLevelPatterns: sanitizePart1ThreadLevelPatterns(value.threadLevelPatterns),
+    answerByAnswerCoaching: sanitizePart1CoachingItems(value.answerByAnswerCoaching, maxCount),
+    highImpactPhraseFixes: sanitizePart1PhraseItems(value.highImpactPhraseFixes, maxCount),
+    materialBank: {
+      myUsableMaterial: sanitizePart1MaterialItems(materialBank.myUsableMaterial),
+      reusableSpokenLanguage: sanitizePart1MaterialItems(materialBank.reusableSpokenLanguage),
+    },
+    optionalPolish: sanitizePart1PhraseItems(value.optionalPolish, maxCount),
+    nextRetryPlan: sanitizePart1NextRetryPlan(value.nextRetryPlan),
+    nextRetryFocusZh: asString(value.nextRetryFocusZh),
+  };
+};
+
 const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined => {
   if (!isObject(value)) return undefined;
   const scores = isObject(value.scores) ? value.scores : {};
+  const sessionKind = asSpeakingSessionKind(value.sessionKind);
+  const threadAnswers = sessionKind === 'part1_topic_thread'
+    ? Array.isArray(value.threadAnswers)
+      ? value.threadAnswers.filter(isObject).map(item => ({
+        questionId: asString(item.questionId),
+        question: asString(item.question),
+        answer: asString(item.answer ?? item.transcript),
+      })).filter(item => item.questionId && item.question)
+      : []
+    : undefined;
   const reusableExample = isObject(value.reusableExample)
     ? {
       example: asString(value.reusableExample.example),
@@ -385,6 +640,13 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     mode: 'practice',
     module: 'speaking',
     part: asSpeakingPart(value.part),
+    sessionKind,
+    topic: asOptionalString(value.topic),
+    threadId: asOptionalString(value.threadId),
+    threadAnswers,
+    threadFeedback: sessionKind === 'part1_topic_thread'
+      ? sanitizePart1ThreadFeedback(value.threadFeedback, threadAnswers?.length || 0)
+      : undefined,
     question: asString(value.question),
     transcript: asString(value.transcript),
     bandEstimateExcludingPronunciation: typeof value.bandEstimateExcludingPronunciation === 'number'
@@ -453,14 +715,34 @@ const sanitizeSpeakingRecord = (value: unknown): SpeakingPracticeRecord | null =
   const question = asString(value.question);
   if (!id || !question) return null;
   const timestamp = asString(value.updatedAt, asString(value.createdAt, nowIso()));
+  const sanitizedThreadAnswers = sanitizeThreadAnswers(value.threadAnswers);
+  const sanitizedFeedback = sanitizeSpeakingFeedback(value.feedback);
+  const restoredThreadIntegrity = value.sessionKind === 'part1_topic_thread' && sanitizedFeedback
+    ? validatePart1ThreadFeedbackIntegrity(sanitizedFeedback, (sanitizedThreadAnswers || []).map(answer => ({
+      questionId: answer.questionId,
+      question: answer.question,
+      transcript: answer.transcript,
+    })))
+    : null;
+  const restoredFeedback = restoredThreadIntegrity && !restoredThreadIntegrity.ok ? undefined : sanitizedFeedback;
+  const restoredStatus = restoredThreadIntegrity && !restoredThreadIntegrity.ok && asStatus(value.status) === 'analyzed'
+    ? 'provider_failed'
+    : asStatus(value.status);
 
   return {
     ...(value as Partial<SpeakingPracticeRecord>),
     id,
     module: 'speaking',
     mode: 'practice',
-    status: asStatus(value.status),
+    status: restoredStatus,
     part: asSpeakingPart(value.part),
+    sessionKind: asSpeakingSessionKind(value.sessionKind),
+    topicId: asOptionalString(value.topicId),
+    threadId: asOptionalString(value.threadId),
+    threadQuestions: sanitizeThreadQuestions(value.threadQuestions),
+    threadAnswers: sanitizedThreadAnswers,
+    activeThreadIndex: typeof value.activeThreadIndex === 'number' ? Math.max(0, Math.floor(value.activeThreadIndex)) : undefined,
+    threadCompleted: typeof value.threadCompleted === 'boolean' ? value.threadCompleted : undefined,
     question,
     questionId: asOptionalString(value.questionId),
     topic: asOptionalString(value.topic),
@@ -473,8 +755,8 @@ const sanitizeSpeakingRecord = (value: unknown): SpeakingPracticeRecord | null =
     audioTranscript: asOptionalString(value.audioTranscript),
     transcriptOrigin: value.transcriptOrigin === 'speech' ? 'speech' : 'manual',
     transcriptSource: asTranscriptSource(value.transcriptSource),
-    feedback: sanitizeSpeakingFeedback(value.feedback),
-    obsidianMarkdown: asOptionalString(value.obsidianMarkdown),
+    feedback: restoredFeedback,
+    obsidianMarkdown: restoredFeedback ? asOptionalString(value.obsidianMarkdown) : undefined,
   };
 };
 

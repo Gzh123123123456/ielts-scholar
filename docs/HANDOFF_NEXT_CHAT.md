@@ -1,6 +1,6 @@
 # Handoff For Next Chat
 
-_Last updated: 2026-05-24_
+_Last updated: 2026-05-26_
 
 ## Project
 
@@ -12,7 +12,7 @@ Local path: `D:\Personal\Desktop\ielts-scholar_-local-first-training-agent`
 
 ## Stable Checkpoint
 
-Stable pushed checkpoint: `11614c3 Complete Speaking runtime and feedback stabilization`.
+Stable pushed checkpoint before the Part 1 closeout: `ecb7de4 Simplify workflow docs and add Codex skills`.
 
 Git commands, not this document, determine the current branch and sync state.
 
@@ -25,6 +25,9 @@ Git commands, not this document, determine the current branch and sync state.
 - Writing Task 1 Academic basic practice is implemented; calibration remains future work requiring real samples.
 - History, Progress, question-bank browsing, active attempts, and localStorage records are available in the local-first prototype.
 - Workflow/docs/skills simplification is completed as the current workflow baseline.
+- Speaking Part 1 topic-thread practice is implemented as a development checkpoint: natural 3-4 question topic threads, traceable supplements for incomplete topics, annotated original answers, one cleaner retry answer per question, thread-level patterns, Material Bank, and Next Retry Plan.
+- Part 1 integrity/reliability work is included: clean-retry safeguards, saved-result restoration safety, annotation de-duplication, transcript-spelling/pronunciation boundary tightening, audio-transcript candidate gating, exact-thread retry, coverage-aware/fair random selection, and topic-thread markdown/export cleanup.
+- Prior real-provider browser checks established the general Part 1 results/feedback flow. The newest audio gating, exact-thread retry, fair random selection, stance/tense refinement, mixed-repair narrowing, and markdown export cleanup still need post-reinstall manual browser validation.
 
 ## Non-Negotiable Current Product Rules
 
@@ -41,12 +44,17 @@ Git commands, not this document, determine the current branch and sync state.
 
 ## Next Priority Sequence
 
-1. Speaking Part 1 topic-thread flow is the next immediate product priority.
-2. Speaking Part 3 discussion-flow refinement follows next.
-3. Audio transcription reliability.
-4. PDF folder import + mainland active-bank publishing + SaaS-ready bank layer.
-5. Writing Task 2 target/score/feedback consistency audit.
-6. Writing Task 1 calibration with real samples.
+1. Verify the Part 1 checkpoint in browser after reinstall:
+   - blank/low-signal recording does not auto-fill the main transcript and can only be adopted through the candidate action;
+   - Retry This Thread replays the same question set in the same order;
+   - Change Topic/random selection avoids immediate repeats and respects topic-level fairness;
+   - one real-provider feedback/export run preserves explicit stance, keeps annotation tense aligned with cleaner-answer tense, avoids transcript-spelling/pronunciation repair, and exports the correct topic filename, Part 1 heading, nested transfer labels, and readable issue labels.
+2. If those checks pass, mark this Part 1 checkpoint browser-accepted; if not, open a small follow-up fix.
+3. Speaking Part 3 discussion-flow refinement follows next.
+4. Audio transcription reliability.
+5. PDF folder import + mainland active-bank publishing + SaaS-ready bank layer.
+6. Writing Task 2 target/score/feedback consistency audit.
+7. Writing Task 1 calibration with real samples.
 
 ## Minimal Reading Rule
 

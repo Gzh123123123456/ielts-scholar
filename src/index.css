@@ -263,6 +263,68 @@
   text-decoration-color: rgba(166, 77, 50, 0.34);
 }
 
+.part1-answer-mark {
+  appearance: none;
+  background: rgba(60, 47, 47, 0.025);
+  border: 0;
+  border-bottom: 1px solid rgba(60, 47, 47, 0.22);
+  border-radius: 0.12rem;
+  color: inherit;
+  display: inline;
+  font: inherit;
+  line-height: inherit;
+  padding: 0.02em 0.14em;
+  position: relative;
+  text-align: inherit;
+  text-decoration: none;
+}
+
+.part1-answer-mark::after {
+  content: "";
+  width: 0.36rem;
+  height: 0.36rem;
+  border: 1px solid rgba(253, 250, 246, 0.95);
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(60, 47, 47, 0.16);
+  position: absolute;
+  right: -0.18rem;
+  top: -0.2rem;
+}
+
+.part1-answer-mark[data-severity="must_fix"] {
+  border-bottom-color: rgba(180, 35, 24, 0.55);
+  background: rgba(180, 35, 24, 0.055);
+}
+
+.part1-answer-mark[data-severity="must_fix"]::after {
+  background: #b42318;
+}
+
+.part1-answer-mark[data-severity="better_spoken_choice"] {
+  border-bottom-color: rgba(166, 77, 50, 0.48);
+  background: rgba(166, 77, 50, 0.05);
+}
+
+.part1-answer-mark[data-severity="better_spoken_choice"]::after {
+  background: #a64d32;
+}
+
+.part1-answer-mark[data-severity="optional_polish"] {
+  border-bottom-style: dotted;
+  border-bottom-color: rgba(60, 47, 47, 0.28);
+  background: rgba(60, 47, 47, 0.025);
+}
+
+.part1-answer-mark[data-severity="optional_polish"]::after {
+  background: #8a7d70;
+}
+
+.part1-answer-mark:hover,
+.part1-answer-mark--active {
+  background: rgba(60, 47, 47, 0.06);
+  box-shadow: inset 0 -0.18em 0 rgba(166, 77, 50, 0.12);
+}
+
 .annotated-correction-overlay {
   background: rgba(253, 250, 246, 0.98);
   border: 1px solid rgba(60, 47, 47, 0.12);
@@ -423,6 +485,17 @@
 .annotation-overlay__upgrade b {
   color: rgba(60, 47, 47, 0.86);
   margin-left: 0.35rem;
+}
+
+.part1-annotation-overlay .annotation-overlay__upgrade span {
+  display: block;
+  margin-bottom: 0.25rem;
+  text-decoration: none;
+}
+
+.part1-annotation-overlay .annotation-overlay__upgrade b {
+  display: block;
+  margin-left: 0;
 }
 
 .annotation-overlay__resize {

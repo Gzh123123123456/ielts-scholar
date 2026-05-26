@@ -39,6 +39,21 @@ const getWritingPreview = (record: WritingTask2PracticeRecord) =>
 const getWritingTask1Preview = (record: WritingTask1PracticeRecord) =>
   preview(record.report || record.quickPlan?.overview || record.quickPlan?.keyFeatures);
 
+const speakingHistoryTitle = (record: SpeakingPracticeRecord) =>
+  record.sessionKind === 'part1_topic_thread'
+    ? record.topic || record.feedback?.topic || 'Part 1 Topic Thread'
+    : preview(record.question, 'Saved Speaking question');
+
+const speakingHistoryMeta = (record: SpeakingPracticeRecord) =>
+  record.sessionKind === 'part1_topic_thread'
+    ? `PART 1 · TOPIC THREAD · ${record.status}${record.threadAnswers?.length ? ` · ${record.threadAnswers.length} questions completed` : ''}`
+    : `Part ${record.part} / ${record.status}`;
+
+const speakingHistoryPreview = (record: SpeakingPracticeRecord) =>
+  record.sessionKind === 'part1_topic_thread'
+    ? preview(record.threadAnswers?.map((answer, index) => `Q${index + 1}: ${answer.transcript}`).join(' ') || record.transcript, 'No transcript saved yet.')
+    : preview(record.transcript, 'No transcript saved yet.');
+
 export default function PracticeHistory() {
   const navigate = useNavigate();
   const [records, setRecords] = useState(() => getPracticeRecords(80));
@@ -139,16 +154,16 @@ export default function PracticeHistory() {
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <div>
                     <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-1">
-                      Part {record.part} / {record.status}
+                      {speakingHistoryMeta(record)}
                     </div>
-                    <h3 className="text-lg leading-snug">{preview(record.question, 'Saved Speaking question')}</h3>
+                    <h3 className="text-lg leading-snug">{speakingHistoryTitle(record)}</h3>
                   </div>
                   <div className="text-xs text-paper-ink/40 font-sans whitespace-nowrap">
                     {formatTimestamp(getTimestamp(record))}
                   </div>
                 </div>
                 <p className="text-sm text-paper-ink/65 mb-4 leading-7">
-                  {preview(record.transcript, 'No transcript saved yet.')}
+                  {speakingHistoryPreview(record)}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <SerifButton

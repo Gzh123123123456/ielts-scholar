@@ -1,5 +1,17 @@
 # Decision Log
 
+## [2026-05-26] Speaking Part 1 Topic-Thread Development Checkpoint
+- **Decision**: Create a recoverable pre-reinstall development checkpoint for the Speaking Part 1 topic-thread workflow while documenting that newest browser acceptance is still pending.
+- **Implemented**:
+  - Part 1 topic-thread practice with natural 3-4 question sets, multiple coherent sets for larger topics, and traceable product-supplement questions where source topics are incomplete.
+  - Results centered on annotated original answers, one cleaner retry answer per question, thread-level patterns, Material Bank, and Next Retry Plan.
+  - Clean-retry integrity, saved-result restoration safety, annotation de-duplication, tighter transcript-spelling/pronunciation boundaries, audio-transcript candidate gating, exact-thread retry, coverage-aware/fair random selection, and Part 1 markdown/export cleanup.
+- **Validation status**:
+  - Prior real-provider browser checks established the general Part 1 results/feedback flow.
+  - This closeout requires fresh lint and build before commit/push.
+  - The newest audio gating, exact-thread retry, fair random selection, stance/tense refinement, mixed-repair narrowing, and markdown export cleanup still require post-reinstall manual browser validation.
+- **Explicitly unchanged**: no Part 2, Part 3, Writing Task 1, Writing Task 2, provider-key architecture, pronunciation scoring, PDF import, SaaS bank publishing, or full mock-exam work is claimed by this checkpoint.
+
 ## [2026-05-24] Workflow Simplification and Codex Skills Baseline
 - **Decision**: Separate workflow/docs optimization from product behavior and make ordinary future work shorter to request.
 - **Implemented**:

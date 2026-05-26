@@ -1,5 +1,6 @@
 ﻿import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from './bands';
 import type { SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
+import { validatePart1ThreadFeedbackIntegrity } from './ai/part1ThreadIntegrity';
 import type { WritingTask1AcademicPrompt } from '../data/questions/bank';
 import type { WritingTask1QuickPlan } from './practiceRecords';
 import {
@@ -19,6 +20,7 @@ interface MarkdownFilenameInput {
   topic?: string;
   prompt?: string;
   timestamp?: string | Date;
+  sessionKind?: 'part1_topic_thread' | 'single_question';
 }
 
 const GENERIC_TOPIC_PATTERN = /academic task|task 1|task 2|writing|speaking|general/i;
@@ -127,8 +129,13 @@ export const buildMarkdownExportFilename = ({
   topic,
   prompt,
   timestamp,
+  sessionKind,
 }: MarkdownFilenameInput) => {
   const { date, time } = formatDateTimeStamp(timestamp);
+  if (module === 'speaking' && taskOrPart === 'p1' && sessionKind === 'part1_topic_thread') {
+    const topicSlug = slugifyMarkdownFilenamePart(isReliableTopic(topic) ? topic : prompt, 5);
+    return `ielts-speaking-p1-${topicSlug || 'topic'}-topic-thread-${date}-${time}.md`;
+  }
   const taskType = taskOrPart === 'task2' ? detectTask2Type(prompt) : '';
   const slug = taskOrPart === 'task2'
     ? unique([topicKeywords(prompt, topic, 3), taskType].filter(Boolean)).join('-')
@@ -728,10 +735,136 @@ const reviewCardIdeaExpansion = (feedback: Omit<SpeakingFeedback, 'obsidianMarkd
     })
     .join('\n\n') || '- No stable personal material yet. Next time, add one real detail before upgrading the language.';
 };
+
+const questionRefLine = (refs: string[]) => refs.length ? `(${refs.join(' / ')}) ` : '';
+
+const part1AnnotationLabel = (severity: string) => {
+  if (severity === 'must_fix') return 'MUST FIX';
+  if (severity === 'better_spoken_choice') return 'BETTER SPOKEN CHOICE';
+  return 'OPTIONAL POLISH';
+};
+
+export const formatPart1IssueTypeLabel = (issueType?: string) => {
+  const normalized = (issueType || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  const mapped: Record<string, string> = {
+    grammatical_structure: 'grammar structure',
+    'grammatical structure': 'grammar structure',
+    singular_plural_agreement: 'number agreement',
+    'singular plural agreement': 'number agreement',
+    missing_verb: 'missing verb',
+    'missing verb': 'missing verb',
+    word_choice: 'word choice',
+    'word choice': 'word choice',
+    pronoun_agreement: 'pronoun agreement',
+    'pronoun agreement': 'pronoun agreement',
+    subject_verb_agreement: 'subject-verb agreement',
+    'subject verb agreement': 'subject-verb agreement',
+  };
+  return mapped[normalized] || normalized || 'language issue';
+};
+
+const part1TransferLine = (reuseFor: string[]) => {
+  const targets = cleanLearningLines(reuseFor);
+  return targets.length ? `  - 可迁移到：${targets.join('；')}` : '';
+};
+
+const part1MaterialItemLines = (item: {
+  sourceWording?: string;
+  reusableVersion: string;
+  reuseFor: string[];
+  explanationZh?: string;
+}) => [
+  `- ${item.reusableVersion}`,
+  item.sourceWording && `  - 来源表达：${item.sourceWording}`,
+  item.explanationZh && `  - 为什么值得保留：${item.explanationZh}`,
+  part1TransferLine(item.reuseFor),
+].filter((line): line is string => Boolean(line && line.trim())).join('\n');
+
+const buildPart1TopicThreadMarkdown = (
+  feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
+  timestamp?: string | Date,
+) => {
+  const thread = feedback.threadFeedback;
+  const answers = feedback.threadAnswers || [];
+  const range = feedback.bandEstimateRange;
+  const estimateText = range && Number.isFinite(range.lower) && Number.isFinite(range.upper)
+    ? `${formatConservativeBandEstimate(range.lower)}-${formatConservativeBandEstimate(range.upper)}`
+    : `${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右`;
+  const material = thread?.materialBank;
+
+  const cleanRetryByQuestion = new Map((thread?.cleanRetryAnswers || []).map(item => [item.questionRef, item] as const));
+  const nextRetryPlan = thread?.nextRetryPlan;
+  const nextRetryPlanItems = cleanLines([
+    nextRetryPlan?.priorityAccuracyPatternZh,
+    nextRetryPlan?.answerLengthRuleZh,
+    nextRetryPlan?.materialToTry && `Try naturally: ${nextRetryPlan.materialToTry}`,
+    ...(nextRetryPlan?.actions || []),
+    !nextRetryPlan && (thread?.nextRetryFocusZh || feedback.nextStepZh),
+  ]);
+  const legacyCoachingFallback = cleanRetryByQuestion.size ? [] : thread?.answerByAnswerCoaching || [];
+  const integrity = validatePart1ThreadFeedbackIntegrity(feedback, answers);
+  const legacyCompletenessNote = integrity.ok
+    ? ''
+    : `\n> Stored result note: this topic-thread feedback is incomplete (${integrity.validCleanRetryCount}/${integrity.expectedCount} cleaner answers). Re-analyze the locked thread for a complete export.\n`;
+
+  return `# IELTS Speaking Part 1｜${feedback.topic || thread?.topic || 'Topic Practice'} Topic Thread
+${legacyCompletenessNote}
+
+## Session Summary
+- Questions completed: ${answers.length}
+- Topic Practice Estimate: ${estimateText}
+- Note: Transcript-based estimate; pronunciation is not formally scored.
+${feedback.estimateRationaleZh ? `- Rationale: ${feedback.estimateRationaleZh}` : ''}
+
+# Part 1｜Annotated Answers
+${answers.map((answer, index) => {
+    const questionRef = `Q${index + 1}`;
+    const annotations = thread?.annotations?.filter(item => item.questionRef === questionRef) || [];
+    const cleanRetry = cleanRetryByQuestion.get(questionRef);
+    const annotationLines = annotations.length
+      ? annotations.map(item => [
+        `- Source: "${item.sourceQuote}"`,
+        item.combinedRepair && `  - Combined repair: ${item.combinedRepair}`,
+        ...item.layers.map(layer => `  - ${part1AnnotationLabel(layer.severity)} / ${formatPart1IssueTypeLabel(layer.issueType)}: ${layer.original} -> ${layer.better}\n    - ${layer.explanationZh}${layer.reuseGuidanceZh ? `\n    - Reuse: ${layer.reuseGuidanceZh}` : ''}`),
+      ].filter(Boolean).join('\n')).join('\n')
+      : '- No anchored correction for this answer.';
+    const cleanRetryBlock = cleanRetry
+      ? `\n\n### A Cleaner Answer for Your Next Try\n${cleanRetry.answer}${cleanRetry.noteZh ? `\n\n${cleanRetry.noteZh}` : ''}`
+      : '';
+    return `## ${questionRef}. ${answer.question}\n> Original answer: ${answer.answer}\n\n### Annotations\n${annotationLines}${cleanRetryBlock}`;
+  }).join('\n\n')}
+
+# Topic-Thread Review｜Session Patterns & Material Bank
+## Thread-Level Patterns
+${thread?.threadLevelPatterns?.length ? thread.threadLevelPatterns.map(item => `- ${item.observationZh}\n  - Why it matters: ${item.whyItMattersZh}\n  - Retry rule: ${item.retryRule}`).join('\n') : legacyCoachingFallback.length ? legacyCoachingFallback.map(item => `- ${questionRefLine(item.questionRefs)}${item.issue}\n  - ${item.coachingZh}${item.exampleFrame ? `\n  - Retry frame: ${item.exampleFrame}` : ''}`).join('\n') : '- No thread-level retry pattern was identified beyond the annotated local fixes.'}
+
+## Speaking Material Bank
+这些是值得保留、以后可迁移到口语 Part 1/2/3 的个人素材和自然表达。
+
+### My Usable Material
+${material?.myUsableMaterial.length ? material.myUsableMaterial.map(part1MaterialItemLines).join('\n') : '- No stable personal material was identified yet.'}
+
+### Reusable Spoken Language
+${material?.reusableSpokenLanguage.length ? material.reusableSpokenLanguage.map(part1MaterialItemLines).join('\n') : '- No stable reusable spoken expressions were identified yet.'}
+
+## Next Retry Plan
+${nextRetryPlanItems.length ? nextRetryPlanItems.map(item => `- ${item}`).join('\n') : '- Repeat this topic with shorter direct openings and one real detail in each answer.'}
+
+_Exported: ${formatExportDate(timestamp)}_`;
+};
+
 export const buildSpeakingTrainingMarkdown = (
   feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
   timestamp?: string | Date,
 ) => {
+  if (feedback.sessionKind === 'part1_topic_thread' && feedback.threadFeedback) {
+    return buildPart1TopicThreadMarkdown(feedback, timestamp);
+  }
+
   const shortQuestion = limitWords(feedback.question, 9);
   const path = reviewCardAnswerPath(feedback).map(cleanLearningText).filter(Boolean);
   const rows = reviewCardRows(feedback)

@@ -14,8 +14,13 @@ import {
   ProviderDiagnostic,
   FatalError,
   NaturalnessHint,
+  Part1AnswerAnnotation,
+  Part1AnswerAnnotationLayer,
+  Part1AnnotationSeverity,
+  Part1CleanRetryAnswer,
   SpeakingAudioTranscriptionResult,
   SpeakingFeedback,
+  SpeakingNextRetryPlan,
   SpeakingPart,
   SpeakingScoreOnlyResult,
   SpeakingTargetAnswerSelfScores,
@@ -777,6 +782,834 @@ const normalizeSpeakingScoreOnly = (
   };
 };
 
+const normalizeQuestionRefs = (
+  value: unknown,
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+): string[] => {
+  const refs = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  const cleaned = refs.map(item => item.trim()).filter(Boolean);
+  return cleaned.length ? cleaned : answers.length ? ['Q1'] : [];
+};
+
+const normalizeThreadPhraseItems = (
+  value: unknown,
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+  validationErrors: string[],
+  path: string,
+) => asArray(value, path, validationErrors).map((item, index) => {
+  const record = isRecord(item) ? item : {};
+  if (!isRecord(item)) validationErrors.push(`${path}[${index}] missing or invalid object`);
+  const questionRefs = normalizeQuestionRefs(record.questionRefs ?? record.affectedQuestions, answers);
+  const original = safeLearningText(asString(record.original ?? record.learnerWording, FALLBACK_TEXT, `${path}[${index}].original`, validationErrors));
+  const better = safeLearningText(asString(record.better ?? record.betterVersion, FALLBACK_TEXT, `${path}[${index}].better`, validationErrors));
+  const explanationZh = safeLearningText(asString(record.explanationZh, 'Provider feedback was incomplete; this item was normalized safely.', `${path}[${index}].explanationZh`, validationErrors));
+  const answerIndex = Number((questionRefs[0] || 'Q1').replace(/^Q/i, '')) - 1;
+  const repair = normalizePart1RepairLayer(original, better, path, explanationZh, answers[answerIndex]?.answer || '');
+  if (!repair) return null;
+  return {
+    questionRefs,
+    original: repair.original,
+    better: repair.better,
+    explanationZh: repair.explanationZh,
+  };
+}).filter((item): item is { questionRefs: string[]; original: string; better: string; explanationZh: string } => Boolean(item && item.questionRefs.length));
+
+const normalizePart1AnnotationSeverity = (value: unknown): Part1AnnotationSeverity => {
+  if (value === 'must_fix' || value === 'better_spoken_choice' || value === 'optional_polish') return value;
+  if (value === 'high_impact_phrase_fix' || value === 'phrase_fix') return 'better_spoken_choice';
+  return 'optional_polish';
+};
+
+const calibratePart1AnnotationSeverity = (
+  severity: Part1AnnotationSeverity,
+  issueType: string,
+  explanationZh: string,
+): Part1AnnotationSeverity => {
+  const evidence = `${issueType} ${explanationZh}`.toLowerCase();
+  if (!/article|determiner|pronoun|plural|singular|countability|preposition|fixed collocation|wrong collocation|tense|agreement|subject-verb|verb|word form|missing|grammar|accuracy|demonstrative|reference|this\/that|these\/those/.test(evidence)) {
+    return severity;
+  }
+  return severity === 'optional_polish' || severity === 'better_spoken_choice'
+    ? 'must_fix'
+    : severity;
+};
+
+const normalizeTranscriptFormatText = (text: string) =>
+  safeLearningText(text)
+    .normalize('NFKC')
+    .replace(/[‘’‚`]/g, "'")
+    .replace(/[“”„]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+const normalizeLettersOnly = (text: string) =>
+  normalizeTranscriptFormatText(text).replace(/[^a-z]/g, '');
+
+const isLikelyTranscriptFormatOnlyLayer = (
+  original: string,
+  better: string,
+  issueType: string,
+  explanationZh: string,
+) => {
+  const originalText = normalizeTranscriptFormatText(original);
+  const betterText = normalizeTranscriptFormatText(better);
+  if (!originalText || !betterText) return false;
+  if (originalText === betterText) return true;
+  if (normalizeLettersOnly(original) === normalizeLettersOnly(better)) return true;
+  const evidence = `${issueType} ${explanationZh}`.toLowerCase();
+  const hasFormatOnlyEvidence = /\b(capitali[sz]ation|uppercase|lowercase|punctuation|spacing|spelling|spell|typo|orthograph|transcription|asr|homophone|pronunciation|pronounce)\b|拼写|大小写|标点|空格|转写|同音|发音/.test(evidence);
+  const hasSpokenLanguageEvidence = /\b(article|determiner|pronoun|plural|singular|countability|preposition|collocation|tense|agreement|verb|word form|missing|grammar|accuracy|structure|word choice|natural|phrasing|spoken|reference)\b/.test(evidence);
+  const originalWords = originalText.split(/\s+/).filter(Boolean);
+  const betterWords = betterText.split(/\s+/).filter(Boolean);
+  if (hasFormatOnlyEvidence && (!hasSpokenLanguageEvidence || (originalWords.length === 1 && betterWords.length === 1))) return true;
+  const homophonePairs = new Set(['to|too', 'too|to', 'there|their', 'their|there', 'its|it s', 'it s|its']);
+  return homophonePairs.has(`${originalText}|${betterText}`);
+};
+
+const hasExplicitPart1SpokenIssue = (issueType: string, explanationZh: string) =>
+  /\b(article|determiner|pronoun|plural|singular|countability|preposition|collocation|tense|agreement|subject-verb|verb|word form|missing|grammar|structure|word choice|reference)\b|冠词|代词|单复数|时态|一致|介词|搭配|缺少|语法/.test(`${issueType} ${explanationZh}`.toLowerCase());
+
+const part1IssueExplanation = (issueType: string, explanationZh: string) => {
+  const evidence = `${issueType} ${explanationZh}`.toLowerCase();
+  if (/\b(article|determiner)\b|冠词/.test(evidence)) return 'Article or determiner use changes the spoken grammar of this phrase.';
+  if (/\b(pronoun|reference)\b|代词/.test(evidence)) return 'Pronoun/reference choice needs to match the thing you mean.';
+  if (/\b(plural|singular|countability)\b|单复数/.test(evidence)) return 'Singular/plural or countability needs to match the noun meaning.';
+  if (/\b(tense)\b|时态/.test(evidence)) return 'Tense needs to match the time meaning of the answer.';
+  if (/\b(agreement|subject-verb)\b|一致/.test(evidence)) return 'Subject and verb need to agree in this phrase.';
+  if (/\b(preposition)\b|介词/.test(evidence)) return 'Preposition choice changes the natural spoken structure.';
+  if (/\b(collocation|word choice)\b|搭配/.test(evidence)) return 'This is a more natural spoken collocation or word choice.';
+  if (/\b(missing|verb|component|word form)\b|缺少/.test(evidence)) return 'A needed spoken-language component is missing or has the wrong form.';
+  if (/\b(grammar|structure)\b|语法/.test(evidence)) return 'This is a grounded spoken-grammar repair.';
+  return undefined;
+};
+
+const part1Words = (text: string) =>
+  safeLearningText(text).match(/[A-Za-z']+|[0-9]+/g) || [];
+
+const normalizePart1Word = (text: string) =>
+  text.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const part1WordEditDistance = (a: string, b: string) => {
+  const left = normalizePart1Word(a);
+  const right = normalizePart1Word(b);
+  if (!left || !right) return 99;
+  const rows = Array.from({ length: left.length + 1 }, (_, row) => [row, ...Array(right.length).fill(0)]);
+  for (let col = 1; col <= right.length; col += 1) rows[0][col] = col;
+  for (let row = 1; row <= left.length; row += 1) {
+    for (let col = 1; col <= right.length; col += 1) {
+      rows[row][col] = Math.min(
+        rows[row - 1][col] + 1,
+        rows[row][col - 1] + 1,
+        rows[row - 1][col - 1] + (left[row - 1] === right[col - 1] ? 0 : 1),
+      );
+    }
+  }
+  return rows[left.length][right.length];
+};
+
+const isLikelyTranscriptSpellingTokenChange = (originalWord: string, betterWord: string) => {
+  const original = normalizePart1Word(originalWord);
+  const better = normalizePart1Word(betterWord);
+  if (!original || !better || original === better) return false;
+  if (Math.abs(original.length - better.length) > 2) return false;
+  if (original.length < 5 || better.length < 5) return false;
+  return part1WordEditDistance(original, better) <= 2;
+};
+
+const localPart1RepairContext = (
+  originalWords: string[],
+  betterWords: string[],
+  originalIndex: number,
+  betterIndex: number,
+  originalCount: number,
+  betterCount: number,
+) => {
+  const originalStart = Math.max(0, originalIndex - 1);
+  const originalEnd = Math.min(originalWords.length, originalIndex + originalCount + 1);
+  const betterStart = Math.max(0, betterIndex - 1);
+  const betterEnd = Math.min(betterWords.length, betterIndex + betterCount + 1);
+  return {
+    original: originalWords.slice(originalStart, originalEnd).join(' '),
+    better: betterWords.slice(betterStart, betterEnd).join(' '),
+  };
+};
+
+const safelyNarrowPart1ArticleRepair = (
+  originalWords: string[],
+  betterWords: string[],
+  answerText: string,
+  issueType: string,
+  explanationZh: string,
+) => {
+  for (let betterIndex = 0; betterIndex < betterWords.length; betterIndex += 1) {
+    const inserted = normalizePart1Word(betterWords[betterIndex]);
+    if (!['a', 'an', 'the'].includes(inserted)) continue;
+    const nextOriginalIndex = originalWords.findIndex((word, index) =>
+      index <= betterIndex + 1 &&
+      normalizePart1Word(word) === normalizePart1Word(betterWords[betterIndex + 1] || ''),
+    );
+    if (nextOriginalIndex < 0) continue;
+    const hasPreviousContext = nextOriginalIndex > 0 && betterIndex > 0;
+    const context = {
+      original: originalWords
+        .slice(hasPreviousContext ? nextOriginalIndex - 1 : nextOriginalIndex, nextOriginalIndex + 1)
+        .join(' '),
+      better: betterWords
+        .slice(hasPreviousContext ? betterIndex - 1 : betterIndex, betterIndex + 2)
+        .join(' '),
+    };
+    if (!context.original || !context.better) return null;
+    if (!normalizeTranscriptFormatText(answerText).includes(normalizeTranscriptFormatText(context.original))) return null;
+    return {
+      original: context.original,
+      better: context.better,
+      explanationZh: part1IssueExplanation(issueType, explanationZh) || 'Article or determiner use changes the spoken grammar of this phrase.',
+    };
+  }
+  return null;
+};
+
+const safelyNarrowPart1PrepositionRepair = (
+  originalWords: string[],
+  betterWords: string[],
+  answerText: string,
+  issueType: string,
+  explanationZh: string,
+) => {
+  const prepositions = new Set(['at', 'in', 'on', 'to', 'for', 'from', 'with', 'by', 'of', 'about', 'into', 'around']);
+  for (let index = 0; index < Math.min(originalWords.length, betterWords.length); index += 1) {
+    const original = normalizePart1Word(originalWords[index]);
+    const better = normalizePart1Word(betterWords[index]);
+    if (!prepositions.has(original) || !prepositions.has(better) || original === better) continue;
+    const context = localPart1RepairContext(originalWords, betterWords, index, index, 1, 1);
+    if (!context.original || !context.better) return null;
+    if (!normalizeTranscriptFormatText(answerText).includes(normalizeTranscriptFormatText(context.original))) return null;
+    return {
+      original: context.original,
+      better: context.better,
+      explanationZh: part1IssueExplanation(issueType, explanationZh) || 'Preposition choice changes the natural spoken structure.',
+    };
+  }
+  return null;
+};
+
+const safeNarrowMixedPart1Repair = (
+  original: string,
+  better: string,
+  issueType: string,
+  explanationZh: string,
+  answerText: string,
+) => {
+  if (!hasExplicitPart1SpokenIssue(issueType, explanationZh)) return undefined;
+  const evidence = `${issueType} ${explanationZh}`.toLowerCase();
+  if (!/\b(article|determiner|preposition)\b/.test(evidence)) return undefined;
+  const originalWords = part1Words(original);
+  const betterWords = part1Words(better);
+  if (originalWords.length < 2 || betterWords.length < 2) return undefined;
+
+  const hasLikelySpellingToken = originalWords.some(originalWord =>
+    betterWords.some(betterWord => isLikelyTranscriptSpellingTokenChange(originalWord, betterWord)),
+  );
+  if (!hasLikelySpellingToken) return undefined;
+
+  if (/\b(article|determiner)\b/.test(evidence)) {
+    return safelyNarrowPart1ArticleRepair(originalWords, betterWords, answerText, issueType, explanationZh);
+  }
+  if (/\b(preposition)\b/.test(evidence)) {
+    return safelyNarrowPart1PrepositionRepair(originalWords, betterWords, answerText, issueType, explanationZh);
+  }
+  return null;
+};
+
+const safeNarrowUnsupportedPart1Repair = (
+  original: string,
+  better: string,
+  issueType: string,
+  explanationZh: string,
+  answerText: string,
+) => {
+  if (!containsUnsupportedSpeakingBoundaryClaim(explanationZh)) return undefined;
+  if (!hasExplicitPart1SpokenIssue(issueType, explanationZh)) return null;
+  const evidence = `${issueType} ${explanationZh}`.toLowerCase();
+  if (!/\b(article|determiner)\b|冠词/.test(evidence)) return null;
+
+  const originalWords = part1Words(original);
+  const betterWords = part1Words(better);
+  if (betterWords.length < originalWords.length + 1) return null;
+
+  for (let insertIndex = 0; insertIndex < betterWords.length; insertIndex += 1) {
+    const inserted = normalizePart1Word(betterWords[insertIndex]);
+    if (!['a', 'an', 'the'].includes(inserted)) continue;
+    const nextOriginal = originalWords[insertIndex];
+    const nextBetter = betterWords[insertIndex + 1];
+    if (!nextOriginal || !nextBetter || normalizePart1Word(nextOriginal) !== normalizePart1Word(nextBetter)) continue;
+    const previousOriginal = originalWords[insertIndex - 1];
+    const previousBetter = betterWords[insertIndex - 1];
+    if (previousOriginal && previousBetter && normalizePart1Word(previousOriginal) !== normalizePart1Word(previousBetter)) continue;
+    const start = Math.max(0, insertIndex - 1);
+    const end = Math.min(originalWords.length, insertIndex + 1);
+    const narrowedOriginal = originalWords.slice(start, end).join(' ');
+    const narrowedBetter = betterWords.slice(start, end + 1).join(' ');
+    if (!narrowedOriginal || !narrowedBetter) return null;
+    if (!normalizeTranscriptFormatText(answerText).includes(normalizeTranscriptFormatText(narrowedOriginal))) return null;
+    return {
+      original: narrowedOriginal,
+      better: narrowedBetter,
+      explanationZh: part1IssueExplanation(issueType, explanationZh) || 'Article or determiner use changes the spoken grammar of this phrase.',
+    };
+  }
+
+  return null;
+};
+
+const normalizePart1RepairLayer = (
+  original: string,
+  better: string,
+  issueType: string,
+  explanationZh: string,
+  answerText: string,
+) => {
+  const polishedBetter = polishPart1RepairText(better);
+  if (!original || !polishedBetter || !explanationZh) return null;
+  if (isLikelyTranscriptFormatOnlyLayer(original, polishedBetter, issueType, explanationZh)) return null;
+  const narrowed = safeNarrowUnsupportedPart1Repair(original, polishedBetter, issueType, explanationZh, answerText);
+  if (narrowed === null) return null;
+  if (narrowed) return narrowed;
+  const mixedNarrowed = safeNarrowMixedPart1Repair(original, polishedBetter, issueType, explanationZh, answerText);
+  if (mixedNarrowed === null) return null;
+  if (mixedNarrowed) return mixedNarrowed;
+  if (containsUnsupportedSpeakingBoundaryClaim(explanationZh)) return null;
+  return {
+    original,
+    better: polishedBetter,
+    explanationZh,
+  };
+};
+
+const containsUnsupportedSpeakingBoundaryClaim = (text: string | undefined) => {
+  const normalized = normalizeTranscriptFormatText(text || '');
+  if (!normalized) return false;
+  const unsupportedArea = /\b(spelling|spell|capitalization|uppercase|lowercase|punctuation|spacing|orthography|transcription|asr|homophone)\b|拼写|大小写|标点|空格|转写|同音/.test(normalized);
+  const hasPronunciationMention = /\b(pronunciation|pronounce|pronouncing)\b/.test(normalized);
+  const allowedPronunciationNote = /\b(not formally assessed|not assessed|excluding pronunciation)\b/.test(normalized);
+  const unsupportedPronunciation = hasPronunciationMention && !allowedPronunciationNote;
+  const unsupportedPronunciationZh = /发音/.test(normalized) && !/不正式评估|未评估|不评估/.test(normalized);
+  return unsupportedArea || unsupportedPronunciation || unsupportedPronunciationZh;
+};
+
+const sanitizePart1FeedbackText = (text: string | undefined, fallback = '') => {
+  const clean = optionalSafeString(text);
+  if (!clean) return fallback || undefined;
+  return containsUnsupportedSpeakingBoundaryClaim(clean) ? (fallback || undefined) : clean;
+};
+
+const polishPart1RepairText = (text: string) =>
+  safeLearningText(text)
+    .replace(/\brecommend you to\b/gi, 'recommend that you')
+    .replace(/\bmiddle-sized\b/gi, 'medium-sized')
+    .trim();
+
+const exactQuoteInAnswer = (quote: string) => {
+  const cleanQuote = safeLearningText(quote).trim();
+  return cleanQuote;
+};
+
+const isBarePart1Starter = (text: string) => {
+  const compact = normalizeTranscriptFormatText(text).replace(/['.?!,;]/g, '');
+  return /^(yes of course|of course|it depends|i think|i would say|in my opinion|for example|actually|basically|well|thats an interesting question|that is an interesting question|thats a good question|that is a good question)$/.test(compact);
+};
+
+const isLowValuePart1Material = (text: string) => {
+  const normalized = normalizeTranscriptFormatText(text);
+  const compact = normalized.replace(/['.?!,;]/g, '');
+  const wordCount = compact.split(/\s+/).filter(Boolean).length;
+  if (!normalized) return true;
+  if (isBarePart1Starter(normalized)) return true;
+  if (wordCount < 3) return true;
+  const hasPersonalSignal = /\b(i|im|ive|id|me|my|mine|we|were|weve|our|us)\b/.test(compact);
+  if (!hasPersonalSignal) return true;
+  if (/^(it is|this is|there is|there are|people|many people|some people)\b/.test(compact) && !/\b(my|our|where i|when i|i usually|i often|i grew|i live|i study|i work|i prefer|i like|i enjoy|we usually|we often)\b/.test(compact)) return true;
+  return false;
+};
+
+const isGroundedInPart1Answers = (
+  text: string | undefined,
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+) => {
+  const normalized = normalizeTranscriptFormatText(text || '');
+  if (!normalized) return false;
+  return answers.some(answer => normalizeTranscriptFormatText(answer.answer).includes(normalized));
+};
+
+const isLowValueReusableSpokenLanguage = (text: string) => {
+  const normalized = normalizeTranscriptFormatText(text);
+  const compact = normalized.replace(/['.?!,;]/g, '');
+  const wordCount = compact.split(/\s+/).filter(Boolean).length;
+  if (!normalized) return true;
+  if (isBarePart1Starter(normalized)) return true;
+  if (/^(yes|yeah|no|sure|maybe|probably|absolutely|definitely)$/i.test(compact)) return true;
+  if (/^\[[^\]]+\]$/.test(normalized)) return true;
+  if (wordCount > 12) return true;
+  const hasTransferableFrame = /\[[^\]]+\]|\b(keen on|switch off|tend to|used to|prefer to|one of the reasons|the main reason|when i want to|im into|i am into|a big fan of|end up|depends on|from time to time|every now and then|as long as|rather than)\b/.test(compact);
+  if (/^(i|im|i am|ive|i have|id|i would|my|we|were|we are|weve|we have|our)\b/.test(compact) && !hasTransferableFrame) return true;
+  if (/^(it is|this is|there is|there are)\b/.test(compact) && wordCount > 6) return true;
+  return false;
+};
+
+const part1AnnotationKeyText = (text: string) =>
+  normalizeTranscriptFormatText(text).replace(/[^a-z0-9]+/g, ' ').trim();
+
+const part1SeverityRank: Record<Part1AnnotationSeverity, number> = {
+  must_fix: 3,
+  better_spoken_choice: 2,
+  optional_polish: 1,
+};
+
+const strongestPart1Severity = (a: Part1AnnotationSeverity, b: Part1AnnotationSeverity) =>
+  part1SeverityRank[a] >= part1SeverityRank[b] ? a : b;
+
+const part1LayerRepairKey = (questionRef: string, layer: Part1AnswerAnnotationLayer) =>
+  `${questionRef}::${part1AnnotationKeyText(layer.original)}::${part1AnnotationKeyText(layer.better)}`;
+
+const textKeyContains = (container: string, contained: string) => {
+  const containerKey = part1AnnotationKeyText(container);
+  const containedKey = part1AnnotationKeyText(contained);
+  return Boolean(containerKey && containedKey && containerKey.includes(containedKey));
+};
+
+const mergePart1AnswerAnnotations = (
+  providerAnnotations: Part1AnswerAnnotation[],
+  fallbackAnnotations: Part1AnswerAnnotation[],
+) => {
+  const merged: Part1AnswerAnnotation[] = [];
+  const representedLayers = new Map<string, Part1AnswerAnnotationLayer>();
+  const dedupeLayers = (questionRef: string, layers: Part1AnswerAnnotationLayer[]) => {
+    const byRepair = new Map<string, Part1AnswerAnnotationLayer>();
+    layers.forEach(layer => {
+      const key = part1LayerRepairKey(questionRef, layer);
+      const existing = byRepair.get(key);
+      if (!existing) {
+        byRepair.set(key, { ...layer });
+        return;
+      }
+      existing.severity = strongestPart1Severity(existing.severity, layer.severity);
+      existing.explanationZh = existing.explanationZh || layer.explanationZh;
+      existing.reuseGuidanceZh = existing.reuseGuidanceZh || layer.reuseGuidanceZh;
+    });
+    return Array.from(byRepair.values());
+  };
+  const findRepresentedLayer = (
+    questionRef: string,
+    layer: Part1AnswerAnnotationLayer,
+    sourceQuote: string,
+    combinedRepair?: string,
+  ) => {
+    const exact = representedLayers.get(part1LayerRepairKey(questionRef, layer));
+    if (exact) return exact;
+    const originalKey = part1AnnotationKeyText(layer.original);
+    const betterKey = part1AnnotationKeyText(layer.better);
+    if (!originalKey || !betterKey) return undefined;
+    return merged
+      .filter(annotation => annotation.questionRef === questionRef)
+      .flatMap(annotation => annotation.layers.map(existingLayer => ({ annotation, existingLayer })))
+      .find(({ annotation, existingLayer }) => {
+        const existingOriginalKey = part1AnnotationKeyText(existingLayer.original);
+        const existingBetterKey = part1AnnotationKeyText(existingLayer.better);
+        const sameRepair = existingOriginalKey === originalKey && existingBetterKey === betterKey;
+        if (sameRepair) return true;
+        const sourceIsCovered = textKeyContains(annotation.sourceQuote, layer.original) ||
+          textKeyContains(sourceQuote, existingLayer.original);
+        const repairIsCovered = existingBetterKey === betterKey ||
+          textKeyContains(existingLayer.better, layer.better) ||
+          textKeyContains(annotation.combinedRepair || '', layer.better) ||
+          textKeyContains(combinedRepair || '', existingLayer.better);
+        return sourceIsCovered && repairIsCovered;
+      })?.existingLayer;
+  };
+  const addAnnotation = (annotation: Part1AnswerAnnotation) => {
+    const sourceKey = `${annotation.questionRef}::${part1AnnotationKeyText(annotation.sourceQuote)}`;
+    if (!part1AnnotationKeyText(annotation.sourceQuote)) return;
+    const incomingLayers = dedupeLayers(annotation.questionRef, annotation.layers)
+      .filter(layer => {
+        const represented = findRepresentedLayer(annotation.questionRef, layer, annotation.sourceQuote, annotation.combinedRepair);
+        if (!represented) return true;
+        represented.severity = strongestPart1Severity(represented.severity, layer.severity);
+        return false;
+      });
+    if (!incomingLayers.length) return;
+    const existing = merged.find(item => `${item.questionRef}::${part1AnnotationKeyText(item.sourceQuote)}` === sourceKey);
+    if (!existing) {
+      merged.push({
+        ...annotation,
+        layers: incomingLayers,
+      });
+      incomingLayers.forEach(layer => representedLayers.set(part1LayerRepairKey(annotation.questionRef, layer), layer));
+      return;
+    }
+    incomingLayers.forEach(layer => {
+      const represented = findRepresentedLayer(annotation.questionRef, layer, annotation.sourceQuote, annotation.combinedRepair);
+      if (represented) {
+        represented.severity = strongestPart1Severity(represented.severity, layer.severity);
+        return;
+      }
+      existing.layers.push(layer);
+      representedLayers.set(part1LayerRepairKey(annotation.questionRef, layer), layer);
+    });
+    existing.combinedRepair = existing.combinedRepair || annotation.combinedRepair;
+  };
+  providerAnnotations.forEach(addAnnotation);
+  fallbackAnnotations.forEach(addAnnotation);
+  return merged.filter(item => item.layers.length);
+};
+
+const normalizePart1AnswerAnnotations = (
+  value: unknown,
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+  validationErrors: string[],
+): Part1AnswerAnnotation[] => asArray(value, 'threadFeedback.annotations', validationErrors).map((item, index) => {
+  const record = isRecord(item) ? item : {};
+  if (!isRecord(item)) validationErrors.push(`threadFeedback.annotations[${index}] missing or invalid object`);
+  const questionRef = normalizeQuestionRefs(record.questionRef ? [record.questionRef] : record.questionRefs, answers)[0] || 'Q1';
+  const sourceQuote = exactQuoteInAnswer(asString(record.sourceQuote ?? record.original, '', `threadFeedback.annotations[${index}].sourceQuote`, validationErrors));
+  const answerIndex = Number(questionRef.replace(/^Q/i, '')) - 1;
+  const answerText = answers[answerIndex]?.answer || '';
+  const rawLayers = asArray(record.layers, `threadFeedback.annotations[${index}].layers`, validationErrors);
+  const layers = rawLayers
+    .map((layer, layerIndex): Part1AnswerAnnotationLayer | null => {
+      const layerRecord = isRecord(layer) ? layer : {};
+      if (!isRecord(layer)) validationErrors.push(`threadFeedback.annotations[${index}].layers[${layerIndex}] missing or invalid object`);
+      const severity = normalizePart1AnnotationSeverity(layerRecord.severity);
+      const original = safeLearningText(asString(layerRecord.original ?? sourceQuote, sourceQuote || FALLBACK_TEXT, `threadFeedback.annotations[${index}].layers[${layerIndex}].original`, validationErrors));
+      const better = safeLearningText(asString(layerRecord.better ?? layerRecord.correction, FALLBACK_TEXT, `threadFeedback.annotations[${index}].layers[${layerIndex}].better`, validationErrors));
+      const explanationZh = safeLearningText(asString(layerRecord.explanationZh, 'Provider feedback was incomplete; this item was normalized safely.', `threadFeedback.annotations[${index}].layers[${layerIndex}].explanationZh`, validationErrors));
+      const issueType = safeLearningText(asString(layerRecord.issueType ?? severity, severity, `threadFeedback.annotations[${index}].layers[${layerIndex}].issueType`, validationErrors));
+      const repair = normalizePart1RepairLayer(original, better, issueType, explanationZh, answerText);
+      if (!repair) return null;
+      return {
+        severity: calibratePart1AnnotationSeverity(severity, issueType, repair.explanationZh),
+        issueType,
+        original: repair.original,
+        better: repair.better,
+        explanationZh: repair.explanationZh,
+        reuseGuidanceZh: optionalSafeString(layerRecord.reuseGuidanceZh),
+      };
+    })
+    .filter((layer): layer is Part1AnswerAnnotationLayer => Boolean(layer));
+  const safeSourceQuote = rawLayers.length > layers.length && layers.length === 1 && textKeyContains(sourceQuote, layers[0].original)
+    ? layers[0].original
+    : sourceQuote;
+  return {
+    id: optionalSafeString(record.id) || `p1_ann_${questionRef}_${index + 1}`,
+    questionRef,
+    sourceQuote: safeSourceQuote,
+    layers,
+    combinedRepair: optionalSafeString(record.combinedRepair) ? polishPart1RepairText(String(record.combinedRepair)) : undefined,
+  };
+}).filter(item => item.sourceQuote && item.layers.length);
+
+const stripGenericPart1CleanRetryOpener = (answer: string) => {
+  const stripped = answer
+    .replace(/^\s*(?:well,\s*)?(?:that's|that is)\s+(?:an interesting|a good)\s+question(?:[.!?,;:]|\s|-)*\s*/i, '')
+    .trim();
+  return stripped && stripped.split(/\s+/).length >= 4 ? stripped : answer;
+};
+
+const normalizePart1CleanRetryAnswers = (
+  value: unknown,
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+  validationErrors: string[],
+): Part1CleanRetryAnswer[] => {
+  const validQuestionRefs = new Set(answers.map((_, index) => `Q${index + 1}`));
+  return asArray(value, 'threadFeedback.cleanRetryAnswers', validationErrors)
+    .map((item, index): Part1CleanRetryAnswer | null => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) validationErrors.push(`threadFeedback.cleanRetryAnswers[${index}] missing or invalid object`);
+      const questionRef = normalizeQuestionRefs(record.questionRef ? [record.questionRef] : record.questionRefs, answers)[0];
+      const answer = stripGenericPart1CleanRetryOpener(polishPart1RepairText(asString(record.answer ?? record.cleanAnswer ?? record.retryAnswer, '', `threadFeedback.cleanRetryAnswers[${index}].answer`, validationErrors)));
+      if (!questionRef || !validQuestionRefs.has(questionRef) || !answer) return null;
+      return {
+        questionRef,
+        answer,
+        noteZh: optionalSafeString(record.noteZh),
+      };
+    })
+    .filter((item): item is Part1CleanRetryAnswer => Boolean(item))
+    .filter((item, index, items) => items.findIndex(candidate => candidate.questionRef === item.questionRef) === index);
+};
+
+const normalizeThreadLevelPatterns = (
+  value: unknown,
+  validationErrors: string[],
+): NonNullable<SpeakingFeedback['threadFeedback']>['threadLevelPatterns'] =>
+  asArray(value, 'threadFeedback.threadLevelPatterns', validationErrors)
+    .map((item, index) => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) validationErrors.push(`threadFeedback.threadLevelPatterns[${index}] missing or invalid object`);
+      return {
+        observationZh: sanitizePart1FeedbackText(safeLearningText(asString(record.observationZh ?? record.observation, '', `threadFeedback.threadLevelPatterns[${index}].observationZh`, validationErrors))) || '',
+        whyItMattersZh: sanitizePart1FeedbackText(safeLearningText(asString(record.whyItMattersZh ?? record.whyItMatters, '', `threadFeedback.threadLevelPatterns[${index}].whyItMattersZh`, validationErrors))) || '',
+        retryRule: sanitizePart1FeedbackText(polishPart1RepairText(asString(record.retryRule ?? record.rule, '', `threadFeedback.threadLevelPatterns[${index}].retryRule`, validationErrors))) || '',
+      };
+    })
+    .filter(item => item.observationZh && item.whyItMattersZh && item.retryRule)
+    .slice(0, 4);
+
+const normalizeNextRetryPlan = (
+  value: unknown,
+  validationErrors: string[],
+): SpeakingNextRetryPlan | undefined => {
+  if (!isRecord(value)) return undefined;
+  const actions = optionalSafeStringArray(value.actions)
+    ?.map(action => safeLearningText(action))
+    .map(action => sanitizePart1FeedbackText(action) || '')
+    .filter(Boolean)
+    .slice(0, 4);
+  const plan = {
+    priorityAccuracyPatternZh: sanitizePart1FeedbackText(optionalSafeString(value.priorityAccuracyPatternZh)),
+    answerLengthRuleZh: sanitizePart1FeedbackText(optionalSafeString(value.answerLengthRuleZh)),
+    materialToTry: sanitizePart1FeedbackText(optionalSafeString(value.materialToTry)),
+    actions,
+  };
+  if (!plan.priorityAccuracyPatternZh && !plan.answerLengthRuleZh && !plan.materialToTry && !plan.actions?.length) {
+    validationErrors.push('threadFeedback.nextRetryPlan missing usable fields');
+    return undefined;
+  }
+  return plan;
+};
+
+const annotationsFromThreadItems = (
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+  mustFix: Array<{ questionRefs: string[]; learnerWording: string; betterVersion: string; explanationZh: string; recurring?: boolean }>,
+  phraseFixes: Array<{ questionRefs: string[]; original: string; better: string; explanationZh: string }>,
+  optionalPolish: Array<{ questionRefs: string[]; original: string; better: string; explanationZh: string }>,
+): Part1AnswerAnnotation[] => {
+  const built: Part1AnswerAnnotation[] = [];
+  const pushItem = (
+    questionRef: string,
+    sourceQuote: string,
+    layer: Part1AnswerAnnotationLayer,
+    combinedRepair?: string,
+  ) => {
+    const quote = exactQuoteInAnswer(sourceQuote);
+    if (!quote) return;
+    const answerIndex = Number(questionRef.replace(/^Q/i, '')) - 1;
+    const answer = answers[answerIndex]?.answer || '';
+    if (!normalizeTranscriptFormatText(answer).includes(normalizeTranscriptFormatText(quote))) return;
+    const existing = built.find(item => item.questionRef === questionRef && item.sourceQuote === quote);
+    if (existing) {
+      existing.layers.push(layer);
+      existing.combinedRepair = existing.combinedRepair || combinedRepair;
+      return;
+    }
+    built.push({
+      id: `p1_ann_${questionRef}_${built.length + 1}`,
+      questionRef,
+      sourceQuote: quote,
+      layers: [layer],
+      combinedRepair,
+    });
+  };
+  mustFix.forEach(item => item.questionRefs.forEach(questionRef => pushItem(questionRef, item.learnerWording, {
+    severity: 'must_fix',
+    issueType: item.recurring ? 'recurring must-fix' : 'must-fix',
+    original: item.learnerWording,
+    better: item.betterVersion,
+    explanationZh: item.explanationZh,
+  }, item.betterVersion)));
+  phraseFixes.forEach(item => item.questionRefs.forEach(questionRef => pushItem(questionRef, item.original, {
+    severity: 'better_spoken_choice',
+    issueType: 'better spoken choice',
+    original: item.original,
+    better: item.better,
+    explanationZh: item.explanationZh,
+  }, item.better)));
+  optionalPolish.forEach(item => item.questionRefs.forEach(questionRef => pushItem(questionRef, item.original, {
+    severity: 'optional_polish',
+    issueType: 'optional polish',
+    original: item.original,
+    better: item.better,
+    explanationZh: item.explanationZh,
+  }, item.better)));
+  return built;
+};
+
+const normalizePart1TopicThreadFeedback = (
+  source: Record<string, unknown>,
+  request: SpeakingRequest,
+  validationErrors: string[],
+  normalizedFields: string[],
+): SpeakingFeedback => {
+  normalizedFields.push('part1TopicThread');
+  const answers = (request.threadAnswers || []).filter(answer => answer.answer.trim());
+  const combinedTranscript = answers
+    .map((answer, index) => `Q${index + 1}: ${answer.question}\nA${index + 1}: ${answer.answer}`)
+    .join('\n\n');
+  const transcriptWords = countWords(combinedTranscript);
+  const scores = isRecord(source.scores) ? source.scores : {};
+  if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
+  const rawHeadline = asNumber(source.bandEstimateExcludingPronunciation, 'bandEstimateExcludingPronunciation', validationErrors, 5);
+  const headline = normalizeHalfBandScore(applyLengthCap(rawHeadline, transcriptWords, Math.max(45, answers.length * 14)));
+  const visibleScores = {
+    fluencyCoherence: normalizeHalfBandScore(asNumber(scores.fluencyCoherence, 'scores.fluencyCoherence', validationErrors, headline)),
+    lexicalResource: normalizeHalfBandScore(asNumber(scores.lexicalResource, 'scores.lexicalResource', validationErrors, headline)),
+    grammaticalRangeAccuracy: normalizeHalfBandScore(asNumber(scores.grammaticalRangeAccuracy, 'scores.grammaticalRangeAccuracy', validationErrors, headline)),
+  };
+  const threadSource = isRecord(source.threadFeedback) ? source.threadFeedback : source;
+  const mustFix = asArray(threadSource.mustFix, 'threadFeedback.mustFix', validationErrors).map((item, index) => {
+    const record = isRecord(item) ? item : {};
+    if (!isRecord(item)) validationErrors.push(`threadFeedback.mustFix[${index}] missing or invalid object`);
+    const questionRefs = normalizeQuestionRefs(record.questionRefs ?? record.affectedQuestions, answers);
+    const learnerWording = safeLearningText(asString(record.learnerWording ?? record.original, FALLBACK_TEXT, `threadFeedback.mustFix[${index}].learnerWording`, validationErrors));
+    const betterVersion = safeLearningText(asString(record.betterVersion ?? record.correction, FALLBACK_TEXT, `threadFeedback.mustFix[${index}].betterVersion`, validationErrors));
+    const explanationZh = safeLearningText(asString(record.explanationZh, 'Provider feedback was incomplete; this item was normalized safely.', `threadFeedback.mustFix[${index}].explanationZh`, validationErrors));
+    const answerIndex = Number((questionRefs[0] || 'Q1').replace(/^Q/i, '')) - 1;
+    const repair = normalizePart1RepairLayer(learnerWording, betterVersion, 'threadFeedback.mustFix', explanationZh, answers[answerIndex]?.answer || '');
+    if (!repair) return null;
+    return {
+      questionRefs,
+      learnerWording: repair.original,
+      betterVersion: repair.better,
+      explanationZh: repair.explanationZh,
+      recurring: Boolean(record.recurring),
+    };
+  }).filter((item): item is { questionRefs: string[]; learnerWording: string; betterVersion: string; explanationZh: string; recurring: boolean } => Boolean(item && (
+    item.questionRefs.length &&
+    item.learnerWording &&
+    item.betterVersion &&
+    item.explanationZh
+  )));
+  const answerByAnswerCoaching = asArray(threadSource.answerByAnswerCoaching, 'threadFeedback.answerByAnswerCoaching', validationErrors).map((item, index) => {
+    const record = isRecord(item) ? item : {};
+    if (!isRecord(item)) validationErrors.push(`threadFeedback.answerByAnswerCoaching[${index}] missing or invalid object`);
+    return {
+      questionRefs: normalizeQuestionRefs(record.questionRefs, answers),
+      issue: sanitizePart1FeedbackText(safeLearningText(asString(record.issue, FALLBACK_TEXT, `threadFeedback.answerByAnswerCoaching[${index}].issue`, validationErrors))) || '',
+      coachingZh: sanitizePart1FeedbackText(safeLearningText(asString(record.coachingZh, 'Provider feedback was incomplete; this item was normalized safely.', `threadFeedback.answerByAnswerCoaching[${index}].coachingZh`, validationErrors))) || '',
+      exampleFrame: optionalSafeString(record.exampleFrame),
+    };
+  }).filter(item => item.questionRefs.length && item.issue && item.coachingZh);
+  const materialSource = isRecord(threadSource.materialBank) ? threadSource.materialBank : {};
+  const materialItems = (
+    value: unknown,
+    path: string,
+    kind: 'personal' | 'language',
+  ) => asArray(value, path, validationErrors).map((item, index) => {
+    const record = isRecord(item) ? item : {};
+    if (!isRecord(item)) validationErrors.push(`${path}[${index}] missing or invalid object`);
+    return {
+      sourceWording: optionalSafeString(record.sourceWording ?? record.originalIdea),
+      reusableVersion: polishPart1RepairText(asString(record.reusableVersion ?? record.naturalReusableVersion, FALLBACK_TEXT, `${path}[${index}].reusableVersion`, validationErrors)),
+      reuseFor: optionalSafeStringArray(record.reuseFor ?? record.whereItMayBeReused) || [],
+      explanationZh: sanitizePart1FeedbackText(optionalSafeString(record.explanationZh)),
+    };
+  }).filter(item => {
+    if (!item.reusableVersion || !item.reuseFor.length || containsUnsupportedSpeakingBoundaryClaim(item.reusableVersion)) return false;
+    if (kind === 'personal') {
+      return !isLowValuePart1Material(item.reusableVersion) &&
+        isGroundedInPart1Answers(item.sourceWording || item.reusableVersion, answers);
+    }
+    return !isLowValueReusableSpokenLanguage(item.reusableVersion);
+  });
+  const highImpactPhraseFixes = normalizeThreadPhraseItems(threadSource.highImpactPhraseFixes, answers, validationErrors, 'threadFeedback.highImpactPhraseFixes');
+  const optionalPolish = normalizeThreadPhraseItems(threadSource.optionalPolish, answers, validationErrors, 'threadFeedback.optionalPolish');
+  const providerAnnotations = normalizePart1AnswerAnnotations(threadSource.annotations ?? [], answers, validationErrors);
+  const fallbackAnnotations = annotationsFromThreadItems(answers, mustFix, highImpactPhraseFixes, optionalPolish);
+  const annotations = mergePart1AnswerAnnotations(providerAnnotations, fallbackAnnotations);
+  normalizedFields.push(`part1ProviderAnnotations:${providerAnnotations.length}`);
+  normalizedFields.push(`part1FallbackAnnotationCandidates:${fallbackAnnotations.length}`);
+  normalizedFields.push(`part1RenderedAnnotations:${annotations.length}`);
+  normalizedFields.push(`part1RenderedAnnotationLayers:${annotations.reduce((total, annotation) => total + annotation.layers.length, 0)}`);
+  const cleanRetryAnswers = normalizePart1CleanRetryAnswers(threadSource.cleanRetryAnswers ?? [], answers, validationErrors);
+  const threadLevelPatterns = normalizeThreadLevelPatterns(threadSource.threadLevelPatterns ?? [], validationErrors);
+  const nextRetryPlan = normalizeNextRetryPlan(threadSource.nextRetryPlan, validationErrors);
+  const myUsableMaterial = materialItems(materialSource.myUsableMaterial, 'threadFeedback.materialBank.myUsableMaterial', 'personal');
+  const personalMaterialKeys = new Set(myUsableMaterial.flatMap(item => [
+    part1AnnotationKeyText(item.sourceWording || ''),
+    part1AnnotationKeyText(item.reusableVersion),
+  ]).filter(Boolean));
+  const reusableSpokenLanguage = materialItems(materialSource.reusableSpokenLanguage, 'threadFeedback.materialBank.reusableSpokenLanguage', 'language')
+    .filter(item => {
+      const sourceKey = part1AnnotationKeyText(item.sourceWording || '');
+      const reusableKey = part1AnnotationKeyText(item.reusableVersion);
+      return !personalMaterialKeys.has(sourceKey) && !personalMaterialKeys.has(reusableKey);
+    });
+  const rationaleFallback = 'Transcript-based estimate: grammar, vocabulary, answer focus and Part 1 control were considered; pronunciation is not formally assessed.';
+  const bandEstimateRange = normalizeSpeakingBandEstimateRange(source.bandEstimateRange, headline, false, normalizedFields);
+  const safeBandEstimateRange = bandEstimateRange && containsUnsupportedSpeakingBoundaryClaim(bandEstimateRange.rationaleZh)
+    ? { ...bandEstimateRange, rationaleZh: rationaleFallback }
+    : bandEstimateRange;
+  const nextRetryFocusZh = sanitizePart1FeedbackText(
+    safeLearningText(asString(threadSource.nextRetryFocusZh ?? source.nextStepZh, 'Next time, answer directly, add one real detail, then stop.', 'threadFeedback.nextRetryFocusZh', validationErrors)),
+    'Next time, answer directly, add one real detail, then stop.',
+  );
+
+  const feedbackWithoutMarkdown: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
+    mode: source.mode === 'mock' ? 'mock' : 'practice',
+    module: 'speaking',
+    part: 1,
+    sessionKind: 'part1_topic_thread',
+    topic: request.topic || optionalSafeString(source.topic),
+    threadId: request.threadId,
+    threadAnswers: answers,
+    threadFeedback: {
+      topic: request.topic || optionalSafeString(threadSource.topic) || 'Part 1 Topic',
+      threadId: request.threadId || optionalSafeString(threadSource.threadId) || 'part1_thread',
+      questionCount: answers.length,
+      mustFix,
+      annotations,
+      cleanRetryAnswers,
+      threadLevelPatterns,
+      answerByAnswerCoaching,
+      highImpactPhraseFixes,
+      materialBank: {
+        myUsableMaterial,
+        reusableSpokenLanguage,
+      },
+      optionalPolish,
+      nextRetryPlan,
+      nextRetryFocusZh: nextRetryFocusZh || 'Next time, answer directly, add one real detail, then stop.',
+    },
+    question: answers.map((answer, index) => `Q${index + 1}. ${answer.question}`).join('\n'),
+    transcript: combinedTranscript,
+    bandEstimateExcludingPronunciation: headline,
+    bandEstimateRange: safeBandEstimateRange,
+    estimateRationaleZh: sanitizePart1FeedbackText(optionalSafeString(source.estimateRationaleZh), rationaleFallback),
+    targetAnswerStatus: 'not_applicable',
+    scores: {
+      ...visibleScores,
+      pronunciation: null,
+      pronunciationNote: 'Pronunciation is not formally assessed in Part 1 topic-thread transcript practice.',
+    },
+    fatalErrors: mustFix.map(item => ({
+      original: `${item.questionRefs.join(' / ')}: ${item.learnerWording}`,
+      correction: item.betterVersion,
+      tag: item.recurring ? 'recurring_must_fix' : 'must_fix',
+      explanationZh: item.explanationZh,
+    })),
+    naturalnessHints: highImpactPhraseFixes.map(item => ({
+      original: `${item.questionRefs.join(' / ')}: ${item.original}`,
+      better: item.better,
+      tag: 'high_impact_phrase_fix',
+      explanationZh: item.explanationZh,
+    })),
+    band9Refinements: [],
+    preservedStyle: myUsableMaterial.map(item => ({
+      text: item.sourceWording || item.reusableVersion,
+      reasonZh: item.explanationZh || '这是来自你自己答案的可复用素材。',
+      sampleNextStep: item.reusableVersion,
+      transferQuestions: item.reuseFor,
+    })),
+    upgradedAnswer: '',
+    reusableExample: null,
+  };
+
+  return {
+    ...feedbackWithoutMarkdown,
+    obsidianMarkdown: buildSpeakingTrainingMarkdown(feedbackWithoutMarkdown),
+  };
+};
+
 const normalizeSpeakingFeedback = (
   value: unknown,
   request: SpeakingRequest,
@@ -785,6 +1618,10 @@ const normalizeSpeakingFeedback = (
 ): SpeakingFeedback => {
   const source = isRecord(value) ? value : {};
   if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+
+  if (request.sessionKind === 'part1_topic_thread') {
+    return normalizePart1TopicThreadFeedback(source, request, validationErrors, normalizedFields);
+  }
 
   const scores = isRecord(source.scores) ? source.scores : {};
   if (!isRecord(source.scores)) validationErrors.push('scores missing or invalid object');
