@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-05-26_
+_Last updated: 2026-05-29_
 
 This is the active baseline, not a history log. Verify branch and sync state with git commands before work.
 
@@ -45,21 +45,32 @@ This is the active baseline, not a history log. Verify branch and sync state wit
 - Audio transcription can fail or fall back; browser Web Speech remains limited. New low-signal audio transcript candidate gating is implemented but still needs post-reinstall browser validation.
 - Pronunciation is not formally scored.
 - Provider keys in Vite/browser env are local-personal prototype only and not SaaS-safe.
-- Persistence is localStorage only.
+- Persistence was localStorage-only; IndexedDB / PracticeRepository transition has been implemented as emergency P0 rescue (see below).
 - No production server/auth/database/RAG/provider-key architecture exists.
 - PDF folder import, mainland active-bank publishing, and SaaS-ready bank administration remain future work.
 - Writing Task 2 target/score/feedback consistency needs a separate audit.
 - Writing Task 1 calibration remains future scoped work and needs real samples.
 
+## P0 Storage / IndexedDB Incident — 2026-05-28 to 2026-05-29
+
+localStorage 配额耗尽（约 6.056 MB）导致白屏崩溃。P0 紧急修复和 IndexedDB 迁移已在脏工作树中实施。详细信息见 `docs/P0_STORAGE_INDEXEDDB_INCIDENT_20260528_20260529.md`。
+
+**当前恢复状态**：
+- History 可见地显示已恢复的规范记录（134 条）和旧版归档会话（172 条）
+- localStorage 当前显示为有效空（仅 `ielts_profile` 等轻量键），即使用户未手动调用释放操作
+- ~~陈旧迁移摘要问题仍未解决（显示不反映恢复导入后的实际 IndexedDB 状态）~~ **已于 2026-05-29 修复**：迁移摘要重新标注为「初始自动迁移」，新增实时「当前 IndexedDB 库存」面板
+- ~~在恢复常规回归测试之前，必须确认最终完整 IndexedDB-inclusive 备份已导出~~ **已于 2026-05-29 确认**：用户确认最终完整 IndexedDB-inclusive 备份已导出并保存在项目目录之外
+
 ## Next Priorities
 
-1. Post-reinstall manual browser validation of the Part 1 checkpoint: blank/low-signal recording candidate adoption, exact-thread retry, fair random/change-topic selection, real-provider stance/tense/annotation/export behavior.
-2. If validation passes, mark the Part 1 checkpoint browser-accepted; if not, open a small follow-up fix.
-3. Speaking Part 3 discussion-flow refinement follows next.
-4. Audio transcription reliability.
-5. PDF folder import + mainland active-bank publishing + SaaS-ready bank layer.
-6. Writing Task 2 target/score/feedback consistency audit.
-7. Writing Task 1 calibration with real samples.
+1. **存储 closeout**：确认最终完整 IndexedDB-inclusive 备份已导出；修复 History 迁移摘要陈旧显示；审计 localStorage 在未手动释放情况下变空的原因。
+2. Post-reinstall manual browser validation of the Part 1 checkpoint: blank/low-signal recording candidate adoption, exact-thread retry, fair random/change-topic selection, real-provider stance/tense/annotation/export behavior.
+3. If validation passes, mark the Part 1 checkpoint browser-accepted; if not, open a small follow-up fix.
+4. Speaking Part 3 discussion-flow refinement follows next.
+5. Audio transcription reliability.
+6. PDF folder import + mainland active-bank publishing + SaaS-ready bank layer.
+7. Writing Task 2 target/score/feedback consistency audit.
+8. Writing Task 1 calibration with real samples.
 
 ## Navigation Pointers
 

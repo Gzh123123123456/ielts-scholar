@@ -1,12 +1,43 @@
 # Project Backlog
 
-_Last updated: 2026-05-26_
+_Last updated: 2026-05-29_
 
 This is the current backlog. Completed implementation history belongs in `docs/DECISION_LOG.md`.
 
 ## Ordered Active List
 
-### 0. Workflow / Docs / Skills Simplification
+### 0. P0/P1 Storage Follow-up (from 2026-05-28/29 Incident)
+
+Status: emergency recovery implemented; closeout completed 2026-05-29.
+
+Why it matters: localStorage quota exhaustion caused white-screen crash. IndexedDB migration is implemented; closeout verification, metadata display fix, and root-cause audit are now complete.
+
+**P0 items (2026-05-29 closeout)**:
+
+- ~~Confirm final complete IndexedDB-inclusive backup export after recovery (user verification).~~ **Done: user confirmed backup exported and saved outside project directory.**
+- Verify normal new-practice persistence after backup confirmation and controlled smoke testing. _(manual browser smoke test plan provided — pending user execution)_
+
+**P1 items (2026-05-29 closeout)**:
+
+- ~~Fix History migration-summary display so it reflects actual IndexedDB canonical/archive counts after recovery import.~~ **Done: migration summary relabeled as "Initial Automatic Migration"; new "Current IndexedDB Inventory" panel added reading live counts from getStorageHealth().**
+- ~~Audit why localStorage displayed 0 MB after restart even though the user did not manually release old storage; do not claim root cause without evidence.~~ **Audited: no automatic clearing code path found. Root cause remains unproven. Documented as unresolved.**
+- Revisit any remaining storage release controls so they cannot misrepresent already-empty or imported recovery state. _(deferred: current controls are safe-guarded; no misleading state observed with new inventory panel)_
+
+**Future architecture items** (not P0/P1):
+
+- Payload slimming for future SaaS sync.
+- Diagnostic retention policy.
+- Safe cloud-sync/import model.
+- Cross-browser/account migration strategy.
+
+Non-scope:
+
+- No Part 1 feedback/pedagogy issues in this task (separate ledger pending user instruction).
+- No SaaS implementation, no cloud sync, no provider/API key architecture changes.
+
+Reference: `docs/P0_STORAGE_INDEXEDDB_INCIDENT_20260528_20260529.md`
+
+### 1. Workflow / Docs / Skills Simplification
 
 Status: completed; this is now the workflow baseline.
 
@@ -24,7 +55,7 @@ Non-scope:
 - no source/config/package changes;
 - no commit, merge, or push unless a later explicit closeout is requested.
 
-### 1. Speaking Part 1 Topic Follow-Up Flow
+### 2. Speaking Part 1 Topic Follow-Up Flow
 
 Status: development checkpoint implemented; pending post-reinstall browser acceptance.
 
@@ -52,7 +83,7 @@ Non-scope:
 - no session-level export unless separately scoped;
 - no scoring/provider architecture rewrite.
 
-### 2. Speaking Part 3 Discussion-Flow Refinement
+### 3. Speaking Part 3 Discussion-Flow Refinement
 
 Status: follows after Part 1 topic-thread flow.
 
@@ -74,7 +105,7 @@ Non-scope:
 
 After Part 1 Topic-Thread feedback is validated, add a later scoped slice that lets learners save selected items from `MY USABLE MATERIAL` and `REUSABLE SPOKEN LANGUAGE` across Part 1 / Part 2 / Part 3 sessions. Initial scope should use local-first storage with review, filter, and delete workflows.
 
-### 3. Audio Transcription Reliability
+### 4. Audio Transcription Reliability
 
 Why it matters: audio-backed transcription exists but can still fail or fall back, so the editable transcript remains the safe path.
 
@@ -91,7 +122,7 @@ Non-scope:
 - no pronunciation score;
 - no persistent audio storage unless separately scoped.
 
-### 4. PDF Folder Import + Mainland Active-Bank Publishing + SaaS-Ready Bank Layer
+### 5. PDF Folder Import + Mainland Active-Bank Publishing + SaaS-Ready Bank Layer
 
 Why it matters: the active mainland seasonal bank needs a traceable update workflow and later admin publishing path.
 
@@ -111,7 +142,7 @@ Non-scope:
 - no unreviewed OCR/LLM output becoming active data;
 - no answer/sample paragraphs, translations, guides, Q&A, QR/promo text, page headers/footers, or low-confidence fragments in active bank data.
 
-### 5. Writing Task 2 Target / Score / Feedback Consistency Audit
+### 6. Writing Task 2 Target / Score / Feedback Consistency Audit
 
 Why it matters: Speaking target-display simplification does not prove Writing consistency.
 
@@ -126,7 +157,7 @@ Non-scope:
 - no Speaking changes unless a shared bug is proven;
 - no redesign of the annotated essay overlay unless separately scoped.
 
-### 6. Writing Task 1 Calibration With Real Samples
+### 7. Writing Task 1 Calibration With Real Samples
 
 Why it matters: Task 1 target reports are conservative/generated and need real samples before calibration changes.
 

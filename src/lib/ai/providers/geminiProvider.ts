@@ -81,16 +81,21 @@ export const speakingPart1TopicThreadSchemaInstruction = `The JSON object must m
         "original": "exact learner words",
         "better": "corrected or more natural wording",
         "explanationZh": "string",
-        "reuseGuidanceZh": "string"
+        "reuseGuidanceZh": "string",
+        "origin": "learner | previous_cleaner_answer_conflict",
+        "priorCertificationStatus": "certified_first_attempt | certified_after_rewrite | legacy_or_unverified",
+        "systemRevisionNoteZh": "string"
       }]
     }],
     "cleanRetryAnswers": [{ "questionRef": "Q1", "answer": "short natural retry answer preserving the learner's meaning", "noteZh": "optional short Chinese note only for meaningful compression or reorganisation" }],
+    "developmentStatus": "needed | sufficient",
+    "developmentTargets": [{ "questionRef": "Q1", "reasonZh": "concise Chinese guidance that first acknowledges information already present in this answer, then names the missing development direction", "developmentMoveZh": "concise Chinese task only; not a model answer", "phraseScaffolds": ["short English phrase or half-open frame only"], "optionalDevelopedAnswer": "" }],
     "threadLevelPatterns": [{ "observationZh": "string", "whyItMattersZh": "string", "retryRule": "Direct answer -> one key detail -> stop." }],
     "mustFix": [{ "questionRefs": ["Q1"], "learnerWording": "string", "betterVersion": "string", "explanationZh": "string", "recurring": false }],
     "answerByAnswerCoaching": [],
     "highImpactPhraseFixes": [{ "questionRefs": ["Q3"], "original": "string", "better": "string", "explanationZh": "string" }],
     "materialBank": {
-      "myUsableMaterial": [{ "sourceWording": "string", "reusableVersion": "string", "reuseFor": ["string"], "explanationZh": "string" }],
+      "myUsableMaterial": [{ "sourceWording": "string", "reusableVersion": "string", "reuseFor": ["Part 1 use case"], "explanationZh": "string", "materialCore": "distinct personal fact or idea", "materialKind": "development_seed | reusable_personal_material", "part1UseCases": ["current Part 1 question/use case"], "developmentMoveZh": "one-step development move", "developedExample": "direct answer plus one grounded detail only for reusable_personal_material", "expressionFrames": ["short reusable frame"], "materialKey": "stable semantic identity" }],
       "reusableSpokenLanguage": [{ "sourceWording": "string", "reusableVersion": "string", "reuseFor": ["string"], "explanationZh": "string" }]
     },
     "optionalPolish": [{ "questionRefs": ["Q1"], "original": "string", "better": "string", "explanationZh": "string" }],
@@ -105,6 +110,59 @@ export const speakingPart1TopicThreadSchemaInstruction = `The JSON object must m
   "reusableExample": null
 }`;
 
+export const part1CleanRetryCertificationSchemaInstruction = `The JSON object must match this exact key structure:
+{
+  "module": "speaking",
+  "operation": "part1_clean_retry_certification",
+  "topic": "string",
+  "threadId": "string",
+  "attempt": 1,
+  "status": "passed | failed",
+  "violations": [{
+    "questionRef": "Q1",
+    "issueType": "grammar_error | broken_structure | wrong_meaning | direct_answer_failure | stance_reversal | invented_personal_fact | internal_factual_temporal_inconsistency | fact_relation_changed | seriously_unnatural_word_choice | underresponsive_or_missing_key_detail | overlong_or_off_task",
+    "severity": "must_fix",
+    "candidateWording": "exact candidate wording that creates the hard problem",
+    "saferVersion": "corrected or safer version when available",
+    "reasonZh": "concise Chinese reason"
+  }],
+  "revisedCleanRetryAnswers": [{ "questionRef": "Q1", "answer": "one revised clean retry answer", "noteZh": "optional Chinese note" }],
+  "rationaleZh": "string"
+}`;
+
+export const part1CleanRetryCertificationInstruction = `This is an internal certification gate for displayed IELTS Speaking Part 1 topic-thread cleaner answers.
+Evaluate the candidate cleanRetryAnswers, not the learner's original answers.
+Do not return a band score, target floor, target status, ordinary learner feedback, material bank, annotations, or analysis of the learner's original answer.
+Return operation exactly "part1_clean_retry_certification".
+
+Certification passes when every candidate is meaning-preserving, natural, concise, directly answers its exact question, avoids invented personal facts, and contains no genuine MUST FIX under the Part 1 cleaner-answer standard.
+
+Certification must fail only for hard problems:
+- grammar error;
+- broken structure;
+- wrong meaning or direct-answer failure;
+- explicit stance reversal compared with the learner's clear Yes / No / Not really / I would / I would not stance;
+- invented personal fact;
+- internal factual or temporal inconsistency, including a continuous-duration claim that conflicts with another period-away or exception stated in the same candidate;
+- changed factual relation, location type, administrative/spatial relation, personal history, stated preference, or stance compared with the learner's source answer;
+- unnatural collocation or word choice that is genuinely incorrect or seriously misleading in ordinary spoken English;
+- answer so under-responsive that it does not answer the exact question or drops the learner's most useful relevant personal content;
+- answer so overlong, rehearsed, or off-task that it is not an immediate Part 1 retry answer.
+
+Meaning-preservation check: compare each candidate against the learner's original answer for that same question. Clarify grammar and naturalness, but do not solve awkward English by changing real-world facts, geography, administrative/spatial relations, timelines, personal history, preferences, or stance. If the learner's intended factual relation is ambiguous, use a semantically conservative formulation rather than inventing a more specific fact.
+
+Internal-consistency check: reread each candidate by itself. If two statements cannot both be true in ordinary spoken English, status must be failed and the revised answer must repair only the inconsistency while preserving the learner's meaning.
+
+Certification must not fail for optional specificity improvements, acceptable synonyms, one natural variant versus another, regional spoken-English variation that remains acceptable, merely more precise wording, formal-versus-casual variation that remains understandable and appropriate, transcript spelling, capitalization, punctuation, spacing, ASR formatting, homophone spelling, pronunciation, or a contextual preference where a more specific object/material term might be nicer but the candidate is already understandable and not wrong.
+
+Certification must fail and rewrite if a candidate remains genuinely under-responsive to the question after repair, especially when it drops the learner's strongest relevant personal detail. Certification must also fail and rewrite if a candidate sounds like a prepared mini Part 2 response instead of an immediately re-recordable Part 1 answer. A good cleaner answer answers directly, preserves the learner's real meaning and strongest personal content, and normally includes one relevant reason, example, contrast, or concrete personal detail when the question invites it. One sentence is acceptable when it already answers adequately; two natural sentences are often strongest for hometown, preferences, routines, experiences, or opinions; three may fit a short contrast or important personal fact. Do not impose a brittle word-count cutoff. If the learner's submitted retry answer is already stable but could be richer, keep it valid and put the richer path in optional guidance rather than pretending it is a correction.
+
+Certification must fail if a cleaner answer or its note would teach a hard spoken-feedback problem: treating acceptable regional/style variants as MUST FIX, teaching transcript-only spelling/capitalization/punctuation/ASR artifacts as spoken errors, or using an over-absolute rule for context-dependent grammar or collocation. Do not fail merely for optional regional or stylistic preferences.
+
+If attempt is 1 and status is failed, return exactly one revisedCleanRetryAnswers item for every expected Q. The revised answers must preserve the learner's meaning, repair the hard problem, remain concise, and not invent personal facts.
+If attempt is 2, do not return another rewrite loop; omit revisedCleanRetryAnswers or return an empty array.
+Do not be stylistically more aggressive than the normal Part 1 feedback engine. Optional polish is not certification failure.`;
+
 export const speakingPart1TopicThreadInstruction = `This is Speaking Part 1 topic-thread practice, not a single-question target-answer task.
 Analyze the whole ordered topic session and preserve question-to-answer mapping through Q references.
 Do not generate a full target answer, target conversation, Band 7 target answer, Band 7+ target answer, Standard Answer, verifier state, certification wording, or target validation language.
@@ -114,11 +172,15 @@ Return actionable topic-session feedback only:
 - If a local repair is mentioned in coaching, retry advice, or a clean retry answer and can be grounded to exact learner wording, it must also appear as an annotation. Do not create a second duplicate annotation for the same original -> better repair.
 - For complex broken stretches where several issues interact, anchor one larger meaningful phrase or sentence instead of several isolated token swaps. Put the detailed local layers inside the same annotation, and use combinedRepair for the complete better spoken version of that span.
 - Severity rules: tense, article, determiner/pronoun choice, plurality/countability, preposition, agreement, missing verb/component, wrong word form, fixed-collocation error, or clearly broken structure = must_fix. A natural spoken alternative without an accuracy error = better_spoken_choice. Minor stylistic variation only = optional_polish.
+- Regional/style variants: if two variants are both acceptable in ordinary spoken English, do not penalize one as an accuracy error just to standardize style or region. A preferred variant for consistency or naturalness may appear only as better_spoken_choice, never learner-fault must_fix.
 - Do not treat ASR casing, punctuation, spacing, capitalization, transcript spelling, or written-form cleanup as learner language errors. Do not recommend inflated, essay-like, or "more formal" Part 1 wording; prefer short, natural, direct spoken English.
 - Do not annotate or discuss transcript-only artifacts as learner errors anywhere in the result: capitalization, punctuation, spacing, ASR casing noise, spelling-only forms that cannot be confirmed in speech, or homophone spelling such as to/too when the spoken form is indistinguishable. If a span has a real structural issue plus casing/spelling cleanup, keep only the real structural issue and anchor only the real spoken-language problem.
+- Avoid over-absolute grammar explanations. If a word or structure behaves differently by meaning or context, explain why the proposed wording is more natural in this answer rather than saying the learner's alternative is never grammatical.
 - Pronunciation is not assessed in this mode. Do not claim pronunciation problems, correct pronunciation, pronunciation score impact, or delivery issues in estimateRationaleZh, bandEstimateRange.rationaleZh, annotations, thread-level patterns, retry plan, or material bank.
 - Before returning every repair and every cleanRetryAnswers item, self-check: grammatical, natural spoken IELTS Part 1 English, intended meaning preserved, concise enough for Part 1, not more formal or inflated. Return one preferred repair, not slash-separated alternatives, in better/combinedRepair.
-- CLEAN RETRY ANSWERS: return exactly one cleanRetryAnswers item for every Q in the thread. This is the learner's own answer rebuilt for immediate re-recording, not a Band target answer, model answer, or target conversation. Preserve real personal material, repair important grammar/collocation/structure, compress overlong detail, and never invent personal facts. Use noteZh only when you substantially compress, reorganize the answer, or need to preserve uncertainty because the intended stance cannot be safely recovered.
+- CLEAN RETRY ANSWERS: return exactly one cleanRetryAnswers item for every Q in the thread. This is the learner's own answer rebuilt for immediate re-recording, not a Band target answer, model answer, or target conversation. Preserve real personal material, repair important grammar/collocation/structure, compress overlong detail, and never invent personal facts. A good Part 1 cleaner answer answers directly and normally includes one relevant reason, example, contrast, or concrete personal detail where the question invites it. One sentence is acceptable when adequate; two natural spoken sentences are often strongest for hometown, preferences, routines, experiences, or opinions; three may be appropriate to preserve a short contrast or important personal fact. Do not delete useful personal detail merely to satisfy "concise", do not turn a Part 1 repair into a mini Part 2 response, and do not pad an already-correct retry answer merely to appear higher band. Use noteZh only when you substantially compress, reorganize the answer, or need to preserve uncertainty because the intended stance cannot be safely recovered.
+- CLEAN RETRY CERTIFICATION AWARENESS: each displayed clean retry answer will be rejected before display if it still contains a genuine MUST FIX. Avoid introducing alternative wording merely for variety when the learner's repaired answer is already correct and concise. A valid cleaner answer may still admit optional polish; optional variation must not be treated as failure or used to trigger endless paraphrasing. Acceptable contextual vocabulary choices must not be promoted to MUST FIX only because a different expression is more specific.
+- RETRY REFERENCE CONTEXT: when input.retryReference is present, this is a same-thread retry. The learner may reuse wording previously displayed by the system as a certified cleaner answer. Analyze the current submitted answer honestly. If a genuine issue appears in wording substantially copied from the previous cleaner answer for the same question, still return the needed correction, but mark the affected annotation layer with origin "previous_cleaner_answer_conflict", include priorCertificationStatus when supplied, and add a brief systemRevisionNoteZh explaining that this is a previous system revision inconsistency rather than a new learner-introduced error. Do not mark mere shared common words, topic overlap, optional specificity preferences, transcript spelling/capitalization/punctuation/ASR formatting, or unsupported pronunciation as either MUST FIX or system conflict. Do not suppress genuinely new learner errors.
 - Clean retry style: normally direct answer first, then one concise supporting detail or reason. Remove empty delay openers such as "That's an interesting question" or "That's a good question." Do not preserve unnecessary detours just because they appeared in the original. If several real details appear, choose the strongest one instead of copying all of them. If thread-level advice says the learner over-expanded, the clean retry answers must model shorter, more focused answers.
 - Clean retry semantic self-check: do not keep a sentence merely because it is grammatical if the idea remains awkward, vague, over-generalized, or unnatural for spoken Part 1. Prefer natural category relationships: a field or subject should not be rewritten as a skill when that sounds awkward; an isolated habit should not become an entire lifestyle unless the learner clearly meant that. Rebuild toward the likely intended habit, routine, preference, object, activity, field, or detail without inventing facts.
 - FINAL CLEAN-ANSWER STANCE CHECK: if the learner explicitly begins with a clear stance such as Yes, No, Not really, I would, or I wouldn't, do not silently reverse that stance merely because the supporting explanation is unclear or poorly phrased. Prefer repairing the supporting logic while preserving the stated position. If the answer contains a genuine contradiction and the intended stance cannot be recovered safely, preserve the uncertainty in noteZh or a feedback explanation rather than inventing a new personal preference. Do not use OPTIONAL POLISH to disguise a reversal of the learner's answer stance.
@@ -131,12 +193,14 @@ Return actionable topic-session feedback only:
 - THREAD-LEVEL PATTERNS: concise macro behavior only: answer length, buried direct answers, useful material that needs compression, written/lecture-like tone, or accuracy collapse during overextension. Each pattern needs observationZh, whyItMattersZh, and one retryRule. Do not duplicate grammar lists from annotations.
 - ANSWER-BY-ANSWER COACHING: return [] for new results. Per-question retry guidance belongs in cleanRetryAnswers.
 - HIGH-IMPACT PHRASE FIXES: separate useful spoken-language upgrades with question provenance.
-- SPEAKING MATERIAL BANK: be selective; sparse or empty is acceptable. myUsableMaterial must be grounded in learner ideas with real reuse value: concrete hobbies, routines, preferences, experiences, study/work goals, or distinctive personal examples. Do not collect weak generalized claims or awkward pseudo-factual assertions merely because they appear in the answer. Do not save material the clean retry answer should omit as conceptually distracting. Keep short concrete grounded material when useful. Never invent personal facts.
+- DEVELOPMENT STATUS: decide from the learner's current submitted answers, not cleaner answers or material bank. Return developmentStatus "needed" when an accurate answer set is still materially thin or under-responsive for questions that invite a reason, example, preference, frequency, experience, description, contrast, feeling, or future intention. This is not a grammar-error state. Return "sufficient" only when the submitted answers already show enough real Part 1 detail and spoken language range for the topic thread. Do not use numeric score alone. If grammar errors and thin content coexist, still return developmentTargets so the retry can repair accuracy and add one grounded development step.
+- DEVELOPMENT TARGETS: return an item for each submitted answer that has no priority language repair but can naturally be expanded with one small real detail, reason, example, feeling, contrast, frequency, or condition. For an accurate-but-thin thread, this often means Q1-Q4 can each have compact answer-local coaching. Do not artificially choose only one target. Do not force already sufficiently developed answers. Each target must name the questionRef, explain in concise Chinese why the current answer is thin, give one concrete Chinese development move, and include 1-3 short English phraseScaffolds. The Chinese reason must acknowledge what the learner already said before suggesting the next detail; never say "only a place/name/no detail" if the answer already contains background, reason, contrast, role, concrete description, relationship, or experience. phraseScaffolds must be short fragments or half-open frames, not complete model sentences, and must not introduce unconfirmed facts such as population, climate, province, beaches, atmosphere, feelings, or lifestyle unless the learner supplied them. Leave optionalDevelopedAnswer empty for no-error content-development cards. Do not treat optional polish as a development target.
+- SPEAKING MATERIAL BANK: this is Part 1 personal-material development, not a sentence archive. Be selective; sparse or empty is acceptable. Use materialKind "development_seed" for short accurate answers that only provide clues for future development; these items should contain materialCore, part1UseCases, developmentMoveZh, and short expressionFrames, but no developedExample by default. Use materialKind "reusable_personal_material" only when the learner already supplied specific enough content to preserve and polish, such as concrete experiences, roles, named activities, viewing habits, conditional preferences, reasons, contrasts, or feelings tied to a situation. myUsableMaterial must be distinct grounded learner ideas with real current-Part-1 development value. Do not archive ordinary facts, bare identity/location statements, generic topic labels, trivial grammar-preserving rewrites, "Yes, definitely" type phrases, or standalone descriptors such as "My hometown is Xiamen" / "It is a medium-sized coastal city" as reusable_personal_material; if useful, classify them only as development_seed tied to a real next move. For reusable_personal_material, include materialCore, part1UseCases, developmentMoveZh, developedExample, and at most two expressionFrames when genuinely useful. Consolidate paraphrases and generic templates into one semantic item; concrete experience and role should outrank abstract emotion phrases. On this Part 1 page, reuseFor and part1UseCases should describe Part 1 use only; do not claim Part 2 or Part 3 transfer here. When input.retryReference includes carriedMyUsableMaterial, do not return the same personal fact again merely as a paraphrase, shorter abstraction, determiner/inflection variation, or less detailed version. Return only genuinely new personal content or a clearly more specific, natural reusable version. Do not collect weak generalized claims or awkward pseudo-factual assertions merely because they appear in the answer. Do not save material the clean retry answer should omit as conceptually distracting. Keep short concrete grounded material when useful. Never invent personal facts.
 - reusableSpokenLanguage should contain only short, natural, content-bearing expressions genuinely worth imitating or transferring, such as a useful collocation, compact sentence frame, or idiomatic phrase. Exclude generic starters/openers, bare affirmative responses such as "Yes, of course" or "Of course", bare "It depends", "I think", "I would say", "In my opinion", empty templates, unnecessarily formal wording, plain autobiographical facts already better captured in myUsableMaterial, and long model mini-answers. Each reuseFor item should explicitly name transfer use across Part 1 / Part 2 / Part 3 when applicable.
 - OPTIONAL POLISH: minor low-priority naturalness only; never put serious issues here.
-- NEXT RETRY PLAN: return concise grounded actions: one priority accuracy pattern, one answer-length/focus rule, and one useful expression or personal material item to try naturally next time. Do not advise more complexity when the problem is overexpansion.
+- NEXT RETRY PLAN: return concise grounded actions: one priority accuracy pattern, one answer-length/focus rule, and one useful expression or personal material item to try naturally next time. Do not advise more complexity when the problem is overexpansion. If developmentStatus is "needed", the plan must say that core accuracy may be stable but answer development limits the current result. This is a training blocker for topic completion, not a red grammar error, and must not demand long prepared responses.
 - NEXT RETRY FOCUS: keep as a compact legacy summary of nextRetryPlan.
-Current estimate is a low-key transcript-based topic-session practice estimate excluding pronunciation. If evidence genuinely straddles two adjacent half-bands, return a bandEstimateRange with exactly one half-band step, for example 4.5-5.0 or 5.0-5.5, never a wider range.`;
+Current estimate is a low-key transcript-based topic-session practice estimate excluding pronunciation. Base it on the learner's current submitted answers, not on your cleaner answers or Material Bank. Absence of MUST FIX does not automatically justify 6.5-7.0 or 7.0+ if the answers are consistently thin or show limited language range. Accurate but very concise answer sets should keep a numerical practice estimate, but the estimate must be conservative and the rationale should say in concise Chinese that the language is accurate but there is not yet enough real-detail development / language range. Natural Part 1 answers do not need to be long: direct answer plus one relevant detail/reason is sufficient for many questions. If you return a higher range, the rationale must cite actual evidence from the submitted answers: specific personal details, natural elaboration, flexible but spoken-appropriate wording, or coherent direct answers. Never return "no issues" plus no optional improvement path while lowering the estimate only with vague simple-vocabulary reasoning. If evidence genuinely straddles two adjacent half-bands, return a bandEstimateRange with exactly one half-band step, for example 4.5-5.0 or 5.0-5.5, never a wider range.`;
 
 export const speakingTargetValidationSchemaInstruction = `The JSON object must match this exact key structure:
 {
@@ -489,6 +553,7 @@ ${speakingAudioTranscriptionSchemaInstruction}`, params.audioBase64, params.mime
     topic?: string;
     threadId?: string;
     threadAnswers?: { questionId: string; question: string; answer: string }[];
+    retryReference?: import('./base').SpeakingAnalysisRequest['retryReference'];
     authoritativeScore?: {
       bandEstimateExcludingPronunciation: number;
       scores: {
@@ -606,6 +671,25 @@ ${speakingTargetValidationSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);
+  }
+
+  async certifyPart1CleanRetry(params: {
+    topic: string;
+    threadId: string;
+    threadAnswers: { questionId: string; question: string; answer: string }[];
+    cleanRetryAnswers: { questionRef: string; answer: string; noteZh?: string }[];
+    attempt: 1 | 2;
+  }): Promise<string> {
+    return this.generateJson(`${strictJsonInstruction}
+
+You are a focused internal verifier for IELTS Speaking Part 1 clean retry answers.
+Chinese is only for concise violation reasons. English is for candidate wording and safer versions.
+${part1CleanRetryCertificationInstruction}
+
+${part1CleanRetryCertificationSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`, 0.1);
   }
 
   async analyzeWriting(params: {

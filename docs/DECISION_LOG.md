@@ -1,5 +1,34 @@
 # Decision Log
 
+## [2026-05-28 to 2026-05-29] P0 Storage Quota Incident and IndexedDB Migration
+
+- **Decision 1**：`localStorage` 不再作为完整练习历史的可接受权威长期存储。根因：约 6.056 MB localStorage 使用量（134 条 `ielts_practice_records_v1` + 172 条 `ielts_sessions`）导致 `QuotaExceededError` 白屏崩溃。localStorage 配额在浏览器之间通常仅为 5-10 MB，不适合累积完整历史数据。
+- **Decision 2**：IndexedDB / PracticeRepository 是选定的 local-first 持久化方向。新架构 stores：`practiceRecords`、`activeStates`、`legacySessionsArchive`、`meta`。支持完整 IndexedDB-inclusive 备份导出/导入。旧版 localStorage 释放保持手动和安全门控。
+- **Decision 3**：规范练习历史（`practiceRecords`）和旧版会话档案（`legacySessionsArchive`）在逻辑上保持分离。两者在 IndexedDB 中独立保存，备份导入分别报告各自的计数。
+- **Decision 4**：历史反馈 payloads 在恢复期间被保留，而非在迁移时精简。未来 SaaS 同步的 payload 精简属于独立的未来架构任务。
+- **Decision 5**：Part 1 反馈重新设计被明确推迟，不得与存储事件混为一谈。存储架构工作和 Part 1 教学反馈工作必须保持独立。
+- **Decision 6**：较早的 `ielts_sessions` localStorage 内容在重启后的丢失/缺失原因仍未得到证明，必须记录而不猜测。用户未点击 `释放旧版存储空间` 操作，一直使用 localhost:3000。确切清除路径未从当前证据中确认。
+- **Implemented (P0 emergency rescue)**：
+  - `src/lib/practiceRecords.ts` 中配额安全写入、写入结果处理、`getAllPracticeRecords()` 消除 80 条截断
+  - 恢复失败阻止导航到损坏状态
+  - History 页面存储健康面板和备份导出入口
+  - 只读 `查看结果` 访问已保存记录
+  - `AppContext`、Speaking、Writing、AI usage 路径的配额保护
+  - 可见的保存失败警告
+- **Implemented (IndexedDB architecture)**：
+  - 新建 `src/lib/practiceRepository.ts`：IndexedDB-backed PracticeRepository
+  - 新建 `src/lib/storage/indexedDb.ts`：IndexedDB 包装层
+  - `src/pages/PracticeHistory.tsx`：迁移摘要、备份导入/导出、恢复导入 UI
+- **Current recovery state**：
+  - 134 条规范 IndexedDB 记录已通过备份导入恢复
+  - 172 条旧版归档会话已恢复
+  - 3 个活跃状态已报告
+  - localStorage 显示 0.000 MB（用户未手动释放）
+  - History 迁移摘要陈旧（不反映恢复导入后的实际 IndexedDB 状态）
+- **Pending verification**：最终完整 IndexedDB-inclusive 备份导出确认
+- **Explicitly unchanged**：无 Part 1 反馈更改、无 provider 提示更改、无评分更改、无 SaaS/云工作、无 merge、无 push
+- **Detailed incident log**：`docs/P0_STORAGE_INDEXEDDB_INCIDENT_20260528_20260529.md`
+
 ## [2026-05-26] Speaking Part 1 Topic-Thread Development Checkpoint
 - **Decision**: Create a recoverable pre-reinstall development checkpoint for the Speaking Part 1 topic-thread workflow while documenting that newest browser acceptance is still pending.
 - **Implemented**:

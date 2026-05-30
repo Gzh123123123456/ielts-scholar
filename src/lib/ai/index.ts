@@ -12,6 +12,7 @@ import {
   canUseRealAudioTranscriptionProvider,
   readEnv,
   routedAnalyzeSpeaking,
+  routedCertifyPart1CleanRetry,
   routedScoreSpeakingOnly,
   routedTranscribeSpeakingAudio,
   routedAnalyzeWriting,
@@ -23,6 +24,7 @@ import {
 } from './router';
 export {
   safeAnalyzeSpeaking,
+  safeCertifyPart1CleanRetry,
   safeScoreSpeakingOnly,
   safeTranscribeSpeakingAudio,
   safeAnalyzeWriting,
@@ -49,6 +51,7 @@ export {
   getProviderRouterMode,
   canUseRealAudioTranscriptionProvider,
   routedAnalyzeSpeaking,
+  routedCertifyPart1CleanRetry,
   routedScoreSpeakingOnly,
   routedTranscribeSpeakingAudio,
   routedAnalyzeWriting,

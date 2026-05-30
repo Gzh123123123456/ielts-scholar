@@ -12,6 +12,7 @@ import {
   canUseRealAudioTranscriptionProvider,
   getAIProviderName,
   routedAnalyzeSpeaking,
+  routedCertifyPart1CleanRetry,
   routedTranscribeSpeakingAudio,
 } from '@/src/lib/ai';
 import { validatePart1ThreadFeedbackIntegrity } from '@/src/lib/ai/part1ThreadIntegrity';
@@ -25,7 +26,18 @@ import {
   speakingPart3,
   SpeakingQuestion,
 } from '@/src/data/speaking/activeSpeakingBank';
-import type { Part1AnswerAnnotation, Part1AnswerAnnotationLayer, SpeakingFeedback } from '@/src/lib/ai/schemas';
+import type {
+  Part1AnswerAnnotation,
+  Part1AnswerAnnotationLayer,
+  Part1CleanRetryAnswer,
+  Part1DevelopmentTarget,
+  Part1DisplayedCleanRetryCertificationStatus,
+  Part1RetryReferenceContext,
+  Part1SessionPriorityState,
+  ProviderDiagnostic,
+  SpeakingFeedback,
+  SpeakingMaterialBankItem,
+} from '@/src/lib/ai/schemas';
 import {
   buildMarkdownExportFilename,
   buildSpeakingTrainingMarkdown,
@@ -38,13 +50,16 @@ import {
 import {
   ActiveSpeakingPracticeSession,
   createRecordId,
-  getActiveSpeakingSession,
-  getPracticeRecords,
-  saveActiveSpeakingSession,
   SpeakingPracticeRecord,
   summarizeDiagnostic,
-  upsertPracticeRecord,
 } from '@/src/lib/practiceRecords';
+import {
+  listPracticeRecords,
+  getActiveSpeakingSession,
+  saveActiveSpeakingSession,
+  upsertPracticeRecord,
+  clearActiveSpeakingSession,
+} from '@/src/lib/practiceRepository';
 import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Info, BookOpen } from 'lucide-react';
 
 type TranscriptionSource = 'browser' | 'audio' | 'manual';
@@ -240,6 +255,22 @@ const part1AnnotationSeverityLabel = (severity: Part1AnswerAnnotationLayer['seve
   return 'OPTIONAL POLISH';
 };
 
+const part1AnnotationLayerLabel = (layer: Part1AnswerAnnotationLayer) =>
+  layer.origin === 'previous_cleaner_answer_conflict'
+    ? 'PREVIOUS CLEANER ANSWER CONFLICT'
+    : part1AnnotationSeverityLabel(layer.severity);
+
+const part1AnnotationHeaderLabel = (annotation: Part1AnswerAnnotation) =>
+  annotation.layers.some(layer => layer.origin === 'previous_cleaner_answer_conflict')
+    ? 'PREVIOUS CLEANER ANSWER CONFLICT'
+    : part1AnnotationSeverityLabel(strongestPart1AnnotationSeverity(annotation));
+
+const concisePart1LayerExplanation = (text: string) => {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  const pieces = clean.match(/[^。！？.!?]+[。！？.!?]?/g)?.map(item => item.trim()).filter(Boolean) || [clean];
+  return pieces.slice(0, 2).join(' ');
+};
+
 const strongestPart1AnnotationSeverity = (annotation: Part1AnswerAnnotation) => {
   if (annotation.layers.some(layer => layer.severity === 'must_fix')) return 'must_fix';
   if (annotation.layers.some(layer => layer.severity === 'better_spoken_choice')) return 'better_spoken_choice';
@@ -249,17 +280,6 @@ const strongestPart1AnnotationSeverity = (annotation: Part1AnswerAnnotation) => 
 const renderTextWithBreaks = (text: string) => text.split('\n').flatMap((line, index) =>
   index === 0 ? [line] : [<br key={`br-${index}`} />, line],
 );
-
-const part1MaterialTransferGroups = (reuseFor: string[]) => {
-  const groups = [
-    { label: 'Part 1', items: reuseFor.filter(item => /part\s*1|topic|routine|habit|hometown|study|work|home/i.test(item)) },
-    { label: 'Part 2', items: reuseFor.filter(item => /part\s*2|cue|card|experience|place|person|activity|story/i.test(item)) },
-    { label: 'Part 3', items: reuseFor.filter(item => /part\s*3|discussion|example|society|supporting/i.test(item)) },
-  ];
-  const matched = new Set(groups.flatMap(group => group.items));
-  const other = reuseFor.filter(item => !matched.has(item));
-  return other.length ? [...groups, { label: 'Other', items: other }] : groups;
-};
 
 type Part1AnnotationSpan = {
   annotation: Part1AnswerAnnotation;
@@ -312,6 +332,260 @@ const buildPart1SearchText = (text: string) => {
 
 const normalizePart1SourceQuote = (text: string) =>
   buildPart1SearchText(text).normalized.trim();
+
+const normalizePart1LineageText = (text: string) =>
+  normalizePart1SourceQuote(text).replace(/[^\p{L}\p{N}\s]+/gu, ' ').replace(/\s+/g, ' ').trim();
+
+const normalizePart1ComparableAnswerText = (text: string) =>
+  normalizePart1LineageText(text)
+    .replace(/\b(that s|that is|it s|it is)\b/g, match => match.replace(/\s+/g, "'"))
+    .trim();
+
+const part1CertificationPassed = (status?: Part1DisplayedCleanRetryCertificationStatus) =>
+  status === 'certified_first_attempt' || status === 'certified_after_rewrite';
+
+const consolidatePart1DevelopmentTargets = (targets: Part1DevelopmentTarget[] = []): Part1DevelopmentTarget[] => {
+  const byQuestion = new Map<string, Part1DevelopmentTarget>();
+  targets.forEach(target => {
+    const refs = target.questionRef.split('/').map(ref => ref.trim()).filter(Boolean);
+    if (refs.length > 1) {
+      refs.forEach(ref => {
+        if (!byQuestion.has(ref)) byQuestion.set(ref, { ...target, questionRef: ref });
+      });
+      return;
+    }
+    if (!byQuestion.has(target.questionRef)) byQuestion.set(target.questionRef, target);
+  });
+  return Array.from(byQuestion.values()).sort(
+    (left, right) => Number(left.questionRef.replace(/^Q/i, '')) - Number(right.questionRef.replace(/^Q/i, '')),
+  );
+};
+
+export const derivePart1SessionPriorityState = (source: SpeakingFeedback | null | undefined): Part1SessionPriorityState | null => {
+  const thread = source?.threadFeedback;
+  if (!source || source.sessionKind !== 'part1_topic_thread' || !thread) return null;
+  const hasOrdinaryMustFix = Boolean(
+    thread.mustFix.some(item => item.origin !== 'previous_cleaner_answer_conflict') ||
+    thread.annotations?.some(annotation =>
+      annotation.layers.some(layer => layer.severity === 'must_fix' && layer.origin !== 'previous_cleaner_answer_conflict'),
+    ) ||
+    source.fatalErrors.length,
+  );
+  const hasPreviousCleanerConflict = Boolean(
+    (thread.previousCleanerConflictCount || 0) > 0 ||
+    thread.annotations?.some(annotation =>
+      annotation.layers.some(layer => layer.origin === 'previous_cleaner_answer_conflict'),
+    ),
+  );
+  if (hasOrdinaryMustFix) return 'core_repair_needed';
+  if (hasPreviousCleanerConflict) return 'system_revision_conflict';
+  if (part1CertificationPassed(thread.cleanRetryCertificationStatus) && thread.developmentTargets?.length) {
+    return 'development_needed';
+  }
+  if (part1CertificationPassed(thread.cleanRetryCertificationStatus)) return 'topic_complete';
+  return thread.part1SessionPriorityState || null;
+};
+
+export const derivePart1ThreadStable = (source: SpeakingFeedback | null | undefined) =>
+  derivePart1SessionPriorityState(source) === 'topic_complete';
+
+const withDerivedPart1SessionPriorityState = (source: SpeakingFeedback): SpeakingFeedback => {
+  if (!source.threadFeedback) return source;
+  const developmentTargets = consolidatePart1DevelopmentTargets(source.threadFeedback.developmentTargets || []);
+  const state = derivePart1SessionPriorityState(source) || source.threadFeedback.part1SessionPriorityState || 'core_repair_needed';
+  const next: SpeakingFeedback = {
+    ...source,
+    threadFeedback: {
+      ...source.threadFeedback,
+      part1SessionPriorityState: state,
+      developmentStatus: developmentTargets.length ? 'needed' : 'sufficient',
+      developmentTargets,
+    },
+    obsidianMarkdown: '',
+  };
+  return {
+    ...next,
+    obsidianMarkdown: buildSpeakingTrainingMarkdown(next),
+  };
+};
+
+const part1MaterialStopWords = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'so', 'because', 'i', 'im', 'ive', 'id', 'me', 'my', 'mine', 'we', 'our', 'us',
+  'it', 'its', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to', 'of', 'for', 'with', 'in', 'on', 'at', 'from',
+  'that', 'this', 'these', 'those', 'there', 'here', 'really', 'very', 'quite', 'usually', 'often', 'sometimes',
+  'hometown', 'city', 'place', 'people', 'thing', 'topic', 'something', 'someone', 'somewhere',
+]);
+
+const part1MaterialText = (item: Pick<SpeakingMaterialBankItem, 'sourceWording' | 'reusableVersion' | 'materialCore'>) =>
+  `${item.materialCore || ''} ${item.reusableVersion || ''} ${item.sourceWording || ''}`;
+
+const part1MaterialTokens = (item: Pick<SpeakingMaterialBankItem, 'sourceWording' | 'reusableVersion'>) =>
+  Array.from(new Set(normalizePart1LineageText(part1MaterialText(item).replace(/\[[^\]]+\]/g, ' '))
+    .replace(/\bmy\s+\w+\b/g, ' ')
+    .split(' ')
+    .filter(token => token.length > 2 && !part1MaterialStopWords.has(token))));
+
+const part1MaterialSpecificity = (item: SpeakingMaterialBankItem) => {
+  const text = part1MaterialText(item);
+  const properNounSignals = (text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || []).length;
+  const reusableWords = normalizePart1LineageText(item.reusableVersion).split(' ').filter(Boolean).length;
+  const sourceWords = normalizePart1LineageText(item.sourceWording || '').split(' ').filter(Boolean).length;
+  return part1MaterialTokens(item).length + properNounSignals + Math.min(reusableWords, 18) / 10 + Math.min(sourceWords, 18) / 20;
+};
+
+const part1MaterialGenericPenalty = (item: SpeakingMaterialBankItem) => {
+  const text = part1MaterialText(item);
+  const bracketCount = (text.match(/\[[^\]]+\]/g) || []).length;
+  const genericSignals = (normalizePart1LineageText(text).match(/\b(hometown|city|place|thing|people|something|someone|somewhere)\b/g) || []).length;
+  return bracketCount * 3 + genericSignals * 0.4;
+};
+
+const isUsefulPart1DisplayMaterial = (item: SpeakingMaterialBankItem) => {
+  const text = normalizePart1LineageText(part1MaterialText(item));
+  if (!text) return false;
+  if (/^(yes|yeah|no|sure|definitely|absolutely|of course|not really)$/i.test(text)) return false;
+  if (/^my hometown is [a-z]+(?: i was born and raised here)?$/i.test(text)) return false;
+  if (/^it is a [a-z-]+(?: [a-z-]+){0,2} city$/i.test(text)) return false;
+  const hasPersonalSignal = /\b(i|im|ive|id|me|my|mine|we|were|weve|our|us)\b/.test(text);
+  const hasValueSignal = /\b(because|so|although|though|but|rather than|instead of|prefer|like|enjoy|miss|missed|feel|felt|family|friend|friends|college|university|school|team|club|match|game|nba|e-?sports?|point guard|captain|role|years?|months?|born|raised|childhood|lived|living|grew up|moved|returned|spent|used to|usually|often)\b/.test(text);
+  const hasDevelopmentField = Boolean(item.materialCore || item.developmentMoveZh || item.developedExample || item.expressionFrames?.length);
+  return hasPersonalSignal && hasValueSignal && hasDevelopmentField && part1MaterialTokens(item).length >= 3;
+};
+
+const isPart1DevelopmentSeedMaterial = (item: SpeakingMaterialBankItem) =>
+  item.materialKind === 'development_seed';
+
+const isUsefulPart1DevelopmentSeed = (item: SpeakingMaterialBankItem) => {
+  if (!isPart1DevelopmentSeedMaterial(item)) return false;
+  const text = normalizePart1LineageText(`${item.materialCore || ''} ${item.sourceWording || ''} ${(item.expressionFrames || []).join(' ')}`);
+  if (!text) return false;
+  if (/^(yes|yeah|no|sure|definitely|absolutely|of course|not really)$/i.test(text)) return false;
+  return Boolean(item.materialCore || item.developmentMoveZh || item.expressionFrames?.length);
+};
+
+const isUsefulPart1ReusableMaterial = (item: SpeakingMaterialBankItem) =>
+  !isPart1DevelopmentSeedMaterial(item) && isUsefulPart1DisplayMaterial(item);
+
+const isLowValuePart1ThreadPattern = (item: { observationZh: string; whyItMattersZh: string; retryRule: string }) => {
+  const text = normalizePart1LineageText(`${item.observationZh} ${item.whyItMattersZh} ${item.retryRule}`);
+  if (!text) return true;
+  const purePraise = /\b(accurate|direct|natural|clear|stable|good|strong|complete|sufficient|no major|no obvious|well answered)\b/.test(text) &&
+    !/\b(need|needs|add|repair|fix|avoid|limit|thin|short|underdeveloped|error|mistake|grammar|range|specific|detail|reason|contrast)\b/.test(text);
+  return purePraise;
+};
+
+const isSamePart1MaterialSlot = (left: SpeakingMaterialBankItem, right: SpeakingMaterialBankItem) => {
+  const leftCore = normalizePart1LineageText(left.materialCore || '');
+  const rightCore = normalizePart1LineageText(right.materialCore || '');
+  if (leftCore && rightCore && (leftCore === rightCore || leftCore.includes(rightCore) || rightCore.includes(leftCore))) return true;
+  const leftTokens = part1MaterialTokens(left);
+  const rightTokens = part1MaterialTokens(right);
+  if (!leftTokens.length || !rightTokens.length) return false;
+  const rightSet = new Set(rightTokens);
+  const overlap = leftTokens.filter(token => rightSet.has(token)).length;
+  const smaller = Math.min(leftTokens.length, rightTokens.length);
+  const larger = Math.max(leftTokens.length, rightTokens.length);
+  const leftKey = leftTokens.join(' ');
+  const rightKey = rightTokens.join(' ');
+  if (leftKey === rightKey) return true;
+  if (smaller >= 4 && (leftKey.includes(rightKey) || rightKey.includes(leftKey))) return true;
+  if (smaller >= 3 && (leftKey.includes(rightKey) || rightKey.includes(leftKey)) && (larger - smaller) <= 3) return true;
+  if ((part1MaterialGenericPenalty(left) > 0 || part1MaterialGenericPenalty(right) > 0) && smaller >= 2 && overlap / smaller >= 1) return true;
+  const hasRelationshipAttachmentSlot = (tokens: string[]) => {
+    const relationship = tokens.some(token => /^(famil|friend|relative|parent|sibling|classmate|mate|people)$/.test(token));
+    const locationOrAttachment = tokens.some(token => /^(attach|connect|stay|live|nearby|close|here|there|home|hometown|belong|support)$/.test(token));
+    return relationship && locationOrAttachment;
+  };
+  if (hasRelationshipAttachmentSlot(leftTokens) && hasRelationshipAttachmentSlot(rightTokens)) return true;
+  const socialAttachment = (tokens: string[]) =>
+    tokens.some(token => /^famil/.test(token) || /^friend/.test(token)) &&
+    tokens.some(token => /^(attach|connect|stay|live|there|close)/.test(token));
+  const sharedFamilyOrFriends = (tokens: string[]) => tokens.some(token => /^famil/.test(token) || /^friend/.test(token));
+  if (sharedFamilyOrFriends(leftTokens) && sharedFamilyOrFriends(rightTokens) && overlap >= 2) return true;
+  if (socialAttachment(leftTokens) && socialAttachment(rightTokens) && overlap >= 2) return true;
+  return smaller >= 4 && overlap / smaller >= 0.86 && overlap / larger >= 0.62;
+};
+
+export const mergePart1MyUsableMaterialForRetry = (
+  carried: SpeakingMaterialBankItem[] = [],
+  fresh: SpeakingMaterialBankItem[] = [],
+) => {
+  const merged: SpeakingMaterialBankItem[] = [];
+  let dedupedCount = 0;
+
+  const mergeOneMaterialItem = (item: SpeakingMaterialBankItem) => {
+    if (!isUsefulPart1DisplayMaterial(item)) {
+      if (part1MaterialGenericPenalty(item) > 0) dedupedCount += 1;
+      return;
+    }
+    const existingIndex = merged.findIndex(existing => isSamePart1MaterialSlot(existing, item));
+    if (existingIndex >= 0) {
+      const existing = merged[existingIndex];
+      const incomingWins = (part1MaterialSpecificity(item) - part1MaterialGenericPenalty(item)) >
+        (part1MaterialSpecificity(existing) - part1MaterialGenericPenalty(existing)) + 0.75;
+      const winner = incomingWins ? item : existing;
+      const fallback = incomingWins ? existing : item;
+      merged[existingIndex] = {
+        ...winner,
+        sourceWording: winner.sourceWording || fallback.sourceWording,
+        reuseFor: Array.from(new Set([...(fallback.reuseFor || []), ...(winner.reuseFor || [])])),
+        explanationZh: winner.explanationZh || fallback.explanationZh,
+        materialCore: winner.materialCore || fallback.materialCore,
+        part1UseCases: Array.from(new Set([...(fallback.part1UseCases || []), ...(winner.part1UseCases || [])])),
+        developmentMoveZh: winner.developmentMoveZh || fallback.developmentMoveZh,
+        developedExample: winner.developedExample || fallback.developedExample,
+        expressionFrames: Array.from(new Set([...(fallback.expressionFrames || []), ...(winner.expressionFrames || [])])).slice(0, 2),
+        materialKey: winner.materialKey || fallback.materialKey,
+      };
+      dedupedCount += 1;
+      return;
+    }
+    merged.push(item);
+  };
+
+  carried.forEach(mergeOneMaterialItem);
+  fresh.forEach(mergeOneMaterialItem);
+  return { items: merged, dedupedCount };
+};
+
+export const isPart1CleanerAnswerEquivalent = (learnerAnswer: string, cleanerAnswer: string) => {
+  const learnerKey = normalizePart1ComparableAnswerText(learnerAnswer);
+  const cleanerKey = normalizePart1ComparableAnswerText(cleanerAnswer);
+  if (!learnerKey || !cleanerKey) return false;
+  if (learnerKey === cleanerKey) return true;
+  const learnerWords = learnerKey.split(' ').filter(Boolean);
+  const cleanerWords = cleanerKey.split(' ').filter(Boolean);
+  if (Math.abs(learnerWords.length - cleanerWords.length) > 2) return false;
+  const learnerSet = new Set(learnerWords);
+  const overlap = cleanerWords.filter(word => learnerSet.has(word)).length;
+  return overlap / Math.max(learnerWords.length, cleanerWords.length) >= 0.92;
+};
+
+const isPart1OptionalDevelopmentText = (text: string) =>
+  /\b(reason|detail|specific|example|develop|rich|expand|one more|small|brief|personal|because|why|contrast|compare|underdeveloped|thin)\b|细节|原因|具体|丰富|补充|例子|展开|对比|偏短|单薄/.test(text);
+
+const part1LineageTextContains = (container: string, contained: string) => {
+  const containerKey = normalizePart1LineageText(container);
+  const containedKey = normalizePart1LineageText(contained);
+  return Boolean(containedKey && containedKey.split(' ').length >= 3 && containerKey.includes(containedKey));
+};
+
+const part1MaterialUseCases = (item: SpeakingMaterialBankItem) => {
+  const explicit = item.part1UseCases?.filter(Boolean) || [];
+  if (explicit.length) return explicit;
+  const filtered = item.reuseFor.filter(useCase =>
+    !/part\s*2|part\s*3|cue\s*card|long\s*turn|discussion|society|abstract/i.test(useCase),
+  );
+  return filtered.length ? filtered : ['Use this for a related Part 1 answer in this topic thread.'];
+};
+
+const part1MaterialDevelopmentMove = (item: SpeakingMaterialBankItem) =>
+  item.developmentMoveZh ||
+  item.explanationZh ||
+  'Add one brief reason, feeling, contrast, or concrete detail when the question invites development.';
+
+const part1MaterialDevelopedExample = (item: SpeakingMaterialBankItem) =>
+  item.developedExample || item.reusableVersion;
 
 const normalizePart1FormatOnlyText = (text: string) =>
   normalizePart1SourceQuote(text).replace(/[^a-z]/g, '');
@@ -490,7 +764,6 @@ const Part1AnnotationOverlay = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  const strongest = strongestPart1AnnotationSeverity(annotation);
   const content = (
     <>
       {!position.isMobile && anchorEl && (
@@ -504,7 +777,7 @@ const Part1AnnotationOverlay = ({
       >
         <div className="annotation-overlay__header">
           <div>
-            <p className="annotation-overlay__eyebrow">{annotation.questionRef} · {part1AnnotationSeverityLabel(strongest)}</p>
+            <p className="annotation-overlay__eyebrow">{annotation.questionRef} · {part1AnnotationHeaderLabel(annotation)}</p>
             <h4>Your words: {annotation.sourceQuote}</h4>
           </div>
           <button type="button" className="annotation-overlay__close" onClick={onClose} aria-label="Close annotation" />
@@ -519,9 +792,12 @@ const Part1AnnotationOverlay = ({
           <section className="annotation-overlay__stack">
             {annotation.layers.map((layer, index) => (
               <div key={`${layer.issueType}-${index}`} className="annotation-overlay__upgrade">
-                <span>{part1AnnotationSeverityLabel(layer.severity)} · {formatPart1IssueTypeLabel(layer.issueType)}</span>
+                <span>{part1AnnotationLayerLabel(layer)} · {formatPart1IssueTypeLabel(layer.issueType)}</span>
                 <b>{layer.original} {'->'} {layer.better}</b>
-                <p>{layer.explanationZh}</p>
+                <p>{concisePart1LayerExplanation(layer.explanationZh)}</p>
+                {layer.origin === 'previous_cleaner_answer_conflict' && (
+                  <p>{layer.systemRevisionNoteZh || '这处表达来自上一轮系统提供的修改答案；本次修正属于系统修订不一致，不视为你新引入的错误。'}</p>
+                )}
                 {layer.reuseGuidanceZh && <p>{layer.reuseGuidanceZh}</p>}
               </div>
             ))}
@@ -542,6 +818,7 @@ export default function SpeakingPractice() {
   const [question, setQuestion] = useState<SpeakingQuestion | null>(null);
   const [part1Thread, setPart1Thread] = useState<Part1TopicThreadSet | null>(null);
   const [lockedThreadAnswers, setLockedThreadAnswers] = useState<LockedThreadAnswer[]>([]);
+  const [part1RetryReference, setPart1RetryReference] = useState<Part1RetryReferenceContext | null>(null);
   const [activeThreadIndex, setActiveThreadIndex] = useState(0);
   const [step, setStep] = useState<'idle' | 'recording' | 'editing' | 'analyzing' | 'results'>('idle');
   const [transcript, setTranscript] = useState('');
@@ -563,6 +840,7 @@ export default function SpeakingPractice() {
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
+  const [storageFullWarning, setStorageFullWarning] = useState('');
   const [transcriptCleanupNote, setTranscriptCleanupNote] = useState('');
   const [statusMessage, setStatusMessage] = useState<'Ready' | 'Requesting microphone...' | 'Listening...' | 'No speech detected' | 'Transcription unavailable' | 'Mic denied'>('Ready');
   const [selectedThreadAnnotationId, setSelectedThreadAnnotationId] = useState<string | null>(null);
@@ -628,6 +906,120 @@ export default function SpeakingPractice() {
   const currentThreadQuestion = part1Thread?.questions[activeThreadIndex];
   const threadQuestionCount = part1Thread?.questions.length || 0;
   const threadCompleted = Boolean(part1Thread && lockedThreadAnswers.length >= threadQuestionCount);
+  const lockedThreadRecoveryMessage = (answerCount = lockedThreadAnswers.length) =>
+    `Analysis could not be completed. Your ${answerCount} locked ${answerCount === 1 ? 'answer is' : 'answers are'} preserved. Re-analyze ${answerCount === 1 ? 'it' : 'them'} without recording again.`;
+  const buildPart1RetryReference = (
+    source: SpeakingFeedback,
+    parentAttemptId: string,
+  ): Part1RetryReferenceContext | null => {
+    const thread = source.threadFeedback;
+    if (!thread?.cleanRetryAnswers.length) return null;
+    const status = thread.cleanRetryCertificationStatus || 'legacy_or_unverified';
+    const questionIdByRef = new Map<string, string>((source.threadAnswers || []).map((answer, index) => [`Q${index + 1}`, answer.questionId]));
+    return {
+      retryChainId: source.part1RetryReference?.retryChainId || createRecordId('p1_retry_chain'),
+      parentAttemptId,
+      cleanRetryAnswers: thread.cleanRetryAnswers.map(item => ({
+        questionRef: item.questionRef,
+        questionId: questionIdByRef.get(item.questionRef),
+        answer: item.answer,
+        certificationStatus: status,
+      })),
+      carriedMyUsableMaterial: thread.materialBank.myUsableMaterial,
+    };
+  };
+  const withPart1ThreadFeedback = (
+    source: SpeakingFeedback,
+    transform: (thread: NonNullable<SpeakingFeedback['threadFeedback']>) => NonNullable<SpeakingFeedback['threadFeedback']>,
+  ): SpeakingFeedback => {
+    if (!source.threadFeedback) return source;
+    const next: SpeakingFeedback = {
+      ...source,
+      threadFeedback: transform(source.threadFeedback),
+      obsidianMarkdown: '',
+    };
+    return {
+      ...next,
+      obsidianMarkdown: buildSpeakingTrainingMarkdown(next),
+    };
+  };
+  const withPart1CertificationStatus = (
+    source: SpeakingFeedback,
+    status: Part1DisplayedCleanRetryCertificationStatus,
+  ) => withDerivedPart1SessionPriorityState(withPart1ThreadFeedback(source, thread => ({
+    ...thread,
+    cleanRetryCertificationStatus: status,
+  })));
+  const withMergedPart1Material = (
+    source: SpeakingFeedback,
+    carried: SpeakingMaterialBankItem[],
+  ): { feedback: SpeakingFeedback; dedupedCount: number } => {
+    let dedupedCount = 0;
+    const feedback = withPart1ThreadFeedback(source, thread => {
+      const merged = mergePart1MyUsableMaterialForRetry(carried, thread.materialBank.myUsableMaterial);
+      dedupedCount = merged.dedupedCount;
+      return {
+        ...thread,
+        materialBank: {
+          ...thread.materialBank,
+          myUsableMaterial: merged.items,
+        },
+      };
+    });
+    return { feedback, dedupedCount };
+  };
+  const hasPreviousCleanerConflictForQuestion = (source: SpeakingFeedback, questionRef: string) =>
+    Boolean(source.threadFeedback?.annotations?.some(annotation =>
+      annotation.questionRef === questionRef &&
+      annotation.layers.some(layer => layer.origin === 'previous_cleaner_answer_conflict'),
+    ));
+  const hasOrdinaryMustFixForQuestion = (source: SpeakingFeedback, questionRef: string) =>
+    Boolean(source.threadFeedback?.annotations?.some(annotation =>
+      annotation.questionRef === questionRef &&
+      annotation.layers.some(layer => layer.severity === 'must_fix' && layer.origin !== 'previous_cleaner_answer_conflict'),
+    ));
+  const isPart1ThreadStableResult = (source: SpeakingFeedback | null | undefined) => {
+    return derivePart1ThreadStable(source);
+  };
+  const stabilizeCleanRetryAnswersForRetry = (
+    source: SpeakingFeedback,
+    answers: LockedThreadAnswer[],
+    retryReference: Part1RetryReferenceContext | null,
+  ) => {
+    if (!source.threadFeedback || !retryReference?.cleanRetryAnswers.length) return { feedback: source, stabilizedCount: 0 };
+    const priorByRef = new Map(retryReference.cleanRetryAnswers.map(item => [item.questionRef, item] as const));
+    let stabilizedCount = 0;
+    const cleanRetryAnswers = source.threadFeedback.cleanRetryAnswers.map(item => {
+      const prior = priorByRef.get(item.questionRef);
+      const answerIndex = Number(item.questionRef.replace(/^Q/i, '')) - 1;
+      const submitted = answers[answerIndex]?.transcript || '';
+      const priorIsCertified = prior?.certificationStatus === 'certified_first_attempt' || prior?.certificationStatus === 'certified_after_rewrite';
+      const submittedMatchesPrior = Boolean(prior && (
+        part1LineageTextContains(submitted, prior.answer) ||
+        part1LineageTextContains(prior.answer, submitted)
+      ));
+      if (
+        priorIsCertified &&
+        submittedMatchesPrior &&
+        !hasPreviousCleanerConflictForQuestion(source, item.questionRef) &&
+        !hasOrdinaryMustFixForQuestion(source, item.questionRef)
+      ) {
+        stabilizedCount += item.answer === submitted ? 0 : 1;
+        return {
+          ...item,
+          answer: submitted,
+          noteZh: item.noteZh,
+        };
+      }
+      return item;
+    });
+    return stabilizedCount
+      ? {
+        feedback: replacePart1CleanRetryAnswers(source, cleanRetryAnswers),
+        stabilizedCount,
+      }
+      : { feedback: source, stabilizedCount };
+  };
   const currentCaptureIdentity = (token: number): CaptureContext => ({
     token,
     attemptId: activeAttemptIdRef.current,
@@ -709,12 +1101,18 @@ export default function SpeakingPractice() {
     }
     return findThreadById(record.threadId);
   };
-  const startPart1Thread = (thread: Part1TopicThreadSet, initialAnswers: LockedThreadAnswer[] = [], startIndex = initialAnswers.length) => {
+  const startPart1Thread = (
+    thread: Part1TopicThreadSet,
+    initialAnswers: LockedThreadAnswer[] = [],
+    startIndex = initialAnswers.length,
+    retryReference: Part1RetryReferenceContext | null = null,
+  ) => {
     const safeIndex = Math.min(Math.max(startIndex, 0), Math.max(thread.questions.length - 1, 0));
     invalidateCaptureContext();
     activeAttemptIdRef.current = createRecordId('sp');
     setPart(1);
     setPart1Thread(thread);
+    setPart1RetryReference(retryReference);
     setLockedThreadAnswers(initialAnswers);
     setActiveThreadIndex(safeIndex);
     setQuestion(toSpeakingQuestion(thread, safeIndex));
@@ -766,6 +1164,10 @@ export default function SpeakingPractice() {
       threadAnswers: part1Thread ? lockedThreadAnswers : undefined,
       activeThreadIndex: part1Thread ? activeThreadIndex : undefined,
       threadCompleted: part1Thread ? (status === 'analyzed' || lockedThreadAnswers.length >= threadQuestionCount) : undefined,
+      retryChainId: part1Thread ? part1RetryReference?.retryChainId : undefined,
+      parentAttemptId: part1Thread ? part1RetryReference?.parentAttemptId : undefined,
+      priorCleanRetryAnswers: part1Thread ? part1RetryReference?.cleanRetryAnswers : undefined,
+      carriedMyUsableMaterial: part1Thread ? part1RetryReference?.carriedMyUsableMaterial : undefined,
       question: question.question,
       questionId: question.id,
       topic: question.topicCategory || question.topic,
@@ -838,7 +1240,7 @@ export default function SpeakingPractice() {
   const hasMeaningfulAttemptContent = (status?: 'draft' | 'analyzed' | 'provider_failed') =>
     Boolean(transcript.trim() || lockedThreadAnswers.length > 0 || feedback || status === 'analyzed' || status === 'provider_failed');
 
-  const persistCurrentSpeakingAttempt = (status?: 'draft' | 'analyzed' | 'provider_failed') => {
+  const persistCurrentSpeakingAttempt = async (status?: 'draft' | 'analyzed' | 'provider_failed') => {
     if (feedback || status === 'analyzed') return;
     if (!hasMeaningfulAttemptContent(status)) return;
     const record = buildCurrentSpeakingRecord(status);
@@ -859,8 +1261,13 @@ export default function SpeakingPractice() {
       },
       updatedAt: new Date().toISOString(),
     };
-    saveActiveSpeakingSession(activeSessionRef.current);
-    upsertPracticeRecord(record);
+    const [sessionResult, recordResult] = await Promise.all([
+      saveActiveSpeakingSession(activeSessionRef.current),
+      upsertPracticeRecord(record),
+    ]);
+    if (!sessionResult.ok || !recordResult.ok) {
+      setStorageFullWarning('本地存储空间已满，当前练习状态未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
+    }
   };
 
   const restoreSpeakingRecord = (record: SpeakingPracticeRecord, message = '') => {
@@ -871,6 +1278,14 @@ export default function SpeakingPractice() {
     const restoredThread = restoreThreadFromSnapshot(record);
     const restoredThreadAnswers = record.threadAnswers || [];
     setPart1Thread(restoredThread);
+    setPart1RetryReference(restoredThread && record.retryChainId && record.priorCleanRetryAnswers?.length
+      ? {
+        retryChainId: record.retryChainId,
+        parentAttemptId: record.parentAttemptId,
+        cleanRetryAnswers: record.priorCleanRetryAnswers,
+        carriedMyUsableMaterial: record.carriedMyUsableMaterial,
+      }
+      : record.feedback?.part1RetryReference || null);
     setLockedThreadAnswers(restoredThread ? restoredThreadAnswers : []);
     setActiveThreadIndex(restoredThread ? Math.min(record.activeThreadIndex ?? restoredThreadAnswers.length, Math.max(restoredThread.questions.length - 1, 0)) : 0);
     setQuestion(restoredThread
@@ -900,44 +1315,50 @@ export default function SpeakingPractice() {
     setFeedbackFallbackUsed(Boolean(record.providerDiagnostic?.fallbackUsed));
     setStep(record.feedback ? 'results' : record.transcript.trim() ? 'editing' : 'idle');
     setTimer(0);
-    setProviderErrorMessage(record.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later.' : '');
+    setProviderErrorMessage(record.status === 'provider_failed'
+      ? restoredThread && restoredThreadAnswers.length >= restoredThread.questions.length
+        ? `Analysis could not be completed. Your ${restoredThreadAnswers.length} locked ${restoredThreadAnswers.length === 1 ? 'answer is' : 'answers are'} preserved. Re-analyze ${restoredThreadAnswers.length === 1 ? 'it' : 'them'} without recording again.`
+        : 'AI provider temporarily unavailable. Please retry later.'
+      : '');
     setTranscriptCleanupNote('');
     setRestoreMessage(message);
   };
 
   useEffect(() => {
-    const active = getActiveSpeakingSession();
-    if (active) {
-      activeSessionRef.current = active;
-      const explicitRestoreId = typeof location.state === 'object' && location.state && 'restoreSpeakingRecordId' in location.state
-        ? String(location.state.restoreSpeakingRecordId || '')
-        : '';
-      if (explicitRestoreId) {
-        const explicitRecord = Object.values(active.attemptsByPart).find(record => record?.id === explicitRestoreId);
-        if (explicitRecord) {
-          restoreSpeakingRecord(explicitRecord);
-          navigate(location.pathname, { replace: true, state: null });
+    (async () => {
+      const active = await getActiveSpeakingSession();
+      if (active) {
+        activeSessionRef.current = active;
+        const explicitRestoreId = typeof location.state === 'object' && location.state && 'restoreSpeakingRecordId' in location.state
+          ? String(location.state.restoreSpeakingRecordId || '')
+          : '';
+        if (explicitRestoreId) {
+          const explicitRecord = Object.values(active.attemptsByPart).find(record => record?.id === explicitRestoreId);
+          if (explicitRecord) {
+            restoreSpeakingRecord(explicitRecord);
+            navigate(location.pathname, { replace: true, state: null });
+            return;
+          }
+        }
+
+        const currentPart = active.currentPart;
+        const candidate = active.attemptsByPart[currentPart];
+        if (isUnfinishedSpeakingAttempt(candidate)) {
+          restoreSpeakingRecord(candidate);
           return;
         }
-      }
 
-      const currentPart = active.currentPart;
-      const candidate = active.attemptsByPart[currentPart];
-      if (isUnfinishedSpeakingAttempt(candidate)) {
-        restoreSpeakingRecord(candidate);
+        const { pruned, session } = pruneCompletedActiveAttempts(active);
+        activeSessionRef.current = session;
+        if (candidate && !isUnfinishedSpeakingAttempt(candidate)) {
+          logSkippedCompletedAutoRestore();
+        }
+        if (pruned) await saveActiveSpeakingSession(session);
+        loadRandomQuestion(currentPart);
         return;
       }
-
-      const { pruned, session } = pruneCompletedActiveAttempts(active);
-      activeSessionRef.current = session;
-      if (candidate && !isUnfinishedSpeakingAttempt(candidate)) {
-        logSkippedCompletedAutoRestore();
-      }
-      if (pruned) saveActiveSpeakingSession(session);
-      loadRandomQuestion(currentPart);
-      return;
-    }
-    loadRandomQuestion(1);
+      loadRandomQuestion(1);
+    })();
   }, []);
 
   useEffect(() => {
@@ -947,17 +1368,19 @@ export default function SpeakingPractice() {
     }
     if (!question || step === 'recording' || step === 'analyzing') return;
     persistCurrentSpeakingAttempt(providerErrorMessage ? 'provider_failed' : undefined);
-  }, [part, question, part1Thread, activeThreadIndex, lockedThreadAnswers, step, transcript, rawTranscript, audioTranscript, transcriptionSource, feedback, providerErrorMessage]);
+  }, [part, question, part1Thread, part1RetryReference, activeThreadIndex, lockedThreadAnswers, step, transcript, rawTranscript, audioTranscript, transcriptionSource, feedback, providerErrorMessage]);
 
   const getQuestionTopicKey = (item: SpeakingQuestion) => item.topicCategory || item.topic;
-  const analyzedPart1ThreadRecords = () =>
-    getPracticeRecords(1000).filter((record): record is SpeakingPracticeRecord =>
+  const analyzedPart1ThreadRecords = async () => {
+    const all = await listPracticeRecords({ module: 'speaking' });
+    return all.filter((record): record is SpeakingPracticeRecord =>
       record.module === 'speaking' &&
       record.part === 1 &&
       record.sessionKind === 'part1_topic_thread' &&
       record.status === 'analyzed' &&
       Boolean(record.feedback)
     );
+  };
 
   const chooseLeastRecentlyAnalyzedThread = (
     threads: Part1TopicThreadSet[],
@@ -984,7 +1407,7 @@ export default function SpeakingPractice() {
     return filtered[0] || sorted[0] || null;
   };
 
-  const selectThreadForTopic = (
+  const selectThreadForTopic = async (
     topicId: string,
     options?: {
       avoidThreadId?: string;
@@ -993,7 +1416,8 @@ export default function SpeakingPractice() {
   ) => {
     const topic = part1TopicBuckets.find(item => item.topicId === topicId);
     if (!topic) return null;
-    const records = analyzedPart1ThreadRecords().filter(record => record.topicId === topicId);
+    const allRecords = await analyzedPart1ThreadRecords();
+    const records = allRecords.filter(record => record.topicId === topicId);
     const practicedIds = new Set(records.map(record => record.threadId).filter(Boolean));
     const eligibleThreads = options?.avoidThreadId && topic.threads.some(thread => thread.id !== options.avoidThreadId)
       ? topic.threads.filter(thread => thread.id !== options.avoidThreadId)
@@ -1006,9 +1430,9 @@ export default function SpeakingPractice() {
     return pickRandomItem(eligibleThreads);
   };
 
-  const pickTopicForFreshPart1Thread = (avoidTopicId?: string) => {
+  const pickTopicForFreshPart1Thread = async (avoidTopicId?: string) => {
     if (!part1TopicBuckets.length) return null;
-    const records = analyzedPart1ThreadRecords();
+    const records = await analyzedPart1ThreadRecords();
     const analyzedThreadIds = new Set(records.map(record => record.threadId).filter(Boolean));
     const analyzedTopicIds = new Set(records.map(record => record.topicId).filter(Boolean));
     const mostRecentTopicId = records[0]?.topicId;
@@ -1056,12 +1480,12 @@ export default function SpeakingPractice() {
     };
   };
 
-  const loadRandomQuestion = (p: 1 | 2 | 3, excludeQuestionId?: string, avoidTopicKey?: string) => {
+  const loadRandomQuestion = async (p: 1 | 2 | 3, excludeQuestionId?: string, avoidTopicKey?: string) => {
     invalidateCaptureContext();
     if (p === 1) {
-      const topicSelection = pickTopicForFreshPart1Thread(avoidTopicKey);
+      const topicSelection = await pickTopicForFreshPart1Thread(avoidTopicKey);
       const thread = topicSelection?.topic
-        ? selectThreadForTopic(topicSelection.topic.topicId, { reuseAfterCoverage: true })
+        ? await selectThreadForTopic(topicSelection.topic.topicId, { reuseAfterCoverage: true })
         : null;
       if (thread) {
         addDebugLog(`Part 1 selector chose ${thread.topicId}/${thread.id} (${topicSelection?.reason || 'default selection'}).`);
@@ -1081,6 +1505,7 @@ export default function SpeakingPractice() {
     invalidateCaptureContext();
     activeAttemptIdRef.current = createRecordId('sp');
     setPart1Thread(null);
+    setPart1RetryReference(null);
     setLockedThreadAnswers([]);
     setActiveThreadIndex(0);
     setQuestion(random);
@@ -1174,9 +1599,15 @@ export default function SpeakingPractice() {
     if (!question) return;
     invalidateCaptureContext();
     if (part === 1 && part1Thread) {
-      startPart1Thread(part1Thread);
+      const retryReference = feedback ? buildPart1RetryReference(feedback, activeAttemptIdRef.current) : null;
+      startPart1Thread(part1Thread, [], 0, retryReference);
       setProviderDiagnostic(null);
       addDebugLog(`Retrying exact Part 1 thread: ${part1Thread.id}`);
+      if (retryReference) {
+        addDebugLog('part1RetryChain:continued');
+        addDebugLog(`part1RetryReferenceAnswers:${retryReference.cleanRetryAnswers.length}`);
+        addDebugLog(`part1MaterialContinuityCarried:${retryReference.carriedMyUsableMaterial?.length || 0}`);
+      }
       addDebugLog('Started a fresh Part 1 topic-thread attempt.');
       return;
     }
@@ -1196,6 +1627,7 @@ export default function SpeakingPractice() {
     hasManualTranscriptEditRef.current = false;
     autoAudioTranscriptionAttemptedRef.current = false;
     setFeedback(null);
+    setPart1RetryReference(null);
     setFeedbackFallbackUsed(false);
     setProviderDiagnostic(null);
     setTimer(0);
@@ -1230,6 +1662,7 @@ export default function SpeakingPractice() {
     clearActiveSpeakingAttempt(part);
     activeAttemptIdRef.current = createRecordId('sp');
     setPart1Thread(null);
+    setPart1RetryReference(null);
     setLockedThreadAnswers([]);
     setActiveThreadIndex(0);
     setQuestion(selected);
@@ -1771,6 +2204,53 @@ export default function SpeakingPractice() {
     setStep('idle');
   };
 
+  const replacePart1CleanRetryAnswers = (
+    source: SpeakingFeedback,
+    cleanRetryAnswers: Part1CleanRetryAnswer[],
+  ): SpeakingFeedback => {
+    if (!source.threadFeedback) return source;
+    const next: SpeakingFeedback = {
+      ...source,
+      threadFeedback: {
+        ...source.threadFeedback,
+        cleanRetryAnswers,
+      },
+      obsidianMarkdown: '',
+    };
+    return {
+      ...next,
+      obsidianMarkdown: buildSpeakingTrainingMarkdown(next),
+    };
+  };
+
+  const mergePart1CertificationDiagnostics = (
+    generationDiagnostic: ProviderDiagnostic,
+    certificationDiagnostics: ProviderDiagnostic[],
+    status: 'passed_first_attempt' | 'rewritten_then_passed' | 'failed_after_rewrite',
+    violationCount: number,
+  ): ProviderDiagnostic => ({
+    ...generationDiagnostic,
+    fallbackUsed: generationDiagnostic.fallbackUsed || certificationDiagnostics.some(item => item.fallbackUsed),
+    failureKind: certificationDiagnostics.find(item => item.failureKind)?.failureKind || generationDiagnostic.failureKind,
+    validationErrors: [
+      ...generationDiagnostic.validationErrors,
+      ...certificationDiagnostics.flatMap(item => item.validationErrors.map(error => `part1CleanRetryCertification:${error}`)),
+    ],
+    normalizedFields: [
+      ...(generationDiagnostic.normalizedFields || []),
+      ...certificationDiagnostics.flatMap((item, index) => [
+        `part1CleanRetryCertificationAttempt:${index + 1}`,
+        `part1CleanRetryCertificationProvider:${item.providerName}`,
+        `part1CleanRetryCertificationOperation:${item.operation}`,
+        ...(item.failureKind ? [`part1CleanRetryCertificationFailure:${item.failureKind}`] : []),
+        ...(item.normalizedFields || []).map(field => `part1CleanRetryCertification:${field}`),
+      ]),
+      `part1CleanRetryCertification:${status}`,
+      `part1CleanRetryCertificationViolationCount:${violationCount}`,
+    ],
+    timestamp: certificationDiagnostics.at(-1)?.timestamp || generationDiagnostic.timestamp,
+  });
+
   const analyzePart1Thread = async (answers: LockedThreadAnswer[] = lockedThreadAnswers) => {
     if (!part1Thread || answers.length < part1Thread.questions.length) return;
     const combinedTranscript = answers
@@ -1793,6 +2273,7 @@ export default function SpeakingPractice() {
           question: answer.question,
           answer: answer.transcript,
         })),
+        retryReference: part1RetryReference || undefined,
       }, false);
       const expectedThreadAnswers = answers.map(answer => ({
         questionId: answer.questionId,
@@ -1811,12 +2292,17 @@ export default function SpeakingPractice() {
           ...(integrity.unknownCleanRetryRefs.length ? [`part1CleanRetryUnknown:${integrity.unknownCleanRetryRefs.join(',')}`] : []),
           ...(integrity.missingContainers.length ? [`part1ThreadMissingContainers:${integrity.missingContainers.join(',')}`] : []),
           ...(integrity.threadAnswerMismatch.length ? [`part1ThreadAnswerMismatch:${integrity.threadAnswerMismatch.join(',')}`] : []),
+          ...(part1RetryReference ? [
+            'part1RetryChain:continued',
+            `part1RetryReferenceAnswers:${part1RetryReference.cleanRetryAnswers.length}`,
+            `part1MaterialContinuityCarried:${part1RetryReference.carriedMyUsableMaterial?.length || 0}`,
+          ] : []),
         ],
       };
       setProviderDiagnostic(diagnosticWithIntegrity);
 
       if (diagnostic.failureKind === 'provider_unavailable') {
-        setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your locked answers are preserved.');
+        setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
         setStep('editing');
         const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
         if (failedBase) {
@@ -1856,7 +2342,7 @@ export default function SpeakingPractice() {
       if (diagnostic.failureKind === 'parse_or_schema' || !integrity.ok) {
         setFeedbackFallbackUsed(diagnostic.fallbackUsed);
         setFeedback(null);
-        setProviderErrorMessage('AI feedback was incomplete. Your locked topic-thread answers are preserved; please retry analysis.');
+        setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
         setStep('editing');
         const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
         if (failedBase) {
@@ -1887,37 +2373,198 @@ export default function SpeakingPractice() {
         return;
       }
 
-      setFeedbackFallbackUsed(diagnostic.fallbackUsed);
-      setFeedback(result);
+      const stabilized = stabilizeCleanRetryAnswersForRetry(result, answers, part1RetryReference);
+      const candidateResult = stabilized.feedback;
+      if (stabilized.stabilizedCount) {
+        addDebugLog(`Part 1 clean retry answers kept from submitted certified retry: ${stabilized.stabilizedCount}`);
+      }
+
+      const certificationThreadAnswers = answers.map(answer => ({
+        questionId: answer.questionId,
+        question: answer.question,
+        answer: answer.transcript,
+      }));
+      const certificationDiagnostics: ProviderDiagnostic[] = [];
+      const saveCertificationFailure = (finalDiagnostic: ProviderDiagnostic, message: string) => {
+        setFeedbackFallbackUsed(finalDiagnostic.fallbackUsed);
+        setFeedback(null);
+        setProviderErrorMessage(message);
+        setStep('editing');
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
+        if (failedBase) {
+          const failedRecord = {
+            ...failedBase,
+            threadAnswers: answers,
+            providerDiagnostic: summarizeDiagnostic(finalDiagnostic),
+          };
+          const session = activeSessionRef.current || {
+            id: createRecordId('speaking_session'),
+            currentPart: 1,
+            attemptsByPart: {},
+            updatedAt: new Date().toISOString(),
+          };
+          activeSessionRef.current = {
+            ...session,
+            currentPart: 1,
+            attemptsByPart: {
+              ...session.attemptsByPart,
+              1: failedRecord,
+            },
+            updatedAt: new Date().toISOString(),
+          };
+          saveActiveSpeakingSession(activeSessionRef.current);
+          upsertPracticeRecord(failedRecord);
+        }
+      };
+
+      const attempt1 = await routedCertifyPart1CleanRetry({
+        topic: part1Thread.topic,
+        threadId: part1Thread.id,
+        threadAnswers: certificationThreadAnswers,
+        cleanRetryAnswers: candidateResult.threadFeedback?.cleanRetryAnswers || [],
+        attempt: 1,
+      });
+      certificationDiagnostics.push(attempt1.diagnostic);
+      setProviderDiagnostic(attempt1.diagnostic);
+      addDebugLog(`Part 1 clean retry certification attempt 1: ${attempt1.feedback.status}`);
+      addDebugLog(`Part 1 clean retry certification attempt 1 violations: ${attempt1.feedback.violations.length}`);
+
+      let finalResult = candidateResult;
+      let finalDiagnostic = mergePart1CertificationDiagnostics(
+        diagnosticWithIntegrity,
+        certificationDiagnostics,
+        attempt1.feedback.status === 'passed' && !attempt1.diagnostic.failureKind
+          ? 'passed_first_attempt'
+          : 'failed_after_rewrite',
+        attempt1.feedback.violations.length,
+      );
+
+      if (attempt1.diagnostic.failureKind) {
+        setProviderDiagnostic(finalDiagnostic);
+        saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
+        addDebugLog(`Part 1 clean retry certification provider failure: ${attempt1.diagnostic.failureKind}`);
+        return;
+      }
+
+      if (attempt1.feedback.status === 'failed') {
+        const revisedResult = replacePart1CleanRetryAnswers(candidateResult, attempt1.feedback.revisedCleanRetryAnswers || []);
+        const revisedIntegrity = validatePart1ThreadFeedbackIntegrity(revisedResult, expectedThreadAnswers);
+        if (!revisedIntegrity.ok) {
+          finalDiagnostic = mergePart1CertificationDiagnostics(
+            diagnosticWithIntegrity,
+            certificationDiagnostics,
+            'failed_after_rewrite',
+            attempt1.feedback.violations.length,
+          );
+          setProviderDiagnostic(finalDiagnostic);
+          saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
+          addDebugLog(`Part 1 clean retry certification failed without a complete rewrite: ${revisedIntegrity.summary}`);
+          return;
+        }
+
+        const attempt2 = await routedCertifyPart1CleanRetry({
+          topic: part1Thread.topic,
+          threadId: part1Thread.id,
+          threadAnswers: certificationThreadAnswers,
+          cleanRetryAnswers: revisedResult.threadFeedback?.cleanRetryAnswers || [],
+          attempt: 2,
+        });
+        certificationDiagnostics.push(attempt2.diagnostic);
+        setProviderDiagnostic(attempt2.diagnostic);
+        addDebugLog(`Part 1 clean retry certification attempt 2: ${attempt2.feedback.status}`);
+        addDebugLog(`Part 1 clean retry certification attempt 2 violations: ${attempt2.feedback.violations.length}`);
+
+        finalDiagnostic = mergePart1CertificationDiagnostics(
+          diagnosticWithIntegrity,
+          certificationDiagnostics,
+          attempt2.feedback.status === 'passed' && !attempt2.diagnostic.failureKind
+            ? 'rewritten_then_passed'
+            : 'failed_after_rewrite',
+          attempt1.feedback.violations.length + attempt2.feedback.violations.length,
+        );
+
+        if (attempt2.diagnostic.failureKind || attempt2.feedback.status !== 'passed') {
+          setProviderDiagnostic(finalDiagnostic);
+          saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
+          addDebugLog('Part 1 clean retry certification failed after one automatic rewrite.');
+          return;
+        }
+
+        finalResult = withPart1CertificationStatus(revisedResult, 'certified_after_rewrite');
+        addDebugLog('Part 1 clean retry answers required one automatic rewrite before certification.');
+      } else {
+        finalResult = withPart1CertificationStatus(finalResult, 'certified_first_attempt');
+      }
+
+      const carriedMaterial = part1RetryReference?.carriedMyUsableMaterial || [];
+      const freshMaterialCount = finalResult.threadFeedback?.materialBank.myUsableMaterial.length || 0;
+      const materialMerge = withMergedPart1Material(finalResult, carriedMaterial);
+      finalResult = withDerivedPart1SessionPriorityState(materialMerge.feedback);
+      const mergedMaterialCount = finalResult.threadFeedback?.materialBank.myUsableMaterial.length || 0;
+      const threadStable = isPart1ThreadStableResult(finalResult);
+      const priorityState = derivePart1SessionPriorityState(finalResult) || 'core_repair_needed';
+      const optionalDevelopmentAvailable = Boolean([
+        finalResult.threadFeedback?.nextRetryPlan?.priorityAccuracyPatternZh,
+        finalResult.threadFeedback?.nextRetryPlan?.answerLengthRuleZh,
+        finalResult.threadFeedback?.nextRetryPlan?.materialToTry,
+        ...(finalResult.threadFeedback?.nextRetryPlan?.actions || []),
+        ...(finalResult.threadFeedback?.threadLevelPatterns || []).flatMap(item => [item.observationZh, item.whyItMattersZh, item.retryRule]),
+      ].filter((item): item is string => Boolean(item?.trim())).some(isPart1OptionalDevelopmentText));
+      addDebugLog(`part1PreviousCleanerConflicts:${finalResult.threadFeedback?.previousCleanerConflictCount || 0}`);
+      addDebugLog(`part1MaterialFreshAccepted:${freshMaterialCount}`);
+      addDebugLog(`part1MaterialContinuityMerged:${mergedMaterialCount}`);
+      addDebugLog(`part1MaterialContinuityDeduped:${materialMerge.dedupedCount}`);
+      addDebugLog(`part1ThreadStable:${threadStable}`);
+      addDebugLog(`part1SessionPriorityState:${priorityState}`);
+      addDebugLog(`part1DevelopmentTargets:${finalResult.threadFeedback?.developmentTargets?.length || 0}`);
+      addDebugLog(`part1OptionalDevelopmentAvailable:${optionalDevelopmentAvailable}`);
+      finalDiagnostic = {
+        ...finalDiagnostic,
+        normalizedFields: [
+          ...(finalDiagnostic.normalizedFields || []),
+          `part1PreviousCleanerConflicts:${finalResult.threadFeedback?.previousCleanerConflictCount || 0}`,
+          `part1MaterialFreshAccepted:${freshMaterialCount}`,
+          `part1MaterialContinuityCarried:${carriedMaterial.length}`,
+          `part1MaterialContinuityMerged:${mergedMaterialCount}`,
+          `part1MaterialContinuityDeduped:${materialMerge.dedupedCount}`,
+          `part1ThreadStable:${threadStable}`,
+          `part1SessionPriorityState:${priorityState}`,
+          `part1DevelopmentTargets:${finalResult.threadFeedback?.developmentTargets?.length || 0}`,
+          `part1OptionalDevelopmentAvailable:${optionalDevelopmentAvailable}`,
+        ],
+      };
+
+      setProviderDiagnostic(finalDiagnostic);
+      setFeedbackFallbackUsed(finalDiagnostic.fallbackUsed);
+      setFeedback(finalResult);
       setStep('results');
-      const analyzedBase = buildCurrentSpeakingRecord('analyzed', result, combinedTranscript);
+      const analyzedBase = buildCurrentSpeakingRecord('analyzed', finalResult, combinedTranscript);
       if (analyzedBase) {
-        upsertPracticeRecord({
+        const saveResult = await upsertPracticeRecord({
           ...analyzedBase,
           threadAnswers: answers,
-          feedback: result,
-          obsidianMarkdown: result.obsidianMarkdown,
-          analyzedAt: diagnostic.timestamp,
-          providerDiagnostic: summarizeDiagnostic(diagnosticWithIntegrity),
+          feedback: finalResult,
+          obsidianMarkdown: finalResult.obsidianMarkdown,
+          analyzedAt: finalDiagnostic.timestamp,
+          providerDiagnostic: summarizeDiagnostic(finalDiagnostic),
         });
+        if (!saveResult.ok) setStorageFullWarning('本地存储空间已满，分析结果未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
       }
       clearActiveSpeakingAttempt(1);
       saveSession({
         id: `sp_${Date.now()}`,
-        date: new Date().toISOString(),
         module: 'speaking',
-        mode: 'practice',
-        question: part1Thread.title,
-        transcript: combinedTranscript,
-        transcriptOrigin: 'manual',
-        transcriptSource: 'reviewed',
-        feedback: result,
-        providerDiagnostic: summarizeDiagnostic(diagnosticWithIntegrity),
+        part: 1,
+        band: finalResult.bandEstimateExcludingPronunciation || undefined,
       });
-      addDebugLog('Part 1 topic-thread analysis complete and results displayed.');
+      addDebugLog(
+        finalDiagnostic.normalizedFields?.includes('part1CleanRetryCertification:rewritten_then_passed')
+          ? 'Part 1 topic-thread analysis complete; certified rewritten clean retry answers displayed.'
+          : 'Part 1 topic-thread analysis complete; clean retry answers certified on first pass.',
+      );
     } catch (error) {
       addDebugLog(`Part 1 topic-thread analysis error: ${error}`);
-      setProviderErrorMessage('AI feedback was incomplete. Your locked answers are preserved; please retry analysis.');
+      setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
       setStep('editing');
     }
   };
@@ -1968,10 +2615,11 @@ export default function SpeakingPractice() {
             updatedAt: new Date().toISOString(),
           };
           saveActiveSpeakingSession(activeSessionRef.current);
-          upsertPracticeRecord({
+          const saveResult = await upsertPracticeRecord({
             ...failedBase,
             providerDiagnostic: summarizeDiagnostic(diagnostic),
           });
+          if (!saveResult.ok) setStorageFullWarning('本地存储空间已满，未能保存当前状态。请先导出数据备份，修复存储前建议暂停新练习。');
         }
         addDebugLog("Provider unavailable for speaking feedback.");
         return;
@@ -2000,10 +2648,11 @@ export default function SpeakingPractice() {
             updatedAt: new Date().toISOString(),
           };
           saveActiveSpeakingSession(activeSessionRef.current);
-          upsertPracticeRecord({
+          const saveResult = await upsertPracticeRecord({
             ...failedBase,
             providerDiagnostic: summarizeDiagnostic(diagnostic),
           });
+          if (!saveResult.ok) setStorageFullWarning('本地存储空间已满，未能保存当前状态。请先导出数据备份，修复存储前建议暂停新练习。');
         }
         addDebugLog("Incomplete speaking feedback preserved as retryable state.");
         return;
@@ -2017,29 +2666,22 @@ export default function SpeakingPractice() {
       setStep('results');
       const analyzedBase = buildCurrentSpeakingRecord('analyzed', resultFeedback, cleanedTranscript);
       if (analyzedBase) {
-        upsertPracticeRecord({
+        const saveResult = await upsertPracticeRecord({
           ...analyzedBase,
           feedback: resultFeedback,
           obsidianMarkdown: resultFeedback.obsidianMarkdown,
           analyzedAt: finalDiagnostic.timestamp,
           providerDiagnostic: summarizeDiagnostic(finalDiagnostic),
         });
+        if (!saveResult.ok) setStorageFullWarning('本地存储空间已满，分析结果未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
       }
       clearActiveSpeakingAttempt(part);
-      
+
       saveSession({
         id: `sp_${Date.now()}`,
-        date: new Date().toISOString(),
         module: 'speaking',
-        mode: 'practice',
-        question: question?.question,
-        transcript: cleanedTranscript,
-        rawTranscript: rawTranscript || undefined,
-        audioTranscript: audioTranscript || undefined,
-        transcriptOrigin: transcriptOriginRef.current,
-        transcriptSource: transcriptionSource === 'browser' ? 'speech' : transcriptionSource,
-        feedback: resultFeedback,
-        providerDiagnostic: summarizeDiagnostic(finalDiagnostic),
+        part,
+        band: resultFeedback.bandEstimateExcludingPronunciation || undefined,
       });
       
       addDebugLog("Analysis complete and results displayed.");
@@ -2105,7 +2747,11 @@ export default function SpeakingPractice() {
     return new Map(entries);
   }, [threadFeedback?.cleanRetryAnswers]);
   const hasCleanRetryAnswers = (threadFeedback?.cleanRetryAnswers?.length || 0) > 0;
-  const threadLevelPatterns = threadFeedback?.threadLevelPatterns || [];
+  const answerLocalDevelopmentCount = (threadFeedback?.developmentTargets || []).length;
+  const hasNoErrorDevelopmentThread = Boolean(answerLocalDevelopmentCount && !threadAnnotations.length);
+  const threadLevelPatterns = (threadFeedback?.threadLevelPatterns || [])
+    .filter(item => !isLowValuePart1ThreadPattern(item))
+    .filter(() => !hasNoErrorDevelopmentThread);
   const legacyCoachingFallback = !hasCleanRetryAnswers ? threadFeedback?.answerByAnswerCoaching || [] : [];
   const nextRetryPlan = threadFeedback?.nextRetryPlan;
   const nextRetryPlanItems = [
@@ -2114,16 +2760,35 @@ export default function SpeakingPractice() {
     nextRetryPlan?.materialToTry && `Try naturally: ${nextRetryPlan.materialToTry}`,
     ...(nextRetryPlan?.actions || []),
   ].filter((item): item is string => Boolean(item?.trim()));
+  const previousCleanerConflictCount = threadFeedback?.previousCleanerConflictCount || 0;
+  const part1SessionPriorityState = step === 'results' && !providerErrorMessage
+    ? derivePart1SessionPriorityState(feedback)
+    : null;
+  const part1ThreadStable = part1SessionPriorityState === 'topic_complete';
+  const part1DevelopmentNeeded = part1SessionPriorityState === 'development_needed';
+  const part1CoreRepairNeeded = part1SessionPriorityState === 'core_repair_needed';
+  const part1SystemRevisionConflict = part1SessionPriorityState === 'system_revision_conflict';
+  const part1DevelopmentTargets = consolidatePart1DevelopmentTargets(threadFeedback?.developmentTargets || []);
+  const part1DevelopmentTargetByQuestion = useMemo(() => new Map(
+    part1DevelopmentTargets.map(target => [target.questionRef, target] as const),
+  ), [part1DevelopmentTargets]);
+  const stableOptionalDevelopmentItems = nextRetryPlanItems.filter(isPart1OptionalDevelopmentText);
+  const displayPart1MaterialSeeds = (threadFeedback?.materialBank.myUsableMaterial || []).filter(isUsefulPart1DevelopmentSeed);
+  const displayPart1ReusableMaterials = (threadFeedback?.materialBank.myUsableMaterial || []).filter(isUsefulPart1ReusableMaterial);
+  const shouldShowPart1RetryPlan = Boolean(
+    !part1ThreadStable &&
+    !part1DevelopmentNeeded &&
+    (nextRetryPlanItems.length || threadFeedback?.nextRetryFocusZh),
+  );
   const hasPart1MaterialBank = Boolean(
-    threadFeedback?.materialBank.myUsableMaterial.length ||
-    threadFeedback?.materialBank.reusableSpokenLanguage.length,
+    displayPart1MaterialSeeds.length || displayPart1ReusableMaterials.length,
   );
   const shouldShowPart1SessionBank = Boolean(
     threadLevelPatterns.length ||
     legacyCoachingFallback.length ||
     hasPart1MaterialBank ||
-    nextRetryPlanItems.length ||
-    threadFeedback?.nextRetryFocusZh,
+    shouldShowPart1RetryPlan ||
+    (part1ThreadStable && stableOptionalDevelopmentItems.length),
   );
   const part1AnnotationRenderByQuestion = useMemo(() => {
     const entries = threadAnswersForReview.map((answer, index) => {
@@ -2176,6 +2841,8 @@ export default function SpeakingPractice() {
   const selectedThreadAnnotationAnchor = selectedThreadAnnotationId
     ? threadAnnotationRefs.current[selectedThreadAnnotationId] || null
     : null;
+  const isCompletedPart1ThreadRecovery = Boolean(isPart1ThreadPractice && threadCompleted && step === 'editing' && providerErrorMessage);
+  const part1RecoveryLockedAnswerCount = isCompletedPart1ThreadRecovery ? lockedThreadAnswers.length : 0;
   const shouldShowTranscriptCard = (step !== 'idle' && step !== 'analyzing') && !(step === 'results' && isPart1ThreadResult);
   const shouldShowPracticePromptCard = !(step === 'results' && isPart1ThreadResult);
   const renderAnnotatedPart1Answer = (answer: string, questionRef: string) => {
@@ -2189,7 +2856,9 @@ export default function SpeakingPractice() {
       if (span.start > cursor) {
         nodes.push(<React.Fragment key={`text-${cursor}`}>{renderTextWithBreaks(answer.slice(cursor, span.start))}</React.Fragment>);
       }
-      const severity = strongestPart1AnnotationSeverity(span.annotation);
+      const severity = span.annotation.layers.some(layer => layer.origin === 'previous_cleaner_answer_conflict')
+        ? 'better_spoken_choice'
+        : strongestPart1AnnotationSeverity(span.annotation);
       nodes.push(
         <button
           key={span.annotation.id}
@@ -2276,10 +2945,10 @@ export default function SpeakingPractice() {
         items={speakingBankItems}
         itemLabel={part === 1 ? 'topic practice entry' : 'question'}
         onClose={() => setIsBankOpen(false)}
-        onSelect={(item) => {
+        onSelect={async (item) => {
           if (part === 1) {
             const selected = item.id
-              ? selectThreadForTopic(item.id, { avoidThreadId: part1Thread?.topicId === item.id ? part1Thread?.id : undefined, reuseAfterCoverage: true })
+              ? await selectThreadForTopic(item.id, { avoidThreadId: part1Thread?.topicId === item.id ? part1Thread?.id : undefined, reuseAfterCoverage: true })
               : null;
             if (selected) selectBankThread(selected);
             return;
@@ -2312,6 +2981,13 @@ export default function SpeakingPractice() {
         <div className="mb-6 space-y-2">
           <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
             {providerErrorMessage}
+          </div>
+        </div>
+      )}
+      {storageFullWarning && (
+        <div className="mb-6 space-y-2">
+          <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-sm rounded-sm font-sans">
+            {storageFullWarning}
           </div>
         </div>
       )}
@@ -2420,28 +3096,38 @@ export default function SpeakingPractice() {
               </div>
               <div className="mb-3 font-sans">
                 <p className="text-xs leading-5 text-paper-ink/55">
-                  Please quickly check the transcript before analysis.
+                  {isCompletedPart1ThreadRecovery
+                    ? `Your ${part1RecoveryLockedAnswerCount} locked ${part1RecoveryLockedAnswerCount === 1 ? 'answer is' : 'answers are'} already saved for this topic thread.`
+                    : 'Please quickly check the transcript before analysis.'}
                 </p>
               </div>
-              <textarea
-                value={transcript}
-                onChange={(e) => {
-                  setTranscript(e.target.value);
-                  setTranscriptCleanupNote('');
-                  setTranscriptionSource('manual');
-                  transcriptionSourceRef.current = 'manual';
-                  hasManualTranscriptEditRef.current = true;
-                  transcriptOriginRef.current = 'manual';
-                }}
-                disabled={step === 'recording' || step === 'results'}
-                placeholder={statusMessage === 'Mic denied' || statusMessage === 'Transcription unavailable' ? "Type your answer manually here..." : "Recognition will appear here..."}
-                className="w-full min-h-[300px] xl:min-h-[420px] bg-transparent border border-transparent rounded-sm font-serif text-lg leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
-              />
+              {isCompletedPart1ThreadRecovery ? (
+                <div className="min-h-[180px] xl:min-h-[260px] border border-paper-ink/10 bg-paper-ink/[0.025] p-5 font-sans text-sm leading-7 text-paper-ink/65">
+                  <p>
+                    No re-recording or retyping is needed. The completed topic-thread answers are locked and will be sent again exactly as saved.
+                  </p>
+                </div>
+              ) : (
+                <textarea
+                  value={transcript}
+                  onChange={(e) => {
+                    setTranscript(e.target.value);
+                    setTranscriptCleanupNote('');
+                    setTranscriptionSource('manual');
+                    transcriptionSourceRef.current = 'manual';
+                    hasManualTranscriptEditRef.current = true;
+                    transcriptOriginRef.current = 'manual';
+                  }}
+                  disabled={step === 'recording' || step === 'results'}
+                  placeholder={statusMessage === 'Mic denied' || statusMessage === 'Transcription unavailable' ? "Type your answer manually here..." : "Recognition will appear here..."}
+                  className="w-full min-h-[300px] xl:min-h-[420px] bg-transparent border border-transparent rounded-sm font-serif text-lg leading-relaxed placeholder:opacity-40 resize-y focus:border-accent-terracotta focus:shadow-[0_0_0_1px_rgba(166,77,50,0.2)]"
+                />
+              )}
               {step === 'editing' && (
                 <div className="mt-4 space-y-3 border-t border-paper-ink/10 pt-4 font-sans">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs leading-5 text-paper-ink/55">
-                      {transcriptStatus}
+                      {isCompletedPart1ThreadRecovery ? 'Locked answers are ready for re-analysis.' : transcriptStatus}
                     </p>
                     {canRetryAudioTranscription && (
                       <button
@@ -2461,7 +3147,9 @@ export default function SpeakingPractice() {
                   >
                     <Send className="w-4 h-4" /> {part1Thread
                       ? threadCompleted
-                        ? 'Analyze Topic Session'
+                        ? isCompletedPart1ThreadRecovery
+                          ? 'Re-analyze Locked Answers'
+                          : 'Analyze Topic Session'
                         : activeThreadIndex + 1 >= threadQuestionCount
                         ? 'Lock Final Answer & Analyze'
                         : 'Lock Answer & Continue'
@@ -2537,12 +3225,9 @@ export default function SpeakingPractice() {
                     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                       <div>
                         <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
-                          PART 1 · TOPIC THREAD · COMPLETE
+                          PART 1 · TOPIC THREAD · {part1ThreadStable ? 'COMPLETE' : part1DevelopmentNeeded ? 'DEVELOPMENT NEEDED' : part1SystemRevisionConflict ? 'SYSTEM REVISION' : 'REPAIR NEEDED'}
                         </p>
                         <h3 className="text-2xl text-paper-ink">{threadFeedback.topic}</h3>
-                        <p className="mt-2 text-xs text-paper-ink/50">
-                          {threadFeedback.questionCount} questions completed · transcript-based estimate; pronunciation is not formally scored.
-                        </p>
                       </div>
                       <div className="text-left md:text-right">
                         <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45">TOPIC PRACTICE ESTIMATE</p>
@@ -2554,13 +3239,74 @@ export default function SpeakingPractice() {
                         {speakingRange?.rationaleZh || feedback.estimateRationaleZh}
                       </p>
                     )}
+                    {part1CoreRepairNeeded && (
+                      <div className="mt-5 border-l-2 border-l-red-800/60 bg-red-50/50 px-4 py-3">
+                        <p className="text-sm leading-7 text-red-950">
+                          先修正影响准确性的错误，同时把重点题目补充到自然的 Part 1 长度。
+                        </p>
+                      </div>
+                    )}
+                    {part1SystemRevisionConflict && (
+                      <div className="mt-5 border-l-2 border-l-amber-700/60 bg-amber-50/70 px-4 py-3">
+                        <p className="text-sm leading-7 text-amber-950">
+                          上一轮系统给出的 cleaner answer 里有需要修订的表达。这不是你新引入的错误；请练习本轮修正后的版本。
+                        </p>
+                      </div>
+                    )}
+                    {part1DevelopmentNeeded && (
+                      <div className="mt-5 border-l-2 border-l-amber-700/60 bg-amber-50/70 px-4 py-3">
+                        <p className="text-sm leading-7 text-amber-950">
+                          核心语言已经稳定，但这一组回答还不够充分。下一步请在重点题目中补充一个真实细节或理由。
+                        </p>
+                      </div>
+                    )}
+                    {part1ThreadStable && (
+                      <div className="mt-5 border-l-2 border-l-emerald-700/45 bg-emerald-50/60 px-4 py-3">
+                        <p className="text-sm leading-7 text-emerald-950">
+                          本组回答准确性和展开都已经稳定。建议切换到新话题继续训练。
+                        </p>
+                      </div>
+                    )}
+                    {previousCleanerConflictCount > 0 && (
+                      <p className="mt-3 text-xs leading-6 text-paper-ink/55">
+                        Estimate note: one correction came from a previous cleaner answer supplied by the system, so it should not be read as a new learner-introduced error.
+                      </p>
+                    )}
+                    {(part1ThreadStable || part1DevelopmentNeeded || part1SystemRevisionConflict || part1CoreRepairNeeded) && (
+                      <div className="mt-5 flex flex-wrap gap-3 border-t border-paper-ink/10 pt-4">
+                        {part1ThreadStable ? (
+                          <>
+                            <SerifButton onClick={changeQuestion} className="text-xs flex items-center gap-2">
+                              Change Topic <ArrowRight className="w-4 h-4" />
+                            </SerifButton>
+                            <SerifButton onClick={practiceThisQuestionAgain} variant="outline" className="text-xs flex items-center gap-2">
+                              <RefreshCcw className="w-4 h-4" /> Retry This Thread
+                            </SerifButton>
+                          </>
+                        ) : (
+                          <>
+                            <SerifButton onClick={practiceThisQuestionAgain} className="text-xs flex items-center gap-2">
+                              <RefreshCcw className="w-4 h-4" /> {part1DevelopmentNeeded ? 'Practise Developed Answers' : 'Retry Corrected Answers'}
+                            </SerifButton>
+                            <SerifButton onClick={changeQuestion} variant="outline" className="text-xs flex items-center gap-2">
+                              Change Topic <ArrowRight className="w-4 h-4" />
+                            </SerifButton>
+                          </>
+                        )}
+                        <SerifButton onClick={exportMarkdown} variant="outline" className="text-xs flex items-center gap-2">
+                          <FileDown className="w-4 h-4" /> Export Markdown
+                        </SerifButton>
+                      </div>
+                    )}
                   </PaperCard>
 
                   <PaperCard className="border-l-2 border-l-red-800/70">
                     <div className="mb-5 border-b border-paper-ink/10 pb-4">
                       <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-red-800/70">PART 1</p>
                       <h4 className="mt-1 text-xl font-bold tracking-wide text-paper-ink">ANNOTATED ANSWERS</h4>
-                      <p className="mt-2 text-sm leading-7 text-paper-ink/60">点击原回答中的标记，查看具体错误、修改方式与值得保留的表达。</p>
+                      {threadAnnotations.length > 0 && (
+                        <p className="mt-2 text-sm leading-7 text-paper-ink/60">点击原回答中的标记，查看具体错误和修改方式。</p>
+                      )}
                     </div>
                     <div className="space-y-5">
                       {threadAnswersForReview.map((answer, index) => {
@@ -2568,21 +3314,48 @@ export default function SpeakingPractice() {
                         const renderData = part1AnnotationRenderByQuestion.get(questionRef) || { anchored: [], unanchored: [] };
                         const answerAnnotationCount = renderData.anchored.length + renderData.unanchored.length;
                         const cleanRetry = cleanRetryByQuestion.get(questionRef);
+                        const developmentTarget = part1DevelopmentTargetByQuestion.get(questionRef);
+                        const shouldRenderDevelopmentCoaching = Boolean(developmentTarget && answerAnnotationCount === 0);
+                        const cleanRetryRepeatsStableAnswer = Boolean(
+                          (part1ThreadStable || part1DevelopmentNeeded) &&
+                          cleanRetry &&
+                          answerAnnotationCount === 0 &&
+                          isPart1CleanerAnswerEquivalent(answer.answer, cleanRetry.answer),
+                        );
+                        const shouldRenderCleanRetry = Boolean(cleanRetry && !cleanRetryRepeatsStableAnswer && answerAnnotationCount > 0);
                         return (
                           <section key={`${answer.questionId}-${index}`} className="border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                               <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">{questionRef}</p>
-                              <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
-                                {renderData.anchored.length
-                                  ? `${renderData.anchored.length} marked ${renderData.anchored.length === 1 ? 'span' : 'spans'}`
-                                  : answerAnnotationCount
-                                    ? `${renderData.unanchored.length} unanchored ${renderData.unanchored.length === 1 ? 'repair' : 'repairs'}`
-                                    : 'No priority language fixes identified'}
-                              </p>
+                              {(renderData.anchored.length > 0 || answerAnnotationCount > 0 || shouldRenderDevelopmentCoaching) && (
+                                <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
+                                  {renderData.anchored.length
+                                    ? `${renderData.anchored.length} marked ${renderData.anchored.length === 1 ? 'span' : 'spans'}`
+                                    : answerAnnotationCount
+                                      ? `${renderData.unanchored.length} unanchored ${renderData.unanchored.length === 1 ? 'repair' : 'repairs'}`
+                                      : 'Development coaching'}
+                                </p>
+                              )}
                             </div>
                             <p className="mb-3 text-lg leading-8 text-paper-ink">{answer.question}</p>
                             {renderAnnotatedPart1Answer(answer.answer, questionRef)}
-                            {cleanRetry && (
+                            {shouldRenderDevelopmentCoaching && developmentTarget && (
+                              <div className="mt-4 border-l-2 border-l-amber-700/45 bg-amber-50/60 px-4 py-3">
+                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-amber-900/60">发展建议</p>
+                                <p className="mt-2 text-sm leading-7 text-paper-ink/70">{developmentTarget.reasonZh}</p>
+                                <p className="mt-1 text-base leading-7 text-paper-ink">{developmentTarget.developmentMoveZh}</p>
+                                {developmentTarget.phraseScaffolds?.length ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {developmentTarget.phraseScaffolds.slice(0, 3).map(frame => (
+                                      <span key={frame} className="border border-amber-700/15 bg-paper-50/80 px-2 py-1 text-xs leading-5 text-paper-ink/65">
+                                        {frame}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+                            {shouldRenderCleanRetry && cleanRetry && (
                               <div className="mt-4 border border-accent-terracotta/15 bg-paper-50/80 p-4">
                                 <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">
                                   A CLEANER ANSWER FOR YOUR NEXT TRY
@@ -2604,7 +3377,7 @@ export default function SpeakingPractice() {
                                     onClick={() => setSelectedThreadAnnotationId(annotation.id)}
                                   >
                                     <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">
-                                      {annotation.layers.map(layer => part1AnnotationSeverityLabel(layer.severity)).filter((label, labelIndex, labels) => labels.indexOf(label) === labelIndex).join(' / ')}
+                                      {annotation.layers.map(part1AnnotationLayerLabel).filter((label, labelIndex, labels) => labels.indexOf(label) === labelIndex).join(' / ')}
                                     </p>
                                     <p className="mt-2 text-sm leading-6 text-paper-ink/65">Your words: {annotation.sourceQuote}</p>
                                     <p className="mt-1 text-base leading-7 text-paper-ink">
@@ -2623,10 +3396,11 @@ export default function SpeakingPractice() {
                   {shouldShowPart1SessionBank && (
                   <PaperCard className="border-l-2 border-l-accent-terracotta/45">
                     <div className="mb-5 border-b border-paper-ink/10 pb-4">
-                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">PART 2</p>
-                      <h4 className="mt-1 text-xl font-bold tracking-wide text-paper-ink">SESSION PATTERNS & MATERIAL BANK</h4>
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">PART 1 · SESSION REVIEW</p>
+                      <h4 className="mt-1 text-xl font-bold tracking-wide text-paper-ink">SESSION PATTERNS & MATERIAL DEVELOPMENT</h4>
                     </div>
 
+                    {(threadLevelPatterns.length > 0 || legacyCoachingFallback.length > 0) && (
                     <section className="mb-6">
                       <h5 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">THREAD-LEVEL PATTERNS</h5>
                       {threadLevelPatterns.length > 0 ? (
@@ -2650,66 +3424,71 @@ export default function SpeakingPractice() {
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        <p className="text-sm leading-7 text-paper-ink/55">No thread-level pattern was identified beyond the annotated local fixes.</p>
+                      ) : null}
+                    </section>
+                    )}
+
+                    {hasPart1MaterialBank && (
+                    <section className="border border-paper-ink/10 bg-paper-ink/[0.02] p-5">
+                      {displayPart1MaterialSeeds.length > 0 && (
+                        <div>
+                          <h5 className="text-sm font-bold leading-7 text-paper-ink">可继续发展的个人线索</h5>
+                          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                            {displayPart1MaterialSeeds.map((item, index) => (
+                              <div key={`${item.materialKey || item.sourceWording || item.reusableVersion}-${index}`} className="border-l-2 border-l-amber-700/30 bg-paper-50/60 py-3 pl-4 pr-3">
+                                <p className="text-base font-bold leading-7 text-paper-ink">{item.materialCore || item.sourceWording || item.reusableVersion}</p>
+                                <p className="mt-1 text-sm leading-7 text-paper-ink/70">{part1MaterialDevelopmentMove(item)}</p>
+                                {item.expressionFrames?.length ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {item.expressionFrames.slice(0, 3).map(frame => (
+                                      <span key={frame} className="border border-amber-700/15 bg-paper-ink/[0.03] px-2 py-1 text-xs leading-5 text-paper-ink/60">
+                                        {frame}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {displayPart1ReusableMaterials.length > 0 && (
+                        <div className={displayPart1MaterialSeeds.length > 0 ? 'mt-6 border-t border-paper-ink/10 pt-5' : ''}>
+                          <h5 className="text-sm font-bold leading-7 text-paper-ink">可积累素材</h5>
+                          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                            {displayPart1ReusableMaterials.map((item, index) => (
+                              <div key={`${item.materialKey || item.reusableVersion}-${index}`} className="border-l-2 border-l-accent-terracotta/30 bg-paper-50/60 py-3 pl-4 pr-3">
+                                <p className="text-base font-bold leading-7 text-paper-ink">{item.materialCore || item.sourceWording || item.reusableVersion}</p>
+                                <p className="mt-1 text-sm leading-7 text-paper-ink/60">{part1MaterialUseCases(item).join(' / ')}</p>
+                                <p className="mt-2 text-sm leading-7 text-paper-ink/70">{part1MaterialDevelopmentMove(item)}</p>
+                                {item.expressionFrames?.length ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {item.expressionFrames.slice(0, 2).map(frame => (
+                                      <span key={frame} className="border border-paper-ink/10 bg-paper-ink/[0.03] px-2 py-1 text-xs leading-5 text-paper-ink/55">
+                                        {frame}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {item.developedExample && (
+                                  <p className="mt-3 text-base leading-7 text-paper-ink">{part1MaterialDevelopedExample(item)}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </section>
+                    )}
 
-                    <section className="border border-paper-ink/10 bg-paper-ink/[0.02] p-5">
-                      <h5 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-4">SPEAKING MATERIAL BANK</h5>
-                      <p className="mb-4 text-sm leading-7 text-paper-ink/55">这些是值得保留、以后可迁移到口语 Part 1/2/3 的个人素材和自然表达。</p>
-                      <div className="grid gap-5 lg:grid-cols-2">
-                        <div>
-                          <h6 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-3">MY USABLE MATERIAL</h6>
-                          <div className="space-y-3">
-                            {threadFeedback.materialBank.myUsableMaterial.length ? threadFeedback.materialBank.myUsableMaterial.map((item, index) => (
-                              <div key={`${item.reusableVersion}-${index}`} className="border-l-2 border-l-accent-terracotta/30 pl-4">
-                                {item.sourceWording && <p className="text-sm text-paper-ink/55 leading-6">From: {item.sourceWording}</p>}
-                                <p className="text-lg leading-8 text-paper-ink">{item.reusableVersion}</p>
-                                <div className="mt-3 space-y-1">
-                                  {part1MaterialTransferGroups(item.reuseFor).filter(group => group.items.length).map(group => (
-                                    <p key={`${item.reusableVersion}-${group.label}`} className="text-xs leading-5 text-paper-ink/45">
-                                      <span className="font-sans font-bold uppercase tracking-widest text-paper-ink/35">{group.label}: </span>
-                                      {group.items.join(' / ')}
-                                    </p>
-                                  ))}
-                                </div>
-                                {item.explanationZh && <p className="mt-2 text-sm leading-7 text-paper-ink/60">{item.explanationZh}</p>}
-                              </div>
-                            )) : (
-                              <p className="text-sm leading-7 text-paper-ink/55">No stable personal material was identified yet.</p>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <h6 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-3">REUSABLE SPOKEN LANGUAGE</h6>
-                          <div className="space-y-3">
-                            {threadFeedback.materialBank.reusableSpokenLanguage.length ? threadFeedback.materialBank.reusableSpokenLanguage.map((item, index) => (
-                              <div key={`${item.reusableVersion}-${index}`} className="border-l-2 border-l-paper-ink/20 pl-4">
-                                <p className="text-lg leading-8 text-paper-ink">{item.reusableVersion}</p>
-                                <div className="mt-3 space-y-1">
-                                  {part1MaterialTransferGroups(item.reuseFor).filter(group => group.items.length).map(group => (
-                                    <p key={`${item.reusableVersion}-${group.label}`} className="text-xs leading-5 text-paper-ink/45">
-                                      <span className="font-sans font-bold uppercase tracking-widest text-paper-ink/35">{group.label}: </span>
-                                      {group.items.join(' / ')}
-                                    </p>
-                                  ))}
-                                </div>
-                                {item.explanationZh && <p className="mt-2 text-sm leading-7 text-paper-ink/60">{item.explanationZh}</p>}
-                              </div>
-                            )) : (
-                              <p className="text-sm leading-7 text-paper-ink/55">No stable reusable spoken expressions were identified yet.</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-
+                    {(shouldShowPart1RetryPlan || (part1ThreadStable && stableOptionalDevelopmentItems.length > 0)) && (
                     <section className="mt-6 border-t border-paper-ink/10 pt-5">
-                      <h5 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">NEXT RETRY PLAN</h5>
-                      {nextRetryPlanItems.length ? (
+                      <h5 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">
+                        {part1ThreadStable ? 'OPTIONAL IMPROVEMENT GUIDANCE' : 'NEXT RETRY PLAN'}
+                      </h5>
+                      {(part1ThreadStable ? stableOptionalDevelopmentItems : nextRetryPlanItems).length ? (
                         <ul className="space-y-2">
-                          {nextRetryPlanItems.map((item, index) => (
+                          {(part1ThreadStable ? stableOptionalDevelopmentItems : nextRetryPlanItems).map((item, index) => (
                             <li key={`${item}-${index}`} className="border-l-2 border-l-accent-terracotta/25 pl-3 text-base leading-8 text-paper-ink/75">
                               {item}
                             </li>
@@ -2719,13 +3498,25 @@ export default function SpeakingPractice() {
                         <p className="text-lg leading-8 text-paper-ink/80">{threadFeedback.nextRetryFocusZh}</p>
                       )}
                     </section>
+                    )}
 
                     <div className="mt-6 flex flex-wrap gap-3 border-t border-paper-ink/10 pt-5">
                       <SerifButton onClick={exportMarkdown} className="text-xs flex items-center justify-center gap-2 py-3" variant="outline">
                         <FileDown className="w-4 h-4" /> Export Markdown
                       </SerifButton>
-                      <SerifButton onClick={practiceThisQuestionAgain} className="text-xs">Retry This Thread</SerifButton>
-                      <SerifButton onClick={changeQuestion} variant="outline" className="text-xs">Change Topic</SerifButton>
+                      {part1ThreadStable ? (
+                        <>
+                          <SerifButton onClick={changeQuestion} className="text-xs">Practise a New Topic</SerifButton>
+                          <SerifButton onClick={practiceThisQuestionAgain} variant="outline" className="text-xs">Retry This Thread</SerifButton>
+                        </>
+                      ) : (
+                        <>
+                          <SerifButton onClick={practiceThisQuestionAgain} className="text-xs">
+                            {part1DevelopmentNeeded ? 'Practise Developed Answers' : 'Retry This Thread'}
+                          </SerifButton>
+                          <SerifButton onClick={changeQuestion} variant="outline" className="text-xs">Change Topic</SerifButton>
+                        </>
+                      )}
                     </div>
                   </PaperCard>
                   )}

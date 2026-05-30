@@ -6,6 +6,7 @@ export type ProviderOperation =
   | 'speaking_audio_transcription'
   | 'speaking_score_only'
   | 'speaking_analysis'
+  | 'part1_clean_retry_certification'
   | 'writing_analysis'
   | 'writing_task1_analysis'
   | 'writing_framework_coach'
@@ -147,12 +148,50 @@ export interface SpeakingThreadAnswer {
   answer: string;
 }
 
+export type Part1CleanRetryCertificationStatus = 'passed' | 'failed';
+export type Part1DisplayedCleanRetryCertificationStatus =
+  | 'certified_first_attempt'
+  | 'certified_after_rewrite'
+  | 'legacy_or_unverified';
+export type Part1AnnotationOrigin = 'learner' | 'previous_cleaner_answer_conflict';
+export type Part1SessionPriorityState =
+  | 'core_repair_needed'
+  | 'system_revision_conflict'
+  | 'development_needed'
+  | 'topic_complete';
+export type Part1DevelopmentStatus = 'needed' | 'sufficient';
+
+export interface Part1RetryReferenceCleanAnswer {
+  questionRef: string;
+  questionId?: string;
+  answer: string;
+  certificationStatus: Part1DisplayedCleanRetryCertificationStatus;
+}
+
+export interface Part1RetryReferenceContext {
+  retryChainId: string;
+  parentAttemptId?: string;
+  cleanRetryAnswers: Part1RetryReferenceCleanAnswer[];
+  carriedMyUsableMaterial?: SpeakingMaterialBankItem[];
+}
+
+export interface Part1CleanRetryCertificationViolation {
+  questionRef: string;
+  issueType: string;
+  severity: 'must_fix';
+  candidateWording: string;
+  saferVersion?: string;
+  reasonZh: string;
+}
+
 export interface SpeakingThreadMustFixItem {
   questionRefs: string[];
   learnerWording: string;
   betterVersion: string;
   explanationZh: string;
   recurring?: boolean;
+  origin?: Part1AnnotationOrigin;
+  priorCertificationStatus?: Part1DisplayedCleanRetryCertificationStatus;
 }
 
 export interface SpeakingThreadCoachingItem {
@@ -181,6 +220,9 @@ export interface Part1AnswerAnnotationLayer {
   better: string;
   explanationZh: string;
   reuseGuidanceZh?: string;
+  origin?: Part1AnnotationOrigin;
+  priorCertificationStatus?: Part1DisplayedCleanRetryCertificationStatus;
+  systemRevisionNoteZh?: string;
 }
 
 export interface Part1AnswerAnnotation {
@@ -197,11 +239,38 @@ export interface Part1CleanRetryAnswer {
   noteZh?: string;
 }
 
+export interface Part1CleanRetryCertificationResult {
+  module: 'speaking';
+  operation: 'part1_clean_retry_certification';
+  topic: string;
+  threadId: string;
+  attempt: 1 | 2;
+  status: Part1CleanRetryCertificationStatus;
+  violations: Part1CleanRetryCertificationViolation[];
+  revisedCleanRetryAnswers?: Part1CleanRetryAnswer[];
+  rationaleZh?: string;
+}
+
+export interface Part1DevelopmentTarget {
+  questionRef: string;
+  reasonZh: string;
+  developmentMoveZh: string;
+  phraseScaffolds?: string[];
+  optionalDevelopedAnswer?: string;
+}
+
 export interface SpeakingMaterialBankItem {
   sourceWording?: string;
   reusableVersion: string;
   reuseFor: string[];
   explanationZh?: string;
+  materialCore?: string;
+  materialKind?: 'development_seed' | 'reusable_personal_material';
+  part1UseCases?: string[];
+  developmentMoveZh?: string;
+  developedExample?: string;
+  expressionFrames?: string[];
+  materialKey?: string;
 }
 
 export interface SpeakingThreadLevelPattern {
@@ -224,6 +293,10 @@ export interface SpeakingThreadFeedback {
   mustFix: SpeakingThreadMustFixItem[];
   annotations?: Part1AnswerAnnotation[];
   cleanRetryAnswers: Part1CleanRetryAnswer[];
+  cleanRetryCertificationStatus?: Part1DisplayedCleanRetryCertificationStatus;
+  part1SessionPriorityState?: Part1SessionPriorityState;
+  developmentStatus?: Part1DevelopmentStatus;
+  developmentTargets?: Part1DevelopmentTarget[];
   threadLevelPatterns?: SpeakingThreadLevelPattern[];
   answerByAnswerCoaching: SpeakingThreadCoachingItem[];
   highImpactPhraseFixes: SpeakingThreadPhraseFixItem[];
@@ -234,6 +307,7 @@ export interface SpeakingThreadFeedback {
   optionalPolish: SpeakingThreadPhraseFixItem[];
   nextRetryPlan?: SpeakingNextRetryPlan;
   nextRetryFocusZh: string;
+  previousCleanerConflictCount?: number;
 }
 
 export interface SpeakingFeedback {
@@ -244,6 +318,7 @@ export interface SpeakingFeedback {
   topic?: string;
   threadId?: string;
   threadAnswers?: SpeakingThreadAnswer[];
+  part1RetryReference?: Part1RetryReferenceContext;
   threadFeedback?: SpeakingThreadFeedback;
   question: string;
   transcript: string;

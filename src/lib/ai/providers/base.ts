@@ -1,6 +1,9 @@
 import {
   SpeakingFeedback,
   SpeakingAudioTranscriptionResult,
+  Part1CleanRetryAnswer,
+  Part1CleanRetryCertificationResult,
+  Part1RetryReferenceContext,
   SpeakingScoreOnlyResult,
   SpeakingTargetValidationResult,
   SpeakingThreadAnswer,
@@ -19,6 +22,7 @@ export interface SpeakingAnalysisRequest {
   topic?: string;
   threadId?: string;
   threadAnswers?: SpeakingThreadAnswer[];
+  retryReference?: Part1RetryReferenceContext;
   authoritativeScore?: SpeakingScoreOnlyResult;
   targetRepairFocus?: string;
   targetAttempt?: number;
@@ -41,6 +45,14 @@ export interface SpeakingAudioTranscriptionRequest {
   cueCard?: string;
   roughBrowserTranscript?: string;
   transcriptionHints?: string[];
+}
+
+export interface Part1CleanRetryCertificationRequest {
+  topic: string;
+  threadId: string;
+  threadAnswers: SpeakingThreadAnswer[];
+  cleanRetryAnswers: Part1CleanRetryAnswer[];
+  attempt: 1 | 2;
 }
 
 export interface WritingAnalysisRequest {
@@ -104,6 +116,8 @@ export interface AIProvider {
   analyzeSpeaking(params: SpeakingAnalysisRequest): Promise<SpeakingFeedback | string>;
 
   validateSpeakingTarget?(params: SpeakingTargetValidationRequest): Promise<SpeakingTargetValidationResult | string>;
+
+  certifyPart1CleanRetry?(params: Part1CleanRetryCertificationRequest): Promise<Part1CleanRetryCertificationResult | string>;
   
   analyzeWriting(params: WritingAnalysisRequest): Promise<WritingFeedback | string>;
 

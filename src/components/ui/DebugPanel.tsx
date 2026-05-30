@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/src/context/AppContext';
 import { PaperCard } from './PaperCard';
 import { SerifButton } from './SerifButton';
@@ -7,6 +7,7 @@ import { useLocation } from 'react-router-dom';
 import { getAIProviderName } from '@/src/lib/ai';
 import type { ProviderDiagnostic } from '@/src/lib/ai/schemas';
 import { resolveTargetState } from '@/src/lib/scoreLayer';
+import { getStorageHealth, getLegacySessionArchiveSummary, isRepositoryReady } from '@/src/lib/practiceRepository';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -106,6 +107,15 @@ export const DebugPanel: React.FC = () => {
   const [isProviderOpen, setIsProviderOpen] = useState(true);
   const { debugLogs, sessions, profile, capabilities, providerDiagnostic, providerDiagnostics } = useApp();
   const location = useLocation();
+  const [repoCounts, setRepoCounts] = useState<{ canonical: number; legacy: number }>({ canonical: 0, legacy: 0 });
+
+  useEffect(() => {
+    if (isOpen && isRepositoryReady()) {
+      Promise.all([getStorageHealth(), getLegacySessionArchiveSummary()])
+        .then(([health, legacy]) => setRepoCounts({ canonical: health.indexedDb.practiceRecords, legacy: legacy.count }))
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   const exportState = () => {
     const data = {
@@ -166,7 +176,7 @@ export const DebugPanel: React.FC = () => {
           <h4 className="font-bold mb-2 text-paper-ink/60 border-b border-paper-ink/5 uppercase tracking-tighter">Application</h4>
           <div className="bg-paper-100 p-2 rounded border border-paper-ink/5 space-y-1">
             <p><span className="opacity-50">Route:</span> {location.pathname}</p>
-            <p><span className="opacity-50">Saved Sessions:</span> {sessions.length}</p>
+            <p><span className="opacity-50">Canonical Records:</span> {repoCounts.canonical || '...'} {repoCounts.legacy > 0 && <span className="opacity-50">(+{repoCounts.legacy} legacy archive)</span>}</p>
           </div>
         </section>
 

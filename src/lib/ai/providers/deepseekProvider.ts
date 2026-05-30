@@ -2,6 +2,8 @@ import { AIProvider } from './base';
 import {
   frameworkCoachSchemaInstruction,
   frameworkSchemaInstruction,
+  part1CleanRetryCertificationInstruction,
+  part1CleanRetryCertificationSchemaInstruction,
   speakingFeedbackDepthInstruction,
   speakingPart1TopicThreadInstruction,
   speakingPart1TopicThreadSchemaInstruction,
@@ -68,6 +70,7 @@ export class DeepSeekProvider implements AIProvider {
     topic?: string;
     threadId?: string;
     threadAnswers?: { questionId: string; question: string; answer: string }[];
+    retryReference?: import('./base').SpeakingAnalysisRequest['retryReference'];
     authoritativeScore?: {
       bandEstimateExcludingPronunciation: number;
       scores: {
@@ -180,6 +183,25 @@ ${speakingTargetValidationSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`);
+  }
+
+  async certifyPart1CleanRetry(params: {
+    topic: string;
+    threadId: string;
+    threadAnswers: { questionId: string; question: string; answer: string }[];
+    cleanRetryAnswers: { questionRef: string; answer: string; noteZh?: string }[];
+    attempt: 1 | 2;
+  }): Promise<string> {
+    return this.generateJson(`${strictJsonInstruction}
+
+You are a focused internal verifier for IELTS Speaking Part 1 clean retry answers.
+Chinese is only for concise violation reasons. English is for candidate wording and safer versions.
+${part1CleanRetryCertificationInstruction}
+
+${part1CleanRetryCertificationSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`, 0.1);
   }
 
   async analyzeWriting(params: {

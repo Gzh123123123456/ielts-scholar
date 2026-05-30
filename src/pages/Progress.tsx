@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
@@ -18,13 +18,12 @@ import {
   speakingPart3,
 } from '@/src/data/speaking/activeSpeakingBank';
 import {
-  getPracticeRecords,
   PracticeRecord,
   SpeakingPracticeRecord,
   WritingTask1PracticeRecord,
   WritingTask2PracticeRecord,
-  clearAllIeltsLocalData,
 } from '@/src/lib/practiceRecords';
+import { listPracticeRecords, clearAllPersonalDataExplicitly } from '@/src/lib/practiceRepository';
 import {
   combineWritingEstimates,
   conservativeRecentEstimate,
@@ -278,7 +277,12 @@ const buildTrainingSuggestions = (
 
 export default function Progress() {
   const [, setResetVersion] = useState(0);
-  const records = getPracticeRecords(80);
+  const [records, setRecords] = useState<PracticeRecord[]>([]);
+  const [recordsLoaded, setRecordsLoaded] = useState(false);
+
+  useEffect(() => {
+    listPracticeRecords().then(recs => { setRecords(recs); setRecordsLoaded(true); }).catch(() => setRecordsLoaded(true));
+  }, []);
   const scoredSpeaking = records.filter(isScoredSpeaking);
   const scoredWritingTask2 = records.filter(isScoredWritingTask2);
   const scoredWritingTask1 = records.filter(isScoredWritingTask1);
@@ -327,10 +331,12 @@ export default function Progress() {
   );
 
   const clearAllPersonalData = () => {
-    const confirmed = window.confirm('清空所有个人数据？这会删除本浏览器里的练习记录、草稿、反馈、调试诊断和 API 使用估算。这个操作不能撤销。');
+    const confirmed = window.confirm('清空所有个人数据？这将删除 IndexedDB 中的所有练习记录、草稿、存档会话、反馈以及本地设置和诊断数据。这个操作不能撤销。');
     if (!confirmed) return;
-    clearAllIeltsLocalData();
-    setResetVersion(value => value + 1);
+    clearAllPersonalDataExplicitly().then(() => {
+      setResetVersion(value => value + 1);
+      setRecords([]);
+    });
   };
 
   return (

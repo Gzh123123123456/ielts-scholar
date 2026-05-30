@@ -1,5 +1,5 @@
 ﻿import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from './bands';
-import type { SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
+import type { Part1DevelopmentTarget, SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
 import { validatePart1ThreadFeedbackIntegrity } from './ai/part1ThreadIntegrity';
 import type { WritingTask1AcademicPrompt } from '../data/questions/bank';
 import type { WritingTask1QuickPlan } from './practiceRecords';
@@ -59,6 +59,23 @@ const cleanLearningText = (value?: string | null) => {
 
 const cleanLearningLines = (items: Array<string | undefined | null>) =>
   cleanLines(items.map(cleanLearningText)).filter(Boolean);
+
+const consolidatePart1DevelopmentTargets = (targets: Part1DevelopmentTarget[] = []): Part1DevelopmentTarget[] => {
+  const byQuestion = new Map<string, Part1DevelopmentTarget>();
+  targets.forEach(target => {
+    const refs = target.questionRef.split('/').map(ref => ref.trim()).filter(Boolean);
+    if (refs.length > 1) {
+      refs.forEach(ref => {
+        if (!byQuestion.has(ref)) byQuestion.set(ref, { ...target, questionRef: ref });
+      });
+      return;
+    }
+    if (!byQuestion.has(target.questionRef)) byQuestion.set(target.questionRef, target);
+  });
+  return Array.from(byQuestion.values()).sort(
+    (left, right) => Number(left.questionRef.replace(/^Q/i, '')) - Number(right.questionRef.replace(/^Q/i, '')),
+  );
+};
 
 const escapeTableCell = (value?: string | null) =>
   cleanLearningText(value).replace(/\|/g, '/');
@@ -744,6 +761,11 @@ const part1AnnotationLabel = (severity: string) => {
   return 'OPTIONAL POLISH';
 };
 
+const part1AnnotationLayerLabel = (layer: { severity: string; origin?: string }) =>
+  layer.origin === 'previous_cleaner_answer_conflict'
+    ? 'PREVIOUS CLEANER ANSWER CONFLICT'
+    : part1AnnotationLabel(layer.severity);
+
 export const formatPart1IssueTypeLabel = (issueType?: string) => {
   const normalized = (issueType || '')
     .replace(/[_-]+/g, ' ')
@@ -767,22 +789,135 @@ export const formatPart1IssueTypeLabel = (issueType?: string) => {
   return mapped[normalized] || normalized || 'language issue';
 };
 
-const part1TransferLine = (reuseFor: string[]) => {
-  const targets = cleanLearningLines(reuseFor);
-  return targets.length ? `  - 可迁移到：${targets.join('；')}` : '';
-};
-
 const part1MaterialItemLines = (item: {
   sourceWording?: string;
   reusableVersion: string;
   reuseFor: string[];
   explanationZh?: string;
-}) => [
-  `- ${item.reusableVersion}`,
-  item.sourceWording && `  - 来源表达：${item.sourceWording}`,
-  item.explanationZh && `  - 为什么值得保留：${item.explanationZh}`,
-  part1TransferLine(item.reuseFor),
-].filter((line): line is string => Boolean(line && line.trim())).join('\n');
+  materialCore?: string;
+  materialKind?: string;
+  part1UseCases?: string[];
+  developmentMoveZh?: string;
+  developedExample?: string;
+  expressionFrames?: string[];
+}) => {
+  const isSeed = item.materialKind === 'development_seed';
+  return [
+    `- ${cleanLearningText(item.materialCore || item.sourceWording || item.reusableVersion)}`,
+    item.sourceWording && !isSeed && `  - 来源表达：${item.sourceWording}`,
+    !isSeed && `  - 可用于: ${cleanLearningLines(item.part1UseCases?.length ? item.part1UseCases : item.reuseFor.filter(useCase => !/part\s*2|part\s*3|cue\s*card|long\s*turn|discussion|society|abstract/i.test(useCase))).join('；') || '当前话题相关 Part 1 问题'}`,
+    `  - 发展方向: ${cleanLearningText(item.developmentMoveZh || item.explanationZh || '补一个真实原因、感受、对比或具体细节。')}`,
+    !isSeed && item.developedExample && `  - 可复用说法: ${cleanLearningText(item.developedExample)}`,
+    item.expressionFrames?.length && `  - 短语支架: ${cleanLearningLines(item.expressionFrames).slice(0, isSeed ? 3 : 2).join(' / ')}`,
+  ].filter((line): line is string => Boolean(line && line.trim())).join('\n');
+};
+
+const normalizePart1MaterialExportText = (item: {
+  sourceWording?: string;
+  reusableVersion: string;
+  materialCore?: string;
+  developmentMoveZh?: string;
+  developedExample?: string;
+  expressionFrames?: string[];
+  materialKind?: string;
+}) =>
+  normalizePart1ExportComparableText(`${item.materialCore || ''} ${item.sourceWording || ''} ${item.reusableVersion || ''} ${item.developmentMoveZh || ''} ${item.developedExample || ''} ${(item.expressionFrames || []).join(' ')}`);
+
+const isUsefulPart1ExportMaterial = (item: {
+  sourceWording?: string;
+  reusableVersion: string;
+  materialCore?: string;
+  developmentMoveZh?: string;
+  developedExample?: string;
+  expressionFrames?: string[];
+  materialKind?: string;
+}) => {
+  const text = normalizePart1MaterialExportText(item);
+  if (!text) return false;
+  if (item.materialKind === 'development_seed') {
+    return Boolean(item.materialCore || item.developmentMoveZh || item.expressionFrames?.length);
+  }
+  if (/^(yes|yeah|no|sure|definitely|absolutely|of course|not really)$/i.test(text)) return false;
+  if (/^my hometown is [a-z]+(?: i was born and raised here)?$/i.test(text)) return false;
+  if (/^it is a [a-z-]+(?: [a-z-]+){0,2} city$/i.test(text)) return false;
+  const hasPersonalSignal = /\b(i|im|ive|id|me|my|mine|we|were|weve|our|us)\b/.test(text);
+  const hasValueSignal = /\b(because|so|although|though|but|rather than|instead of|prefer|like|enjoy|miss|missed|feel|felt|family|friend|friends|college|university|school|team|club|match|game|nba|e-?sports?|point guard|captain|role|years?|months?|born|raised|childhood|lived|living|grew up|moved|returned|spent|used to|usually|often)\b/.test(text);
+  const hasDevelopmentField = Boolean(item.materialCore || item.developmentMoveZh || item.developedExample || item.expressionFrames?.length);
+  return hasPersonalSignal && hasValueSignal && hasDevelopmentField;
+};
+
+const isPart1ExportSeedMaterial = (item: { materialKind?: string; materialCore?: string; developmentMoveZh?: string; expressionFrames?: string[] }) =>
+  item.materialKind === 'development_seed' && Boolean(item.materialCore || item.developmentMoveZh || item.expressionFrames?.length);
+
+const isPart1ExportReusableMaterial = (item: {
+  sourceWording?: string;
+  reusableVersion: string;
+  materialCore?: string;
+  developmentMoveZh?: string;
+  developedExample?: string;
+  expressionFrames?: string[];
+  materialKind?: string;
+}) => item.materialKind !== 'development_seed' && isUsefulPart1ExportMaterial(item);
+
+const normalizePart1ExportComparableText = (text: string) =>
+  cleanLearningText(text)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isPart1ExportCleanerEquivalent = (learnerAnswer: string, cleanerAnswer: string) => {
+  const learnerKey = normalizePart1ExportComparableText(learnerAnswer);
+  const cleanerKey = normalizePart1ExportComparableText(cleanerAnswer);
+  if (!learnerKey || !cleanerKey) return false;
+  if (learnerKey === cleanerKey) return true;
+  const learnerWords = learnerKey.split(' ').filter(Boolean);
+  const cleanerWords = cleanerKey.split(' ').filter(Boolean);
+  if (Math.abs(learnerWords.length - cleanerWords.length) > 2) return false;
+  const learnerSet = new Set(learnerWords);
+  const overlap = cleanerWords.filter(word => learnerSet.has(word)).length;
+  return overlap / Math.max(learnerWords.length, cleanerWords.length) >= 0.92;
+};
+
+const derivePart1ThreadExportState = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  const thread = feedback.threadFeedback;
+  if (!thread) return undefined;
+  const certificationPassed = thread.cleanRetryCertificationStatus === 'certified_first_attempt' ||
+    thread.cleanRetryCertificationStatus === 'certified_after_rewrite';
+  const hasOrdinaryMustFix = Boolean(
+    thread.mustFix.some(item => item.origin !== 'previous_cleaner_answer_conflict') ||
+    thread.annotations?.some(annotation =>
+      annotation.layers.some(layer => layer.severity === 'must_fix' && layer.origin !== 'previous_cleaner_answer_conflict'),
+    ) ||
+    feedback.fatalErrors.length,
+  );
+  const hasConflict = Boolean(
+    (thread.previousCleanerConflictCount || 0) > 0 ||
+    thread.annotations?.some(annotation =>
+      annotation.layers.some(layer => layer.origin === 'previous_cleaner_answer_conflict'),
+    ),
+  );
+  if (hasOrdinaryMustFix) return 'core_repair_needed';
+  if (hasConflict) return 'system_revision_conflict';
+  if (certificationPassed && thread.developmentTargets?.length) return 'development_needed';
+  if (certificationPassed) return 'topic_complete';
+  return thread.part1SessionPriorityState;
+};
+
+const part1ExportStateLabel = (state: ReturnType<typeof derivePart1ThreadExportState>) => {
+  if (state === 'core_repair_needed') return '需要先修正核心语言';
+  if (state === 'system_revision_conflict') return '系统 cleaner answer 需要修订';
+  if (state === 'development_needed') return '需要补充一个真实细节';
+  if (state === 'topic_complete') return '本话题已完成';
+  return '未完成 / 旧记录';
+};
+
+const isLowValuePart1ExportPattern = (item: { observationZh: string; whyItMattersZh: string; retryRule: string }) => {
+  const text = normalizePart1ExportComparableText(`${item.observationZh} ${item.whyItMattersZh} ${item.retryRule}`);
+  const purePraise = /\b(accurate|direct|natural|clear|stable|good|strong|complete|sufficient|no major|no obvious|well answered)\b/.test(text) &&
+    !/\b(need|needs|add|repair|fix|avoid|limit|thin|short|underdeveloped|error|mistake|grammar|range|specific|detail|reason|contrast)\b/.test(text);
+  return purePraise;
+};
 
 const buildPart1TopicThreadMarkdown = (
   feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
@@ -795,6 +930,16 @@ const buildPart1TopicThreadMarkdown = (
     ? `${formatConservativeBandEstimate(range.lower)}-${formatConservativeBandEstimate(range.upper)}`
     : `${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右`;
   const material = thread?.materialBank;
+  const exportMaterialSeeds = (material?.myUsableMaterial || []).filter(isPart1ExportSeedMaterial);
+  const exportReusableMaterial = (material?.myUsableMaterial || []).filter(isPart1ExportReusableMaterial);
+  const priorityState = derivePart1ThreadExportState(feedback);
+  const threadStable = priorityState === 'topic_complete';
+  const developmentTargets = consolidatePart1DevelopmentTargets(thread?.developmentTargets || []);
+  const hasNoErrorDevelopmentThread = Boolean(developmentTargets.length && !(thread?.annotations || []).length);
+  const exportPatterns = hasNoErrorDevelopmentThread
+    ? []
+    : (thread?.threadLevelPatterns || []).filter(item => !isLowValuePart1ExportPattern(item));
+  const developmentTargetByQuestion = new Map(developmentTargets.map(target => [target.questionRef, target] as const));
 
   const cleanRetryByQuestion = new Map((thread?.cleanRetryAnswers || []).map(item => [item.questionRef, item] as const));
   const nextRetryPlan = thread?.nextRetryPlan;
@@ -805,7 +950,9 @@ const buildPart1TopicThreadMarkdown = (
     ...(nextRetryPlan?.actions || []),
     !nextRetryPlan && (thread?.nextRetryFocusZh || feedback.nextStepZh),
   ]);
+  const shouldExportRetryPlan = priorityState !== 'development_needed' || developmentTargets.length === 0;
   const legacyCoachingFallback = cleanRetryByQuestion.size ? [] : thread?.answerByAnswerCoaching || [];
+  const shouldExportSessionReview = exportPatterns.length || legacyCoachingFallback.length || exportMaterialSeeds.length || exportReusableMaterial.length || (shouldExportRetryPlan && nextRetryPlanItems.length);
   const integrity = validatePart1ThreadFeedbackIntegrity(feedback, answers);
   const legacyCompletenessNote = integrity.ok
     ? ''
@@ -816,43 +963,55 @@ ${legacyCompletenessNote}
 
 ## Session Summary
 - Questions completed: ${answers.length}
+- Session priority: ${part1ExportStateLabel(priorityState)}
 - Topic Practice Estimate: ${estimateText}
-- Note: Transcript-based estimate; pronunciation is not formally scored.
-${feedback.estimateRationaleZh ? `- Rationale: ${feedback.estimateRationaleZh}` : ''}
+${priorityState === 'development_needed' ? '- 发展状态: 核心语言基本稳定，但还需要在重点题目补一个真实原因、细节、例子或对比。' : ''}
+${threadStable ? '- 话题状态: 准确性和展开已经足够稳定，可以换新话题。' : ''}
+${feedback.estimateRationaleZh ? `- 估计依据: ${feedback.estimateRationaleZh}` : ''}
 
 # Part 1｜Annotated Answers
 ${answers.map((answer, index) => {
     const questionRef = `Q${index + 1}`;
     const annotations = thread?.annotations?.filter(item => item.questionRef === questionRef) || [];
     const cleanRetry = cleanRetryByQuestion.get(questionRef);
+    const developmentTarget = developmentTargetByQuestion.get(questionRef);
+    const suppressStableCleaner = Boolean((threadStable || priorityState === 'development_needed') && cleanRetry && !annotations.length && isPart1ExportCleanerEquivalent(answer.answer, cleanRetry.answer));
     const annotationLines = annotations.length
       ? annotations.map(item => [
         `- Source: "${item.sourceQuote}"`,
         item.combinedRepair && `  - Combined repair: ${item.combinedRepair}`,
-        ...item.layers.map(layer => `  - ${part1AnnotationLabel(layer.severity)} / ${formatPart1IssueTypeLabel(layer.issueType)}: ${layer.original} -> ${layer.better}\n    - ${layer.explanationZh}${layer.reuseGuidanceZh ? `\n    - Reuse: ${layer.reuseGuidanceZh}` : ''}`),
+        ...item.layers.map(layer => `  - ${part1AnnotationLayerLabel(layer)} / ${formatPart1IssueTypeLabel(layer.issueType)}: ${layer.original} -> ${layer.better}\n    - ${layer.explanationZh}${layer.origin === 'previous_cleaner_answer_conflict' ? `\n    - System revision note: This wording came from a previous cleaner answer and is corrected here for consistency; it is not counted as a new learner-introduced error.` : ''}${layer.reuseGuidanceZh ? `\n    - Reuse: ${layer.reuseGuidanceZh}` : ''}`),
       ].filter(Boolean).join('\n')).join('\n')
-      : '- No anchored correction for this answer.';
-    const cleanRetryBlock = cleanRetry
-      ? `\n\n### A Cleaner Answer for Your Next Try\n${cleanRetry.answer}${cleanRetry.noteZh ? `\n\n${cleanRetry.noteZh}` : ''}`
       : '';
-    return `## ${questionRef}. ${answer.question}\n> Original answer: ${answer.answer}\n\n### Annotations\n${annotationLines}${cleanRetryBlock}`;
+    const cleanRetryBlock = cleanRetry
+      ? suppressStableCleaner
+        ? ''
+        : annotations.length
+          ? `\n\n### A Cleaner Answer for Your Next Try\n${cleanRetry.answer}${cleanRetry.noteZh ? `\n\n${cleanRetry.noteZh}` : ''}`
+          : ''
+      : '';
+    const developmentBlock = developmentTarget && !annotations.length
+      ? `\n\n### 发展建议\n- ${developmentTarget.reasonZh}\n- 训练动作: ${developmentTarget.developmentMoveZh}${developmentTarget.phraseScaffolds?.length ? `\n- 短语支架: ${cleanLearningLines(developmentTarget.phraseScaffolds).slice(0, 3).join(' / ')}` : ''}`
+      : '';
+    return `## ${questionRef}. ${answer.question}\n> Original answer: ${answer.answer}${annotationLines ? `\n\n### Annotations\n${annotationLines}` : ''}${developmentBlock}${cleanRetryBlock}`;
   }).join('\n\n')}
 
-# Topic-Thread Review｜Session Patterns & Material Bank
-## Thread-Level Patterns
-${thread?.threadLevelPatterns?.length ? thread.threadLevelPatterns.map(item => `- ${item.observationZh}\n  - Why it matters: ${item.whyItMattersZh}\n  - Retry rule: ${item.retryRule}`).join('\n') : legacyCoachingFallback.length ? legacyCoachingFallback.map(item => `- ${questionRefLine(item.questionRefs)}${item.issue}\n  - ${item.coachingZh}${item.exampleFrame ? `\n  - Retry frame: ${item.exampleFrame}` : ''}`).join('\n') : '- No thread-level retry pattern was identified beyond the annotated local fixes.'}
+${shouldExportSessionReview ? `
+# Topic-Thread Review｜Session Patterns & Part 1 Material Development
+${exportPatterns.length || legacyCoachingFallback.length ? `## 线程层面模式\n${exportPatterns.length ? exportPatterns.map(item => `- ${item.observationZh}\n  - 为什么重要: ${item.whyItMattersZh}\n  - 下次规则: ${item.retryRule}`).join('\n') : legacyCoachingFallback.map(item => `- ${questionRefLine(item.questionRefs)}${item.issue}\n  - ${item.coachingZh}${item.exampleFrame ? `\n  - 下次句架: ${item.exampleFrame}` : ''}`).join('\n')}\n` : ''}
 
-## Speaking Material Bank
-这些是值得保留、以后可迁移到口语 Part 1/2/3 的个人素材和自然表达。
+${exportMaterialSeeds.length ? `## 可继续发展的个人线索
+这些不是已完成素材，只是下次可以补充真实细节的方向。
 
-### My Usable Material
-${material?.myUsableMaterial.length ? material.myUsableMaterial.map(part1MaterialItemLines).join('\n') : '- No stable personal material was identified yet.'}
+${exportMaterialSeeds.map(part1MaterialItemLines).join('\n')}\n` : ''}
 
-### Reusable Spoken Language
-${material?.reusableSpokenLanguage.length ? material.reusableSpokenLanguage.map(part1MaterialItemLines).join('\n') : '- No stable reusable spoken expressions were identified yet.'}
+${exportReusableMaterial.length ? `## 可积累素材
+这些内容已经足够具体，可以整理成以后可复用的个人素材。
 
-## Next Retry Plan
-${nextRetryPlanItems.length ? nextRetryPlanItems.map(item => `- ${item}`).join('\n') : '- Repeat this topic with shorter direct openings and one real detail in each answer.'}
+${exportReusableMaterial.map(part1MaterialItemLines).join('\n')}\n` : ''}
+
+${shouldExportRetryPlan && nextRetryPlanItems.length ? `## ${threadStable ? 'Optional Improvement Guidance' : 'Next Retry Plan'}\n${nextRetryPlanItems.map(item => `- ${item}`).join('\n')}` : ''}
+` : ''}
 
 _Exported: ${formatExportDate(timestamp)}_`;
 };

@@ -1,5 +1,6 @@
 ﻿import { AIProvider } from './base';
 import {
+  Part1CleanRetryCertificationResult,
   SpeakingFeedback,
   SpeakingScoreOnlyResult,
   SpeakingTargetValidationResult,
@@ -29,6 +30,14 @@ const shorten = (text: string, maxLength = 180): string => {
 
 const countWords = (text: string): number =>
   text.trim().split(/\s+/).filter(Boolean).length;
+
+const normalizeMockText = (text: string): string =>
+  text
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 
 export class MockProvider implements AIProvider {
   async transcribeSpeakingAudio(params: {
@@ -60,6 +69,7 @@ export class MockProvider implements AIProvider {
     topic?: string;
     threadId?: string;
     threadAnswers?: { questionId: string; question: string; answer: string }[];
+    retryReference?: import('./base').SpeakingAnalysisRequest['retryReference'];
     authoritativeScore?: SpeakingScoreOnlyResult;
     targetRepairFocus?: string;
     targetAttempt?: number;
@@ -69,31 +79,68 @@ export class MockProvider implements AIProvider {
     if (params.sessionKind === 'part1_topic_thread') {
       const answers = params.threadAnswers || [];
       const transcript = answers.map((answer, index) => `Q${index + 1}: ${answer.question}\nA${index + 1}: ${answer.answer}`).join('\n\n') || params.transcript;
+      const isStableFixture = /\bmock stable thread\b/i.test(transcript);
+      const isThinStableFixture = /\bmock thin stable\b/i.test(transcript);
+      const isMixedSufficiencyFixture = /\bmock mixed sufficiency\b/i.test(transcript);
+      const isRegionalVariantFixture = /\bmock regional variant\b/i.test(transcript);
       const quoteFromAnswer = (answer?: string) => {
         const words = (answer || '').trim().split(/\s+/).filter(Boolean);
         return words.slice(0, Math.min(words.length, 5)).join(' ') || 'my answer';
       };
-      const mockAnnotations = answers.map((answer, index) => {
+      const priorByQuestion = new Map((params.retryReference?.cleanRetryAnswers || []).map(item => [item.questionRef, item]));
+      const mockAnnotations = isMixedSufficiencyFixture
+        ? answers.slice(2, 3).map((answer, offset) => {
+          const index = offset + 2;
+          const questionRef = `Q${index + 1}`;
+          const quote = quoteFromAnswer(answer.answer);
+          return {
+            id: `mock_p1_ann_${questionRef.toLowerCase()}`,
+            questionRef,
+            sourceQuote: quote,
+            combinedRepair: `${quote} ...`,
+            layers: [{
+              severity: 'must_fix',
+              issueType: 'grammar accuracy',
+              original: quote,
+              better: `${quote} ...`,
+              explanationZh: 'Mock mixed fixture: this answer contains the local grammar repair item.',
+              origin: 'learner',
+            }],
+          };
+        })
+        : isStableFixture || isThinStableFixture ? [] : answers.map((answer, index) => {
         const questionRef = `Q${index + 1}`;
         const quote = quoteFromAnswer(answer.answer);
+        const prior = priorByQuestion.get(questionRef);
+        const isPriorConflict = Boolean(prior && normalizeMockText(prior.answer).includes(normalizeMockText(quote)));
         const severity = index === 0 ? 'must_fix' : index === 1 ? 'better_spoken_choice' : 'optional_polish';
+        const variantOnly = isRegionalVariantFixture && index === 0;
         return {
           id: `mock_p1_ann_${questionRef.toLowerCase()}`,
           questionRef,
-          sourceQuote: quote,
-          combinedRepair: index === 0 ? `${quote} ...` : index === 1 ? 'a more natural spoken version' : 'a slightly cleaner spoken version',
+          sourceQuote: variantOnly ? 'in a team' : quote,
+          combinedRepair: variantOnly ? 'on a team' : index === 0 ? `${quote} ...` : index === 1 ? 'a more natural spoken version' : 'a slightly cleaner spoken version',
           layers: [
             {
               severity,
-              issueType: index === 0 ? 'grammar accuracy' : index === 1 ? 'spoken phrasing' : 'minor naturalness',
-              original: quote,
-              better: index === 0 ? `${quote} ...` : index === 1 ? 'a more natural spoken version' : 'a slightly cleaner spoken version',
-              explanationZh: index === 0
-                ? 'Mock 示例：这里代表需要优先修复的准确性问题。真实模型应覆盖每题中有证据的本地语言问题。'
+              issueType: variantOnly ? 'preposition regional variant' : index === 0 ? 'grammar accuracy' : index === 1 ? 'spoken phrasing' : 'minor naturalness',
+              original: variantOnly ? 'in a team' : quote,
+              better: variantOnly ? 'on a team' : index === 0 ? `${quote} ...` : index === 1 ? 'a more natural spoken version' : 'a slightly cleaner spoken version',
+              explanationZh: variantOnly
+                ? 'Mock 示例：这只是地区/风格偏好的介词变体，不应作为必须修正的学习者错误。'
+                : index === 0
+                ? isPriorConflict
+                  ? 'Mock 示例：这里代表上一轮系统 cleaner answer 中残留的准确性问题。'
+                  : 'Mock 示例：这里代表需要优先修复的准确性问题。真实模型应覆盖每题中有证据的本地语言问题。'
                 : index === 1
                   ? 'Mock 示例：这是自然口语表达升级，不是完整范文替换。'
                   : 'Mock 示例：这是低优先级微调，不能替代真正的语法准确性修复。',
               reuseGuidanceZh: index === 1 ? '可迁移到 Part 1 喜好、习惯或经历类问题。' : undefined,
+              origin: isPriorConflict ? 'previous_cleaner_answer_conflict' : 'learner',
+              priorCertificationStatus: isPriorConflict ? prior?.certificationStatus : undefined,
+              systemRevisionNoteZh: isPriorConflict
+                ? '这处表达来自上一轮系统提供的修改答案；本次修正属于系统修订不一致，不视为你新引入的错误。'
+                : undefined,
             },
           ],
         };
@@ -109,7 +156,11 @@ export class MockProvider implements AIProvider {
         question: answers.map((answer, index) => `Q${index + 1}. ${answer.question}`).join('\n'),
         transcript,
         bandEstimateExcludingPronunciation: 6.0,
-        estimateRationaleZh: 'Mock topic-thread estimate: answers are understandable, but several short-answer control and phrasing issues remain. Pronunciation is not formally scored.',
+        estimateRationaleZh: isStableFixture
+          ? 'Mock topic-thread estimate: the submitted answers are accurate and include enough direct Part 1 development from the learner answers. Pronunciation is not formally scored.'
+          : isThinStableFixture || isMixedSufficiencyFixture
+            ? 'Mock topic-thread estimate: core accuracy is stable, but the submitted answers are still thin and need one real supporting detail. Pronunciation is not formally scored.'
+            : 'Mock topic-thread estimate: answers are understandable, but several short-answer control and phrasing issues remain. Pronunciation is not formally scored.',
         scores: {
           fluencyCoherence: 6.0,
           lexicalResource: 6.0,
@@ -124,7 +175,9 @@ export class MockProvider implements AIProvider {
           annotations: mockAnnotations,
           cleanRetryAnswers: answers.map((answer, index) => ({
             questionRef: `Q${index + 1}`,
-            answer: index === 0
+            answer: isStableFixture || isThinStableFixture || isMixedSufficiencyFixture
+              ? answer.answer.replace(/\bmock stable thread\b|\bmock thin stable\b|\bmock mixed sufficiency\b/gi, '').trim() || 'Yes, I do. It is part of my routine.'
+              : index === 0
               ? 'Yes, I do. I usually do it when I want to switch off after a busy day, and it helps me feel more relaxed.'
               : index === 1
                 ? 'I normally keep it simple. I give a direct answer first, then add one small personal detail.'
@@ -138,14 +191,41 @@ export class MockProvider implements AIProvider {
               retryRule: 'Direct answer -> one key detail -> stop.',
             },
           ],
+          developmentStatus: isStableFixture ? 'sufficient' : 'needed',
+          developmentTargets: isStableFixture ? [] : isMixedSufficiencyFixture
+            ? answers.slice(0, 1).map((answer, index) => ({
+              questionRef: `Q${index + 1}`,
+              reasonZh: 'Mock mixed fixture: this answer is accurate but still expandable with one real detail.',
+              developmentMoveZh: 'Add one grounded reason or example without writing a full model answer.',
+              phraseScaffolds: ['one real reason', 'for example', 'what matters most is ...'],
+            }))
+            : isThinStableFixture
+            ? answers.map((answer, index) => ({
+              questionRef: `Q${index + 1}`,
+              reasonZh: 'Mock 示例：这题语言基本稳定，但当前回答偏短，缺少一个真实理由或细节。',
+              developmentMoveZh: '保留原意，再补一个真实原因、感受或具体例子。',
+              phraseScaffolds: ['one real reason', 'for example', 'what matters most is ...'],
+            }))
+            : [
+              {
+                questionRef: 'Q1',
+                reasonZh: 'Mock 示例：这题既需要修正准确性，也需要补一个真实细节，避免只剩最小正确句。',
+                developmentMoveZh: '保留原意，再补一个真实原因、感受或具体例子。',
+                phraseScaffolds: ['one real reason', 'for example', 'what matters most is ...'],
+              },
+            ],
           mustFix: [
+            ...(isStableFixture || isThinStableFixture || isMixedSufficiencyFixture ? [] : [
             {
               questionRefs: ['Q1', answers.length >= 3 ? 'Q3' : 'Q2'].filter(Boolean),
-              learnerWording: 'I likes / people is',
-              betterVersion: 'I like / people are',
-              explanationZh: '这是基础主谓一致问题，重复出现会明显影响 GRA，需要优先修复。',
+              learnerWording: isRegionalVariantFixture ? 'in a team' : 'I likes / people is',
+              betterVersion: isRegionalVariantFixture ? 'on a team' : 'I like / people are',
+              explanationZh: isRegionalVariantFixture
+                ? 'This is a regional spoken variant preference, not a required correction.'
+                : '这是基础主谓一致问题，重复出现会明显影响 GRA，需要优先修复。',
               recurring: true,
             },
+            ]),
           ],
           answerByAnswerCoaching: [
           ],
@@ -160,10 +240,17 @@ export class MockProvider implements AIProvider {
           materialBank: {
             myUsableMaterial: [
               {
-                sourceWording: answers[0]?.answer || 'my real daily habit',
+                sourceWording: isMixedSufficiencyFixture ? answers[3]?.answer || answers[0]?.answer || 'my real daily habit' : answers[0]?.answer || 'my real daily habit',
                 reusableVersion: 'I usually do it when I want to switch off after a busy day.',
-                reuseFor: ['Part 1 hobbies', 'Part 2 relaxing activity', 'Part 3 daily routine examples'],
+                reuseFor: ['Part 1 hobbies', 'Part 1 routine questions'],
                 explanationZh: '保留你的真实习惯，但把表达压缩成可复用的口语素材。',
+                materialCore: 'A real daily habit used to relax after a busy day.',
+                materialKind: 'reusable_personal_material',
+                part1UseCases: ['hobbies', 'daily routine', 'what you do to relax'],
+                developmentMoveZh: 'Add when you do it or why it helps you.',
+                developedExample: 'I usually do it when I want to switch off after a busy day, because it helps me feel more relaxed.',
+                expressionFrames: ['when I want to switch off', 'what helps me most is ...'],
+                materialKey: 'daily_habit_switch_off',
               },
             ],
             reusableSpokenLanguage: [
@@ -183,13 +270,17 @@ export class MockProvider implements AIProvider {
             },
           ],
           nextRetryPlan: {
-            priorityAccuracyPatternZh: '先稳住基础动词形式和主谓一致，再扩展细节。',
+            priorityAccuracyPatternZh: isStableFixture || isThinStableFixture
+              ? 'Q1 的核心回答已经稳定；如果想进一步丰富，可以补一个真实原因或具体细节。'
+              : '先稳住基础动词形式和主谓一致，再扩展细节。',
             answerLengthRuleZh: '每题控制在直接回答 + 一个细节 + 一个短原因。',
-            materialToTry: 'when I want to switch off after a busy day',
+            materialToTry: isStableFixture || isThinStableFixture
+              ? 'one brief real reason'
+              : 'when I want to switch off after a busy day',
             actions: [
-              'Open each answer with the direct answer.',
+              isStableFixture || isThinStableFixture ? 'Move to a new topic after one optional detail check.' : 'Open each answer with the direct answer.',
               'Keep one real detail and delete extra background.',
-              'Reuse one natural expression from the material bank.',
+              isStableFixture || isThinStableFixture ? 'Do not expand it into a long prepared response.' : 'Reuse one natural expression from the material bank.',
             ],
           },
           nextRetryFocusZh: '下次重复这个话题时，每题先用一句话直接回答，再补一个具体个人细节，避免每题都用同一个开头。',
@@ -344,6 +435,107 @@ export class MockProvider implements AIProvider {
         explanationZh: '这个短语可以用来描述城市变化或发展类话题。',
       },
     } as SpeakingFeedback;
+  }
+
+  async certifyPart1CleanRetry(params: {
+    topic: string;
+    threadId: string;
+    threadAnswers: { questionId: string; question: string; answer: string }[];
+    cleanRetryAnswers: { questionRef: string; answer: string; noteZh?: string }[];
+    attempt: 1 | 2;
+  }): Promise<Part1CleanRetryCertificationResult> {
+    await new Promise(r => setTimeout(r, 300));
+    const expected = params.threadAnswers.map((_, index) => `Q${index + 1}`);
+    const candidateByRef = new Map(params.cleanRetryAnswers.map(item => [item.questionRef, item.answer]));
+    const hasSecondFailMarker = params.cleanRetryAnswers.some(item => /\bmock\s+second\s+fail\b/i.test(item.answer));
+    const grammarFailureRef = expected.find(ref => /\bI likes\b/i.test(candidateByRef.get(ref) || ''));
+    const internalConflictRef = expected.find(ref => /\bcontinuous duration conflict\b/i.test(candidateByRef.get(ref) || ''));
+    const overlongRef = expected.find(ref => /\bmock\s+overdeveloped\s+cleaner\b/i.test(candidateByRef.get(ref) || ''));
+    const underresponsiveRef = expected.find(ref => /\bmock\s+underresponsive\s+cleaner\b/i.test(candidateByRef.get(ref) || ''));
+    const meaningChangeRef = expected.find((ref, index) => {
+      const learner = params.threadAnswers[index]?.answer || '';
+      const candidate = candidateByRef.get(ref) || '';
+      return /\bsource factual relation\b/i.test(learner) && /\bchanged factual relation\b/i.test(candidate);
+    });
+    const failureRef = grammarFailureRef || internalConflictRef || meaningChangeRef || underresponsiveRef || overlongRef;
+
+    if (hasSecondFailMarker || failureRef) {
+      const issueType = grammarFailureRef
+        ? 'grammar_error'
+        : internalConflictRef
+          ? 'internal_factual_temporal_inconsistency'
+          : meaningChangeRef
+            ? 'wrong_meaning'
+            : underresponsiveRef
+              ? 'underresponsive_or_missing_key_detail'
+            : overlongRef
+              ? 'overlong_or_off_task'
+            : 'broken_structure';
+      return {
+        module: 'speaking',
+        operation: 'part1_clean_retry_certification',
+        topic: params.topic,
+        threadId: params.threadId,
+        attempt: params.attempt,
+        status: 'failed',
+        violations: [{
+          questionRef: failureRef || expected[0] || 'Q1',
+          issueType,
+          severity: 'must_fix',
+          candidateWording: failureRef
+            ? candidateByRef.get(failureRef) || ''
+            : params.cleanRetryAnswers[0]?.answer || '',
+          saferVersion: grammarFailureRef
+            ? (candidateByRef.get(grammarFailureRef) || '').replace(/\bI likes\b/gi, 'I like')
+            : internalConflictRef
+              ? (candidateByRef.get(internalConflictRef) || '').replace(/\bcontinuous duration conflict\b/gi, 'consistent timeline')
+              : meaningChangeRef
+                ? (candidateByRef.get(meaningChangeRef) || '').replace(/\bchanged factual relation\b/gi, 'source factual relation')
+                : underresponsiveRef
+                  ? (candidateByRef.get(underresponsiveRef) || '').replace(/\bmock\s+underresponsive\s+cleaner\b/gi, 'with one relevant personal detail')
+                : overlongRef
+                  ? (candidateByRef.get(overlongRef) || '').replace(/\bmock\s+overdeveloped\s+cleaner\b/gi, '').split(/[.!?]/).slice(0, 2).join('. ').trim() || 'I can answer this briefly with one real detail.'
+            : undefined,
+          reasonZh: grammarFailureRef
+            ? 'Mock certification: candidate still contains a clear subject-verb agreement error.'
+            : internalConflictRef
+              ? 'Mock certification: candidate contains an internal factual or temporal inconsistency.'
+              : meaningChangeRef
+                ? 'Mock certification: candidate changes the learner source meaning.'
+                : underresponsiveRef
+                  ? 'Mock certification: candidate is too under-responsive for this Part 1 question.'
+                : overlongRef
+                  ? 'Mock certification: candidate is too overdeveloped for an immediate Part 1 retry.'
+            : 'Mock certification: second-attempt failure fixture.',
+        }],
+        revisedCleanRetryAnswers: params.attempt === 1
+          ? expected.map(ref => ({
+            questionRef: ref,
+            answer: (candidateByRef.get(ref) || 'I can answer this briefly with one real detail.')
+              .replace(/\bI likes\b/gi, 'I like')
+              .replace(/\bcontinuous duration conflict\b/gi, 'consistent timeline')
+              .replace(/\bchanged factual relation\b/gi, 'source factual relation')
+              .replace(/\bmock\s+underresponsive\s+cleaner\b/gi, 'with one relevant personal detail')
+              .replace(/\bmock\s+overdeveloped\s+cleaner\b/gi, '')
+              .replace(/\s+/g, ' ')
+              .trim(),
+          }))
+          : [],
+        rationaleZh: 'Mock clean-retry certification failed for a hard fixture issue.',
+      };
+    }
+
+    return {
+      module: 'speaking',
+      operation: 'part1_clean_retry_certification',
+      topic: params.topic,
+      threadId: params.threadId,
+      attempt: params.attempt,
+      status: 'passed',
+      violations: [],
+      revisedCleanRetryAnswers: [],
+      rationaleZh: 'Mock clean-retry certification passed.',
+    };
   }
 
   async scoreSpeakingOnly(params: {

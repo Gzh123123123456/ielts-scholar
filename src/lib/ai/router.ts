@@ -3,6 +3,7 @@ import { GeminiProvider } from './providers/geminiProvider';
 import { DeepSeekProvider } from './providers/deepseekProvider';
 import {
   AIProvider,
+  Part1CleanRetryCertificationRequest,
   SpeakingAudioTranscriptionRequest,
   SpeakingAnalysisRequest,
   SpeakingScoreOnlyRequest,
@@ -16,6 +17,7 @@ import {
 import {
   ProviderDiagnostic,
   ProviderOperation,
+  Part1CleanRetryCertificationResult,
   SpeakingAudioTranscriptionResult,
   SpeakingFeedback,
   SpeakingScoreOnlyResult,
@@ -41,6 +43,7 @@ import {
   safeAnalyzeWriting,
   safeAnalyzeWritingTask1,
   safeCoachWritingFramework,
+  safeCertifyPart1CleanRetry,
   safeExtractWritingFramework,
   safeValidateSpeakingTarget,
   safeValidateWritingTarget,
@@ -460,6 +463,14 @@ export const routedValidateSpeakingTarget = (
     },
   };
 });
+
+export const routedCertifyPart1CleanRetry = (
+  request: Part1CleanRetryCertificationRequest,
+): Promise<RoutedResult<Part1CleanRetryCertificationResult>> => {
+  const route = chooseRoute('part1_clean_retry_certification', request, { reserveGemini: true });
+  return runWithGeminiRetry('part1_clean_retry_certification', request, route, (provider, providerName) =>
+    safeCertifyPart1CleanRetry(provider, providerName, request));
+};
 
 export const routedAnalyzeWriting = (
   request: WritingAnalysisRequest,

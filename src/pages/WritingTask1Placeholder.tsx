@@ -13,13 +13,17 @@ import { formatConservativeBandEstimate, getTargetLabelZh } from '@/src/lib/band
 import { resolveTask1TargetState } from '@/src/lib/scoreLayer';
 import {
   createRecordId,
-  getActiveWritingTask1,
-  saveActiveWritingTask1,
+  StorageWriteResult,
   summarizeDiagnostic,
-  upsertPracticeRecord,
   WritingTask1PracticeRecord,
   WritingTask1QuickPlan,
 } from '@/src/lib/practiceRecords';
+import {
+  getActiveWritingTask1,
+  saveActiveWritingTask1,
+  upsertPracticeRecord,
+  deleteActiveWritingTask1,
+} from '@/src/lib/practiceRepository';
 import {
   buildMarkdownExportFilename,
   buildWritingTask1TrainingMarkdown,
@@ -218,26 +222,48 @@ export default function WritingTask1Placeholder() {
   const selectedPrompt = selectedWritingTask1PromptId
     ? writingTask1Academic.find(item => item.id === selectedWritingTask1PromptId)
     : undefined;
-  const activeRecord = useMemo(
-    () => selectedPrompt ? null : getActiveWritingTask1(),
-    [selectedPrompt],
-  );
-  const initialActiveRecordRef = useRef(activeRecord);
-  const isInitialRestoreRef = useRef(Boolean(activeRecord));
-  const initialPrompt = selectedPrompt || writingTask1Academic.find(prompt => prompt.id === activeRecord?.questionId) || writingTask1Academic[0];
+  const [activeRecord, setActiveRecord] = useState<any>(null);
+  const [activeLoaded, setActiveLoaded] = useState(false);
+  const initialActiveRecordRef = useRef<any>(null);
+  const isInitialRestoreRef = useRef(false);
+  const initialPrompt = selectedPrompt || writingTask1Academic[0];
 
-  const [recordId, setRecordId] = useState(selectedPrompt ? createRecordId('writing_task1') : activeRecord?.id || createRecordId('writing_task1'));
-  const [createdAt, setCreatedAt] = useState(selectedPrompt ? new Date().toISOString() : activeRecord?.createdAt || new Date().toISOString());
+  useEffect(() => {
+    if (selectedPrompt) { setActiveLoaded(true); return; }
+    getActiveWritingTask1().then(rec => {
+      if (rec) {
+        setActiveRecord(rec);
+        initialActiveRecordRef.current = rec;
+        isInitialRestoreRef.current = true;
+      }
+      setActiveLoaded(true);
+    }).catch(() => setActiveLoaded(true));
+  }, [selectedPrompt]);
+
+  const [recordId, setRecordId] = useState(selectedPrompt ? createRecordId('writing_task1') : '');
+  const [createdAt, setCreatedAt] = useState(selectedPrompt ? new Date().toISOString() : '');
   const [prompt, setPrompt] = useState<WritingTask1AcademicPrompt>(initialPrompt);
-  const [quickPlan, setQuickPlan] = useState<WritingTask1QuickPlan>(selectedPrompt ? emptyPlan : activeRecord?.quickPlan || emptyPlan);
-  const [report, setReport] = useState(selectedPrompt ? '' : activeRecord?.report || '');
-  const [feedback, setFeedback] = useState<WritingTask1Feedback | undefined>(selectedPrompt ? undefined : activeRecord?.feedback);
+  const [quickPlan, setQuickPlan] = useState<WritingTask1QuickPlan>(emptyPlan);
+  const [report, setReport] = useState('');
+  const [feedback, setFeedback] = useState<WritingTask1Feedback | undefined>(undefined);
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
+
+  useEffect(() => {
+    if (!activeRecord) return;
+    setRecordId(activeRecord.id || createRecordId('writing_task1'));
+    setCreatedAt(activeRecord.createdAt || new Date().toISOString());
+    setQuickPlan(activeRecord.quickPlan || emptyPlan);
+    setReport(activeRecord.report || '');
+    setFeedback(activeRecord.feedback);
+    const matchedPrompt = writingTask1Academic.find(p => p.id === activeRecord.questionId);
+    if (matchedPrompt) setPrompt(matchedPrompt);
+  }, [activeRecord]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [providerErrorMessage, setProviderErrorMessage] = useState(
     !selectedPrompt && activeRecord?.status === 'provider_failed' ? 'AI provider temporarily unavailable. Please retry later. Your report is preserved.' : '',
   );
   const [apiStatusMessage, setApiStatusMessage] = useState('');
+  const [storageFullWarning, setStorageFullWarning] = useState('');
 
   const words = countWords(report);
   const status = providerErrorMessage ? 'provider_failed' : feedback ? 'analyzed' : 'draft';
@@ -287,15 +313,20 @@ export default function WritingTask1Placeholder() {
   }, []);
 
   useEffect(() => {
-    if (isInitialRestoreRef.current) {
-      isInitialRestoreRef.current = false;
-      return;
-    }
-    const record = buildRecord();
-    saveActiveWritingTask1(record);
-    if (record.status !== 'draft') {
-      upsertPracticeRecord(record);
-    }
+    (async () => {
+      if (isInitialRestoreRef.current) {
+        isInitialRestoreRef.current = false;
+        return;
+      }
+      const record = buildRecord();
+      const [activeResult, upsertResult] = await Promise.all([
+        saveActiveWritingTask1(record),
+        record.status !== 'draft' ? upsertPracticeRecord(record) : Promise.resolve({ ok: true }),
+      ]);
+      if (!activeResult.ok || !upsertResult.ok) {
+        setStorageFullWarning('本地存储空间已满，当前写作状态未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
+      }
+    })();
   }, [recordId, createdAt, prompt, quickPlan, report, feedback, providerErrorMessage]);
 
   const updatePlan = (field: keyof WritingTask1QuickPlan, value: string) => {
@@ -341,29 +372,39 @@ export default function WritingTask1Placeholder() {
         setDiagnostic(result.diagnostic);
         setProviderErrorMessage('AI provider temporarily unavailable. Please retry later. Your report is preserved.');
         const failedRecord = buildRecord(undefined, 'provider_failed');
-        upsertPracticeRecord({
-          ...failedRecord,
-          providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        });
-        saveActiveWritingTask1({
-          ...failedRecord,
-          providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        });
+        const [failedUpsertResult, failedActiveResult] = await Promise.all([
+          upsertPracticeRecord({
+            ...failedRecord,
+            providerDiagnostic: summarizeDiagnostic(result.diagnostic),
+          }),
+          saveActiveWritingTask1({
+            ...failedRecord,
+            providerDiagnostic: summarizeDiagnostic(result.diagnostic),
+          }),
+        ]);
+        if (!failedUpsertResult.ok || !failedActiveResult.ok) {
+          setStorageFullWarning('本地存储空间已满，当前状态未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
+        }
         return;
       }
       setFeedback(result.feedback);
       setDiagnostic(result.diagnostic);
       const analyzedRecord = buildRecord(result.feedback);
-      upsertPracticeRecord({
-        ...analyzedRecord,
-        providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        obsidianMarkdown: buildWritingTask1TrainingMarkdown(result.feedback, prompt, quickPlan),
-      });
-      saveActiveWritingTask1({
-        ...analyzedRecord,
-        providerDiagnostic: summarizeDiagnostic(result.diagnostic),
-        obsidianMarkdown: buildWritingTask1TrainingMarkdown(result.feedback, prompt, quickPlan),
-      });
+      const [analyzedUpsertResult, analyzedActiveResult] = await Promise.all([
+        upsertPracticeRecord({
+          ...analyzedRecord,
+          providerDiagnostic: summarizeDiagnostic(result.diagnostic),
+          obsidianMarkdown: buildWritingTask1TrainingMarkdown(result.feedback, prompt, quickPlan),
+        }),
+        saveActiveWritingTask1({
+          ...analyzedRecord,
+          providerDiagnostic: summarizeDiagnostic(result.diagnostic),
+          obsidianMarkdown: buildWritingTask1TrainingMarkdown(result.feedback, prompt, quickPlan),
+        }),
+      ]);
+      if (!analyzedUpsertResult.ok || !analyzedActiveResult.ok) {
+        setStorageFullWarning('本地存储空间已满，分析结果未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -416,6 +457,11 @@ export default function WritingTask1Placeholder() {
       {apiStatusMessage && (
         <div className="mb-6 p-3 bg-paper-ink/5 border border-paper-ink/10 text-paper-ink/65 text-sm rounded-sm font-sans">
           {apiStatusMessage}
+        </div>
+      )}
+      {storageFullWarning && (
+        <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-800 text-sm rounded-sm font-sans">
+          {storageFullWarning}
         </div>
       )}
 

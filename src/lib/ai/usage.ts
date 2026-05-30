@@ -47,7 +47,16 @@ const readJson = <T,>(key: string, fallback: T): T => {
 };
 
 const writeJson = (key: string, value: unknown) => {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    const serialized = JSON.stringify(value);
+    localStorage.setItem(key, serialized);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      console.warn(`[ielts] localStorage quota exceeded writing "${key}"; usage/router bookkeeping skipped.`);
+      return;
+    }
+    console.error(`[ielts] Unexpected storage write error for "${key}":`, error);
+  }
 };
 
 export const estimateTokensFromText = (text: string) => Math.max(1, Math.ceil(text.length / 4));

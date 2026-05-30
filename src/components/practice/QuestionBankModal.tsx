@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { getPracticeRecords, PracticeRecord } from '@/src/lib/practiceRecords';
+import { PracticeRecord } from '@/src/lib/practiceRecords';
+import { getAnalyzedPracticeRecords } from '@/src/lib/practiceRepository';
 
 export interface QuestionBankItem {
   id?: string;
@@ -76,7 +77,15 @@ export function QuestionBankModal<T extends QuestionBankItem>({
   onSelect,
 }: QuestionBankModalProps<T>) {
   const [activeTag, setActiveTag] = useState('All');
-  const records = useMemo(() => (isOpen ? getPracticeRecords(1000) : []), [isOpen]);
+  const [records, setRecords] = useState<PracticeRecord[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      getAnalyzedPracticeRecords().then(setRecords).catch(() => setRecords([]));
+    } else {
+      setRecords([]);
+    }
+  }, [isOpen]);
 
   const tags = useMemo(() => {
     const derived = uniqueLabels(items.flatMap(item => item.tags || []));

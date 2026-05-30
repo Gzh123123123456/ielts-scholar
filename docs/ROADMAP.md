@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-26_
+_Last updated: 2026-05-29_
 
 This roadmap describes horizons, not implementation history.
 
@@ -30,6 +30,7 @@ Explicitly not now: full Speaking mock, pronunciation scoring, or Writing behavi
 
 ## Reliability / Data Horizon
 
+- **Storage emergency recovery (2026-05-28/29)**: localStorage quota exhaustion crash → P0 quota-safe writes + IndexedDB / PracticeRepository transition. Current: 134 canonical records + 172 legacy sessions recovered into IndexedDB. **Closeout completed 2026-05-29:** backup confirmed exported, migration-summary display fixed, localStorage 0 MB audited (no automatic clearing path found — unexplained). See `docs/P0_STORAGE_INDEXEDDB_INCIDENT_20260528_20260529.md`.
 - Improve audio transcription reliability while preserving one editable transcript box and manual-edit fallback.
 - Build PDF folder import and extraction-report workflow for mainland active-bank updates.
 - Prepare SaaS-ready active-bank publishing: admin review/publish later, active seasonal bank overwrite, and saved history preserving question snapshots.
@@ -46,7 +47,7 @@ Explicitly not now: full Speaking mock, pronunciation scoring, or Writing behavi
 - Server-side provider key management or proxy before non-personal deployment.
 - User/account model, auth, database/storage migration, and admin publishing workflow.
 - Optional OpenAI-compatible/OpenRouter routing UI after provider architecture settles.
-- Optional IndexedDB/local file backup before any storage migration.
+- IndexedDB local-first persistence: transition implemented as P0 emergency recovery. Closeout follow-up pending.
 - Full mock exam mode after basic practice flows are stable.
 
 ## Explicit Not Now

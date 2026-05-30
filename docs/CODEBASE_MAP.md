@@ -1,6 +1,6 @@
 ﻿# Codebase Map
 
-_Last updated: 2026-05-24_
+_Last updated: 2026-05-29_
 
 ## Purpose
 
@@ -120,6 +120,42 @@ Score, diagnosis, target layer, target output, UI, export, and history must stay
 - History display and restore/delete behavior live in `src/pages/PracticeHistory.tsx`.
 - Progress summaries and coverage are data-derived in `src/pages/Progress.tsx`.
 - Question-bank practice counts are computed in `src/components/practice/QuestionBankModal.tsx` from analyzed records with feedback. Do not hardcode counts.
+
+## Storage architecture map
+
+IELTS Scholar 正在进行从 localStorage 到 IndexedDB 的 local-first 持久化过渡（由 2026-05-28/29 P0 存储配额事件触发）。详见 `docs/P0_STORAGE_INDEXEDDB_INCIDENT_20260528_20260529.md`。
+
+### 关键文件
+
+- `src/lib/practiceRecords.ts` — 旧版 localStorage 练习记录持久化（配额安全写入、备份导出/导入 helper、`getAllPracticeRecords()` 消除 80 条截断）
+- `src/lib/practiceRepository.ts` — **新文件**：IndexedDB-backed PracticeRepository（规范练习记录 + 活跃状态 + 旧版归档会话 + 元数据）
+- `src/lib/storage/indexedDb.ts` — **新文件**：IndexedDB 包装层（数据库打开/升级、事务、存储操作）
+- `src/pages/PracticeHistory.tsx` — History UI（迁移摘要、备份导出/导入、恢复导入、存储健康面板）
+- `src/context/AppContext.tsx` — 应用级 localStorage 写入的配额保护
+
+### IndexedDB stores
+
+| Store | 内容 |
+|---|---|
+| `practiceRecords` | 规范练习记录（134 条已恢复） |
+| `activeStates` | 活跃状态（3 个已报告） |
+| `legacySessionsArchive` | 旧版会话档案（172 条已恢复） |
+| `meta` | 元数据 |
+
+### 重要提醒
+
+- History 迁移摘要显示可能在备份导入后陈旧；不要将其作为 IndexedDB 状态的真实来源
+- 旧版 localStorage 键（`ielts_practice_records_v1`、`ielts_sessions` 等）已被清除或不再暴露（确切路径未证明，用户未点击释放按钮）
+- 当前轻量 localStorage 键（如 `ielts_profile`）保持为 localStorage 键
+- 备份导出/导入支持完整的 IndexedDB-inclusive 备份（规范记录 + 旧版归档 + 活跃状态）
+
+### 修改存储代码前的检查清单
+
+- 检查 `practiceRepository.ts` 了解当前 IndexedDB store schema
+- 检查 `indexedDb.ts` 了解数据库版本和升级逻辑
+- 检查 `PracticeHistory.tsx` 了解迁移摘要、备份导入/导出、恢复导入 UI
+- 检查 `practiceRecords.ts` 了解旧版 localStorage 兼容性和配额安全模式
+- 在未确认最终备份的情况下，不要运行破坏性 IndexedDB 操作
 
 ## Common task entry checklist
 

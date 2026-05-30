@@ -73,10 +73,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sanitizeProfile(readJson<unknown>('ielts_profile', null))
   );
 
-  const [sessions, setSessions] = useState<any[]>(() => {
-    const saved = readJson<unknown>('ielts_sessions', []);
-    return Array.isArray(saved) ? saved : [];
-  });
+  const [sessions, setSessions] = useState<any[]>([]);
 
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [providerDiagnostic, setProviderDiagnostic] = useState<ProviderDiagnostic | null>(null);
@@ -103,12 +100,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   useEffect(() => {
-    localStorage.setItem('ielts_profile', JSON.stringify(profile));
+    try {
+      localStorage.setItem('ielts_profile', JSON.stringify(profile));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        console.warn('[ielts] localStorage quota exceeded saving profile.');
+      }
+    }
   }, [profile]);
-
-  useEffect(() => {
-    localStorage.setItem('ielts_sessions', JSON.stringify(sessions));
-  }, [sessions]);
 
   useEffect(() => {
     // Check initial capabilities
@@ -134,15 +133,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  const saveSession = (session: any) => {
-    setSessions(prev => [session, ...prev]);
+  const saveSession = (event: { id: string; module?: string; part?: number; task?: string; band?: number }) => {
+    setSessions(prev => [{ date: new Date().toISOString(), ...event }, ...prev].slice(0, 20));
     setProfile(prev => ({
       ...prev,
       totalSessions: prev.totalSessions + 1,
       lastPracticed: new Date().toISOString(),
-      estimatedBandHistory: [...prev.estimatedBandHistory, { date: new Date().toISOString(), band: session.feedback?.bandEstimateExcludingPronunciation || session.feedback?.scores?.taskResponse || 0 }]
+      estimatedBandHistory: typeof event.band === 'number'
+        ? [...prev.estimatedBandHistory, { date: new Date().toISOString(), band: event.band }]
+        : prev.estimatedBandHistory,
     }));
-    addDebugLog(`Session saved: ${session.id}`);
+    addDebugLog(`Session completed: ${event.id}`);
   };
 
   return (

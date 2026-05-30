@@ -22,13 +22,17 @@ import {
 } from '@/src/lib/ai/schemas';
 import {
   createRecordId,
-  getActiveWritingTask2,
-  saveActiveWritingTask2,
+  StorageWriteResult,
   summarizeDiagnostic,
-  upsertPracticeRecord,
   ProviderDiagnosticSummary,
   WritingTask2PracticeRecord,
 } from '@/src/lib/practiceRecords';
+import {
+  getActiveWritingTask2,
+  saveActiveWritingTask2,
+  upsertPracticeRecord,
+  deleteActiveWritingTask2,
+} from '@/src/lib/practiceRepository';
 import {
   buildMarkdownExportFilename,
   buildWritingTask2TrainingMarkdown,
@@ -1250,6 +1254,7 @@ export default function WritingTask2Practice() {
   const [restoreMessage, setRestoreMessage] = useState('');
   const [providerErrorMessage, setProviderErrorMessage] = useState('');
   const [apiStatusMessage, setApiStatusMessage] = useState('');
+  const [storageFullWarning, setStorageFullWarning] = useState('');
   const discussionRef = useRef<HTMLDivElement | null>(null);
   const markerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const isFrameworkInputComposingRef = useRef(false);
@@ -1272,12 +1277,14 @@ export default function WritingTask2Practice() {
       navigate('/writing/task2/practice', { replace: true, state: null });
       return;
     }
-    const active = getActiveWritingTask2();
-    if (active) {
-      restoreWritingAttempt(active);
-      return;
-    }
-    loadRandomQuestion();
+    (async () => {
+      const active = await getActiveWritingTask2();
+      if (active) {
+        restoreWritingAttempt(active);
+        return;
+      }
+      loadRandomQuestion();
+    })();
   }, []);
 
   useEffect(() => {
@@ -1354,15 +1361,18 @@ export default function WritingTask2Practice() {
     };
   };
 
-  const persistWritingAttempt = (
+  const persistWritingAttempt = async (
     status?: 'draft' | 'analyzed' | 'provider_failed',
     overrides?: Parameters<typeof buildWritingRecord>[1],
   ) => {
     const record = buildWritingRecord(status, overrides);
     if (!record) return;
-    saveActiveWritingTask2(record);
-    if (record.status !== 'draft') {
-      upsertPracticeRecord(record);
+    const [activeResult, upsertResult] = await Promise.all([
+      saveActiveWritingTask2(record),
+      record.status !== 'draft' ? upsertPracticeRecord(record) : Promise.resolve({ ok: true }),
+    ]);
+    if (!activeResult.ok || !upsertResult.ok) {
+      setStorageFullWarning('本地存储空间已满，当前写作状态未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
     }
   };
 
@@ -1736,10 +1746,11 @@ export default function WritingTask2Practice() {
           phase: 'writing',
         });
         if (failedBase) {
-          upsertPracticeRecord({
+          const failedResult = await upsertPracticeRecord({
             ...failedBase,
             providerDiagnostic: diagnosticSummary,
           });
+          if (!failedResult.ok) setStorageFullWarning('本地存储空间已满，当前状态未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
         }
         addDebugLog('Provider unavailable for writing feedback.');
         return;
@@ -1786,7 +1797,7 @@ export default function WritingTask2Practice() {
           providerDiagnostic: finalDiagnosticSummary,
         });
       if (analyzedBase) {
-        upsertPracticeRecord({
+        const analyzedResult = await upsertPracticeRecord({
           ...analyzedBase,
           essay: resultEssay,
           feedback: resultFeedback,
@@ -1794,18 +1805,16 @@ export default function WritingTask2Practice() {
           obsidianMarkdown: resultFeedback.obsidianMarkdown,
           providerDiagnostic: finalDiagnosticSummary,
         });
+        if (!analyzedResult.ok) setStorageFullWarning('本地存储空间已满，分析结果未能保存。请先导出数据备份，修复存储前建议暂停新练习。');
       }
 
       saveSession({
         id: `wt2_${Date.now()}`,
-        date: new Date().toISOString(),
         module: 'writing',
-        mode: 'practice',
-        question: submittedQuestion.question,
-        essay: resultEssay,
-        framework: submittedFinalFrameworkSummary,
-        feedback: resultFeedback,
-        providerDiagnostic: finalDiagnosticSummary,
+        task: 'task2',
+        band: resultFeedback?.scores
+          ? (resultFeedback.scores.taskResponse + resultFeedback.scores.coherenceCohesion + resultFeedback.scores.lexicalResource + resultFeedback.scores.grammaticalRangeAccuracy) / 4
+          : undefined,
       });
       addDebugLog("Writing analysis complete");
       if (diagnostic.fallbackUsed || finalDiagnostic.fallbackUsed) {
@@ -2054,6 +2063,13 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
           <div className="mb-6 space-y-2">
             <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-sm font-sans">
               {providerErrorMessage}
+            </div>
+          </div>
+        )}
+        {storageFullWarning && (
+          <div className="mb-6 space-y-2">
+            <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-sm rounded-sm font-sans">
+              {storageFullWarning}
             </div>
           </div>
         )}

@@ -1,7 +1,13 @@
 import { SpeakingQuestion, WritingQuestion, WritingTask1AcademicPrompt } from '@/src/data/questions/bank';
 import {
   ProviderDiagnostic,
+  Part1AnnotationOrigin,
   Part1AnswerAnnotationLayer,
+  Part1DisplayedCleanRetryCertificationStatus,
+  Part1DevelopmentStatus,
+  Part1RetryReferenceCleanAnswer,
+  Part1SessionPriorityState,
+  SpeakingMaterialBankItem,
   SpeakingFeedback,
   WritingFeedback,
   WritingFrameworkCoachFeedback,
@@ -11,6 +17,13 @@ import {
 import { validatePart1ThreadFeedbackIntegrity } from '@/src/lib/ai/part1ThreadIntegrity';
 
 export type PracticeRecordStatus = 'draft' | 'analyzed' | 'provider_failed';
+
+export interface StorageWriteResult {
+  ok: boolean;
+  reason?: 'quota_exceeded' | 'storage_write_failed';
+  key?: string;
+  message?: string;
+}
 
 export interface ProviderDiagnosticSummary {
   operation: ProviderDiagnostic['operation'];
@@ -67,6 +80,10 @@ export interface SpeakingPracticeRecord extends PracticeRecordBase {
   }[];
   activeThreadIndex?: number;
   threadCompleted?: boolean;
+  retryChainId?: string;
+  parentAttemptId?: string;
+  priorCleanRetryAnswers?: Part1RetryReferenceCleanAnswer[];
+  carriedMyUsableMaterial?: SpeakingMaterialBankItem[];
   questionData?: SpeakingQuestion;
   transcript: string;
   rawTranscript?: string;
@@ -174,6 +191,33 @@ const asTargetState = (value: unknown) =>
   value === 'high_band_stable'
     ? value
     : undefined;
+
+const asPart1CleanRetryCertificationStatus = (
+  value: unknown,
+): Part1DisplayedCleanRetryCertificationStatus =>
+  value === 'certified_first_attempt' ||
+  value === 'certified_after_rewrite' ||
+  value === 'legacy_or_unverified'
+    ? value
+    : 'legacy_or_unverified';
+
+const asPart1AnnotationOrigin = (value: unknown): Part1AnnotationOrigin | undefined =>
+  value === 'previous_cleaner_answer_conflict'
+    ? 'previous_cleaner_answer_conflict'
+    : value === 'learner'
+      ? 'learner'
+      : undefined;
+
+const asPart1SessionPriorityState = (value: unknown): Part1SessionPriorityState | undefined =>
+  value === 'core_repair_needed' ||
+  value === 'system_revision_conflict' ||
+  value === 'development_needed' ||
+  value === 'topic_complete'
+    ? value
+    : undefined;
+
+const asPart1DevelopmentStatus = (value: unknown): Part1DevelopmentStatus | undefined =>
+  value === 'needed' || value === 'sufficient' ? value : undefined;
 
 const asStatus = (value: unknown): PracticeRecordStatus =>
   value === 'analyzed' || value === 'provider_failed' || value === 'draft' ? value : 'draft';
@@ -487,6 +531,11 @@ const sanitizePart1Annotations = (
           better: asString(layer.better ?? layer.correction),
           explanationZh: sanitizeStoredPart1FeedbackText(asString(layer.explanationZh)),
           reuseGuidanceZh: asOptionalString(layer.reuseGuidanceZh),
+          origin: asPart1AnnotationOrigin(layer.origin),
+          priorCertificationStatus: layer.priorCertificationStatus
+            ? asPart1CleanRetryCertificationStatus(layer.priorCertificationStatus)
+            : undefined,
+          systemRevisionNoteZh: sanitizeStoredPart1FeedbackText(asOptionalString(layer.systemRevisionNoteZh)),
         })).filter(layer => (
           layer.original &&
           layer.better &&
@@ -550,8 +599,52 @@ const sanitizePart1MaterialItems = (value: unknown): NonNullable<SpeakingFeedbac
       reusableVersion: asString(item.reusableVersion ?? item.naturalReusableVersion),
       reuseFor: asRequiredStringArray(item.reuseFor ?? item.whereItMayBeReused),
       explanationZh: sanitizeStoredPart1FeedbackText(asOptionalString(item.explanationZh)),
+      materialCore: asOptionalString(item.materialCore ?? item.personalMaterialCore),
+      part1UseCases: asStringArray(item.part1UseCases ?? item.part1UseCase),
+      developmentMoveZh: sanitizeStoredPart1FeedbackText(asOptionalString(item.developmentMoveZh ?? item.developmentMove)),
+      developedExample: asOptionalString(item.developedExample),
+      expressionFrames: asStringArray(item.expressionFrames)?.slice(0, 2),
+      materialKey: asOptionalString(item.materialKey ?? item.identityKey),
     })).filter(item => item.reusableVersion && item.reuseFor.length && !containsStoredPart1UnsupportedBoundaryClaim(item.reusableVersion))
     : [];
+
+const sanitizePart1DevelopmentTargets = (
+  value: unknown,
+  maxCount: number,
+): NonNullable<SpeakingFeedback['threadFeedback']>['developmentTargets'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      questionRef: asString(item.questionRef),
+      reasonZh: sanitizeStoredPart1FeedbackText(asString(item.reasonZh ?? item.reason)),
+      developmentMoveZh: sanitizeStoredPart1FeedbackText(asString(item.developmentMoveZh ?? item.developmentMove)),
+      optionalDevelopedAnswer: asOptionalString(item.optionalDevelopedAnswer ?? item.developedAnswer),
+    })).filter(item => /^Q\d+$/.test(item.questionRef) && Number(item.questionRef.slice(1)) <= maxCount && item.reasonZh && item.developmentMoveZh)
+      .filter((item, index, items) => items.findIndex(candidate => candidate.questionRef === item.questionRef) === index)
+    : [];
+
+const sanitizePart1RetryCleanAnswers = (value: unknown): Part1RetryReferenceCleanAnswer[] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map(item => ({
+      questionRef: asString(item.questionRef),
+      questionId: asOptionalString(item.questionId),
+      answer: asString(item.answer),
+      certificationStatus: asPart1CleanRetryCertificationStatus(item.certificationStatus),
+    })).filter(item => /^Q\d+$/.test(item.questionRef) && item.answer.trim())
+      .filter((item, index, items) => items.findIndex(candidate => candidate.questionRef === item.questionRef) === index)
+    : [];
+
+const sanitizePart1RetryReference = (value: unknown): SpeakingFeedback['part1RetryReference'] => {
+  if (!isObject(value)) return undefined;
+  const retryChainId = asString(value.retryChainId);
+  const cleanRetryAnswers = sanitizePart1RetryCleanAnswers(value.cleanRetryAnswers);
+  if (!retryChainId || !cleanRetryAnswers.length) return undefined;
+  return {
+    retryChainId,
+    parentAttemptId: asOptionalString(value.parentAttemptId),
+    cleanRetryAnswers,
+    carriedMyUsableMaterial: sanitizePart1MaterialItems(value.carriedMyUsableMaterial),
+  };
+};
 
 const sanitizePart1ThreadLevelPatterns = (
   value: unknown,
@@ -599,6 +692,12 @@ const sanitizePart1ThreadFeedback = (
       : [],
     annotations: sanitizePart1Annotations(value.annotations, maxCount),
     cleanRetryAnswers: sanitizePart1CleanRetryAnswers(value.cleanRetryAnswers, maxCount),
+    cleanRetryCertificationStatus: value.cleanRetryCertificationStatus
+      ? asPart1CleanRetryCertificationStatus(value.cleanRetryCertificationStatus)
+      : undefined,
+    part1SessionPriorityState: asPart1SessionPriorityState(value.part1SessionPriorityState),
+    developmentStatus: asPart1DevelopmentStatus(value.developmentStatus),
+    developmentTargets: sanitizePart1DevelopmentTargets(value.developmentTargets, maxCount),
     threadLevelPatterns: sanitizePart1ThreadLevelPatterns(value.threadLevelPatterns),
     answerByAnswerCoaching: sanitizePart1CoachingItems(value.answerByAnswerCoaching, maxCount),
     highImpactPhraseFixes: sanitizePart1PhraseItems(value.highImpactPhraseFixes, maxCount),
@@ -609,6 +708,9 @@ const sanitizePart1ThreadFeedback = (
     optionalPolish: sanitizePart1PhraseItems(value.optionalPolish, maxCount),
     nextRetryPlan: sanitizePart1NextRetryPlan(value.nextRetryPlan),
     nextRetryFocusZh: asString(value.nextRetryFocusZh),
+    previousCleanerConflictCount: typeof value.previousCleanerConflictCount === 'number'
+      ? Math.max(0, Math.floor(value.previousCleanerConflictCount))
+      : undefined,
   };
 };
 
@@ -644,6 +746,7 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     topic: asOptionalString(value.topic),
     threadId: asOptionalString(value.threadId),
     threadAnswers,
+    part1RetryReference: sanitizePart1RetryReference(value.part1RetryReference),
     threadFeedback: sessionKind === 'part1_topic_thread'
       ? sanitizePart1ThreadFeedback(value.threadFeedback, threadAnswers?.length || 0)
       : undefined,
@@ -743,6 +846,10 @@ const sanitizeSpeakingRecord = (value: unknown): SpeakingPracticeRecord | null =
     threadAnswers: sanitizedThreadAnswers,
     activeThreadIndex: typeof value.activeThreadIndex === 'number' ? Math.max(0, Math.floor(value.activeThreadIndex)) : undefined,
     threadCompleted: typeof value.threadCompleted === 'boolean' ? value.threadCompleted : undefined,
+    retryChainId: asOptionalString(value.retryChainId),
+    parentAttemptId: asOptionalString(value.parentAttemptId),
+    priorCleanRetryAnswers: sanitizePart1RetryCleanAnswers(value.priorCleanRetryAnswers),
+    carriedMyUsableMaterial: sanitizePart1MaterialItems(value.carriedMyUsableMaterial),
     question,
     questionId: asOptionalString(value.questionId),
     topic: asOptionalString(value.topic),
@@ -865,7 +972,7 @@ const sanitizeWritingTask1Record = (value: unknown): WritingTask1PracticeRecord 
   };
 };
 
-const sanitizePracticeRecord = (value: unknown): PracticeRecord | null =>
+export const sanitizePracticeRecord = (value: unknown): PracticeRecord | null =>
   isObject(value) && value.module === 'speaking'
     ? sanitizeSpeakingRecord(value)
     : isObject(value) && value.module === 'writing_task1'
@@ -889,8 +996,28 @@ const readJsonArray = (key: string): unknown[] => {
   return Array.isArray(value) ? value : [];
 };
 
-const writeJson = (key: string, value: unknown) => {
-  localStorage.setItem(key, JSON.stringify(value));
+const writeJson = (key: string, value: unknown): StorageWriteResult => {
+  try {
+    const serialized = JSON.stringify(value);
+    localStorage.setItem(key, serialized);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      return {
+        ok: false,
+        reason: 'quota_exceeded',
+        key,
+        message: `localStorage quota exceeded writing "${key}".`,
+      };
+    }
+    console.error(`[ielts] Unexpected storage write error for "${key}":`, error);
+    return {
+      ok: false,
+      reason: 'storage_write_failed',
+      key,
+      message: `Failed to write to localStorage key "${key}".`,
+    };
+  }
 };
 
 const removeJson = (key: string) => {
@@ -920,8 +1047,15 @@ export const getPracticeRecords = (limit = 12): PracticeRecord[] =>
     .sort((a, b) => sortTimestamp(b).localeCompare(sortTimestamp(a)))
     .slice(0, limit);
 
-export const upsertPracticeRecord = (record: PracticeRecord) => {
-  if (record.status === 'draft') return;
+export const getAllPracticeRecords = (): PracticeRecord[] =>
+  readJsonArray(RECORDS_KEY)
+    .map(sanitizePracticeRecord)
+    .filter((record): record is PracticeRecord => Boolean(record))
+    .filter(record => record.status !== 'draft')
+    .sort((a, b) => sortTimestamp(b).localeCompare(sortTimestamp(a)));
+
+export const upsertPracticeRecord = (record: PracticeRecord): StorageWriteResult => {
+  if (record.status === 'draft') return { ok: true };
   const rawRecords = readJsonArray(RECORDS_KEY);
   const validRecords = rawRecords
     .map(sanitizePracticeRecord)
@@ -942,7 +1076,7 @@ export const upsertPracticeRecord = (record: PracticeRecord) => {
       .sort((a, b) => sortTimestamp(b).localeCompare(sortTimestamp(a))),
     ...preservedUnknownRecords,
   ];
-  writeJson(RECORDS_KEY, next);
+  return writeJson(RECORDS_KEY, next);
 };
 
 export const deletePracticeRecord = (
@@ -953,7 +1087,7 @@ export const deletePracticeRecord = (
   const next = records.filter(record => (
     !isObject(record) || record.id !== recordId || (module ? record.module !== module : false)
   ));
-  writeJson(RECORDS_KEY, next);
+  return writeJson(RECORDS_KEY, next);
 };
 
 export const getActiveSpeakingSession = (): ActiveSpeakingPracticeSession | null =>
@@ -975,15 +1109,15 @@ export const getActiveSpeakingSession = (): ActiveSpeakingPracticeSession | null
     };
   })();
 
-export const saveActiveSpeakingSession = (session: ActiveSpeakingPracticeSession) => {
-  writeJson(ACTIVE_SPEAKING_KEY, { ...session, updatedAt: nowIso() });
+export const saveActiveSpeakingSession = (session: ActiveSpeakingPracticeSession): StorageWriteResult => {
+  return writeJson(ACTIVE_SPEAKING_KEY, { ...session, updatedAt: nowIso() });
 };
 
 export const getActiveWritingTask2 = (): WritingTask2PracticeRecord | null =>
   sanitizeWritingTask2Record(readJson<unknown>(ACTIVE_WRITING_TASK2_KEY, null));
 
-export const saveActiveWritingTask2 = (attempt: WritingTask2PracticeRecord) => {
-  writeJson(ACTIVE_WRITING_TASK2_KEY, attempt);
+export const saveActiveWritingTask2 = (attempt: WritingTask2PracticeRecord): StorageWriteResult => {
+  return writeJson(ACTIVE_WRITING_TASK2_KEY, attempt);
 };
 
 export const deleteActiveWritingTask2 = (recordId: string) => {
@@ -996,8 +1130,8 @@ export const deleteActiveWritingTask2 = (recordId: string) => {
 export const getActiveWritingTask1 = (): WritingTask1PracticeRecord | null =>
   sanitizeWritingTask1Record(readJson<unknown>(ACTIVE_WRITING_TASK1_KEY, null));
 
-export const saveActiveWritingTask1 = (attempt: WritingTask1PracticeRecord) => {
-  writeJson(ACTIVE_WRITING_TASK1_KEY, attempt);
+export const saveActiveWritingTask1 = (attempt: WritingTask1PracticeRecord): StorageWriteResult => {
+  return writeJson(ACTIVE_WRITING_TASK1_KEY, attempt);
 };
 
 export const deleteActiveWritingTask1 = (recordId: string) => {
@@ -1005,6 +1139,55 @@ export const deleteActiveWritingTask1 = (recordId: string) => {
   if (active?.id === recordId) {
     removeJson(ACTIVE_WRITING_TASK1_KEY);
   }
+};
+
+export interface StorageUsageInfo {
+  key: string;
+  sizeBytes: number;
+  sizeMB: string;
+}
+
+export const getStorageUsage = () => {
+  const entries: StorageUsageInfo[] = [];
+  let totalBytes = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    const value = localStorage.getItem(key) || '';
+    const sizeBytes = new Blob([value]).size;
+    totalBytes += sizeBytes;
+    entries.push({ key, sizeBytes, sizeMB: (sizeBytes / 1024 / 1024).toFixed(3) });
+  }
+  entries.sort((a, b) => b.sizeBytes - a.sizeBytes);
+  const totalMB = (totalBytes / 1024 / 1024).toFixed(3);
+  const isNearQuota = totalBytes > 4.5 * 1024 * 1024;
+  return { entries, totalBytes, totalMB, isNearQuota };
+};
+
+export const exportBrowserStorageBackup = () => {
+  const localData: Record<string, string | null> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key) localData[key] = localStorage.getItem(key);
+  }
+  const sessionData: Record<string, string | null> = {};
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
+    if (key) sessionData[key] = sessionStorage.getItem(key);
+  }
+  const backupPayload = {
+    origin: window.location.origin,
+    capturedAt: new Date().toISOString(),
+    localStorage: localData,
+    sessionStorage: sessionData,
+  };
+  const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ielts-scholar-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 };
 
 export const clearAllIeltsLocalData = () => {
