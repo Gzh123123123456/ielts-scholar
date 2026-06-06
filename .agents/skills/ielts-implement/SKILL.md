@@ -17,6 +17,28 @@ Treat the user's short task statement as the current scope.
 
 Use `AGENTS.md`, current source/runtime evidence, and the smallest relevant project docs/source files. Do not rely on old chat memory. Do not read the full handoff, backlog, roadmap, and decision history for every small fix.
 
+
+## Decision Discipline
+
+Use these rules before choosing Scout, Implement, Review, or Goal Mode.
+
+1. Do not assume the user knows exactly what they want.
+   - If motivation, target state, or desired product behavior is unclear, pause before implementation.
+   - Ask for the missing decision in plain language.
+   - Do not turn vague dissatisfaction or a screenshot into a code task without identifying the product goal.
+
+2. If the user has a clear goal but the requested route is not the shortest safe route, say so.
+   - Recommend the better route.
+   - Explain briefly why it reduces diff size, user testing burden, runtime risk, or rework.
+
+3. Root cause first.
+   - Every implementation decision must answer: “why is this the right layer to change?”
+   - Do not add local guards, blacklists, or one-sample patches when the issue belongs in shared provider/safety/display/export logic.
+   - If the root cause is unknown, choose Scout or Review Mode and stop before edits.
+
+4. Say only what changes the next decision.
+   - Final reports should be compact and tied to acceptance, verification, rollback, or the next task.
+   - Do not repeat project history, old chat context, or unchanged boilerplate unless it changes the current decision.
 ## Choose One Work Mode First
 
 At the start, state the chosen mode briefly.

@@ -11,6 +11,7 @@ import { useApp } from '@/src/context/AppContext';
 import {
   canUseRealAudioTranscriptionProvider,
   getAIProviderName,
+  routedAnalyzePart1LearningAssets,
   routedAnalyzeSpeaking,
   routedCertifyPart1CleanRetry,
   routedTranscribeSpeakingAudio,
@@ -32,17 +33,28 @@ import type {
   Part1CleanRetryAnswer,
   Part1DevelopmentTarget,
   Part1DisplayedCleanRetryCertificationStatus,
+  Part1LearningAssetsResult,
   Part1RetryReferenceContext,
   Part1SessionPriorityState,
   ProviderDiagnostic,
   SpeakingFeedback,
   SpeakingMaterialBankItem,
+  SpeakingThreadAnswer,
 } from '@/src/lib/ai/schemas';
 import {
   buildMarkdownExportFilename,
   buildSpeakingTrainingMarkdown,
   formatPart1IssueTypeLabel,
 } from '@/src/lib/markdownExport';
+import {
+  buildPart1LearningDisplayModel,
+  evaluatePart1LearningPayloadQuality,
+  findPart1AnnotationDisplaySpans,
+  normalizePart1LearnerText,
+  normalizePart1TranscriptDisplayText,
+  part1DevelopmentChunkKey,
+  part1LearningItemKey,
+} from '@/src/lib/part1LearningDisplayModel';
 import {
   isHighBandStableState,
   resolveSpeakingTargetState,
@@ -79,6 +91,17 @@ type Part1TopicBucket = {
 };
 
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+const normalizePart1InlineTranscriptSegment = (
+  text: string,
+  options: { treatInitialAsSentenceStart?: boolean } = {},
+) => {
+  const leading = text.match(/^\s+/)?.[0]?.replace(/[^\S\r\n]+/g, ' ') || '';
+  const trailing = text.match(/\s+$/)?.[0]?.replace(/[^\S\r\n]+/g, ' ') || '';
+  const core = text.trim();
+  const normalizedCore = core ? normalizePart1TranscriptDisplayText(core, options) : '';
+  return `${leading}${normalizedCore}${trailing}`;
+};
 
 const hasLowSignalSpeakingText = (text: string) => {
   const normalized = text.toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -409,6 +432,117 @@ const withDerivedPart1SessionPriorityState = (source: SpeakingFeedback): Speakin
   };
 };
 
+const withClearedPart1LearningAssets = (source: SpeakingFeedback): SpeakingFeedback => {
+  if (source.sessionKind !== 'part1_topic_thread' || !source.threadFeedback) return source;
+  const next: SpeakingFeedback = {
+    ...source,
+    threadFeedback: {
+      ...source.threadFeedback,
+      developmentStatus: 'sufficient',
+      developmentTargets: [],
+      threadLevelPatterns: [],
+      answerByAnswerCoaching: [],
+      highImpactPhraseFixes: [],
+      materialBank: {
+        myUsableMaterial: [],
+        reusableSpokenLanguage: [],
+      },
+      optionalPolish: [],
+    },
+    obsidianMarkdown: '',
+  };
+  return {
+    ...next,
+    obsidianMarkdown: buildSpeakingTrainingMarkdown(next),
+  };
+};
+
+const withPart1LearningAssets = (
+  source: SpeakingFeedback,
+  assets: Part1LearningAssetsResult,
+): SpeakingFeedback => {
+  if (source.sessionKind !== 'part1_topic_thread' || !source.threadFeedback) return source;
+  const developmentTargets = consolidatePart1DevelopmentTargets(assets.developmentTargets || []);
+  const next: SpeakingFeedback = {
+    ...source,
+    threadFeedback: {
+      ...source.threadFeedback,
+      developmentStatus: developmentTargets.length ? 'needed' : 'sufficient',
+      developmentTargets,
+      threadLevelPatterns: [],
+      answerByAnswerCoaching: [],
+      highImpactPhraseFixes: [],
+      materialBank: {
+        myUsableMaterial: assets.materialBank.myUsableMaterial || [],
+        reusableSpokenLanguage: assets.materialBank.reusableSpokenLanguage || [],
+      },
+      optionalPolish: [],
+    },
+    obsidianMarkdown: '',
+  };
+  return {
+    ...next,
+    obsidianMarkdown: buildSpeakingTrainingMarkdown(next),
+  };
+};
+
+type Part1LearningCandidateSnapshot = {
+  feedback: SpeakingFeedback;
+  quality: ReturnType<typeof evaluatePart1LearningPayloadQuality>;
+  developmentCount: number;
+  developmentChunkCount: number;
+  expressionCount: number;
+  materialCount: number;
+  score: number;
+};
+
+const summarizePart1LearningCandidate = (
+  feedback: SpeakingFeedback,
+  answers: SpeakingThreadAnswer[],
+): Part1LearningCandidateSnapshot => {
+  const display = buildPart1LearningDisplayModel(feedback.threadFeedback, { answers });
+  const quality = evaluatePart1LearningPayloadQuality(feedback.threadFeedback, answers);
+  const developmentChunkCount = display.answerCoaching.reduce(
+    (total, target) => total + (target.phraseChunks || []).length,
+    0,
+  );
+  const score =
+    display.answerCoaching.length * 120 +
+    developmentChunkCount * 8 +
+    display.expressionBank.length * 10 +
+    display.userMaterials.length * 35 -
+    quality.issues.length * 20;
+  return {
+    feedback,
+    quality,
+    developmentCount: display.answerCoaching.length,
+    developmentChunkCount,
+    expressionCount: display.expressionBank.length,
+    materialCount: display.userMaterials.length,
+    score,
+  };
+};
+
+const part1LearningSnapshotNeedsRepair = (
+  snapshot: Part1LearningCandidateSnapshot,
+  answerCount: number,
+) =>
+  snapshot.developmentCount < answerCount ||
+  snapshot.developmentChunkCount < answerCount * 5 ||
+  snapshot.expressionCount < 10 ||
+  snapshot.materialCount === 0;
+
+const buildPart1LearningRepairFocus = (
+  snapshot: Part1LearningCandidateSnapshot,
+  answerCount: number,
+) => [
+  `This is a gap-fill pass for visible learner-facing Part 1 learning assets. Do not rescore or rewrite clean answers.`,
+  `Development must appear for every submitted answer: visible ${snapshot.developmentCount}/${answerCount}, visible chunks ${snapshot.developmentChunkCount}. Missing refs: ${snapshot.quality.missingDevelopmentRefs.join(', ') || 'none'}. Thin refs: ${snapshot.quality.thinDevelopmentRefs.join(', ') || 'none'}.`,
+  `For each answer, give 5-8 useful phraseChunks. Give alternative expressions and nearby topic language, not grammar fixes, source-to-replacement pairs, or labels such as fix/correct/replace/修正/替代. Prefer spoken corpus blocks with verbs/collocations, not one-word nouns and not mechanical labels.`,
+  `Reusable spoken language must show at least 10 useful current-topic items, preferably 12-20. Visible count is ${snapshot.expressionCount}.`,
+  `Reusable material visible count is ${snapshot.materialCount}. If the learner supplied a recoverable stance, preference, reason, habit, feeling, fact, or answer angle, return 2-4 paraphrased or lightly expanded material sentences with matching Chinese translations. Do not repeat the learner's original sentence or clean retry sentence unchanged, and do not start developedExample with disposable lead-ins like yes/no/absolutely/definitely/of course/not really.`,
+].join(' ');
+
 const part1MaterialStopWords = new Set([
   'a', 'an', 'the', 'and', 'or', 'but', 'so', 'because', 'i', 'im', 'ive', 'id', 'me', 'my', 'mine', 'we', 'our', 'us',
   'it', 'its', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to', 'of', 'for', 'with', 'in', 'on', 'at', 'from',
@@ -570,23 +704,6 @@ const part1LineageTextContains = (container: string, contained: string) => {
   return Boolean(containedKey && containedKey.split(' ').length >= 3 && containerKey.includes(containedKey));
 };
 
-const part1MaterialUseCases = (item: SpeakingMaterialBankItem) => {
-  const explicit = item.part1UseCases?.filter(Boolean) || [];
-  if (explicit.length) return explicit;
-  const filtered = item.reuseFor.filter(useCase =>
-    !/part\s*2|part\s*3|cue\s*card|long\s*turn|discussion|society|abstract/i.test(useCase),
-  );
-  return filtered.length ? filtered : ['Use this for a related Part 1 answer in this topic thread.'];
-};
-
-const part1MaterialDevelopmentMove = (item: SpeakingMaterialBankItem) =>
-  item.developmentMoveZh ||
-  item.explanationZh ||
-  'Add one brief reason, feeling, contrast, or concrete detail when the question invites development.';
-
-const part1MaterialDevelopedExample = (item: SpeakingMaterialBankItem) =>
-  item.developedExample || item.reusableVersion;
-
 const normalizePart1FormatOnlyText = (text: string) =>
   normalizePart1SourceQuote(text).replace(/[^a-z]/g, '');
 
@@ -686,31 +803,57 @@ const getPart1AnnotationRenderData = (
   answer: string,
   annotations: Part1AnswerAnnotation[],
 ) => {
-  const anchored: Part1AnnotationSpan[] = [];
-  const unanchored: Part1AnswerAnnotation[] = [];
-  annotations.forEach(annotation => {
-    const renderable = renderablePart1Annotation(annotation);
-    if (!renderable) return;
-    const span = findPart1AnnotationSpan(answer, renderable);
-    if (!span) {
-      unanchored.push(renderable);
-      return;
-    }
-    anchored.push({
-      annotation: {
-        ...renderable,
-        sourceQuote: answer.slice(span.start, span.end),
-        layers: sortPart1AnnotationLayers(renderable.layers),
-      },
-      start: span.start,
-      end: span.end,
-      visibleText: answer.slice(span.start, span.end),
-    });
-  });
+  const { anchored, unanchored } = findPart1AnnotationDisplaySpans(answer, annotations);
   return {
     anchored: mergePart1Annotations(answer, anchored),
     unanchored,
   };
+};
+
+const part1RepairDiffTokens = (original: string, better: string) => {
+  const originalTokens = normalizePart1TranscriptDisplayText(original).split(/\s+/).filter(Boolean);
+  const betterTokens = normalizePart1TranscriptDisplayText(better).split(/\s+/).filter(Boolean);
+  let prefix = 0;
+  while (
+    prefix < originalTokens.length &&
+    prefix < betterTokens.length &&
+    originalTokens[prefix].toLowerCase() === betterTokens[prefix].toLowerCase()
+  ) {
+    prefix += 1;
+  }
+  let suffix = 0;
+  while (
+    suffix < originalTokens.length - prefix &&
+    suffix < betterTokens.length - prefix &&
+    originalTokens[originalTokens.length - 1 - suffix].toLowerCase() === betterTokens[betterTokens.length - 1 - suffix].toLowerCase()
+  ) {
+    suffix += 1;
+  }
+
+  return {
+    prefix: betterTokens.slice(0, prefix).join(' '),
+    removed: originalTokens.slice(prefix, originalTokens.length - suffix).join(' '),
+    added: betterTokens.slice(prefix, betterTokens.length - suffix).join(' '),
+    suffix: suffix ? betterTokens.slice(betterTokens.length - suffix).join(' ') : '',
+  };
+};
+
+const renderPart1RepairDiff = (original: string, better: string) => {
+  const diff = part1RepairDiffTokens(original, better);
+  if (!diff.removed && !diff.added) return normalizePart1TranscriptDisplayText(better);
+  return (
+    <>
+      {diff.prefix && <span>{diff.prefix} </span>}
+      {diff.removed && (
+        <del className="text-paper-ink/45 decoration-accent-terracotta decoration-2">
+          {diff.removed}
+        </del>
+      )}
+      {diff.removed && diff.added && <span> </span>}
+      {diff.added && <span className="font-bold text-red-800">{diff.added}</span>}
+      {diff.suffix && <span> {diff.suffix}</span>}
+    </>
+  );
 };
 
 const Part1AnnotationOverlay = ({
@@ -764,6 +907,14 @@ const Part1AnnotationOverlay = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
+  const primaryLayer = annotation.layers[0];
+  const primaryRepair = annotation.combinedRepair || primaryLayer?.better || '';
+  const primaryOriginal = annotation.combinedRepair ? annotation.sourceQuote : primaryLayer?.original || annotation.sourceQuote;
+  const systemRevisionNote = annotation.layers.find(layer => layer.origin === 'previous_cleaner_answer_conflict')?.systemRevisionNoteZh;
+  const explanationLines = Array.from(new Set(annotation.layers
+    .map(layer => concisePart1LayerExplanation(layer.explanationZh))
+    .filter(Boolean)));
+
   const content = (
     <>
       {!position.isMobile && anchorEl && (
@@ -778,31 +929,21 @@ const Part1AnnotationOverlay = ({
         <div className="annotation-overlay__header">
           <div>
             <p className="annotation-overlay__eyebrow">{annotation.questionRef} · {part1AnnotationHeaderLabel(annotation)}</p>
-            <h4>Your words: {annotation.sourceQuote}</h4>
+            <h4>
+              Your words:{' '}
+              {primaryRepair
+                ? renderPart1RepairDiff(primaryOriginal, primaryRepair)
+                : normalizePart1TranscriptDisplayText(annotation.sourceQuote)}
+            </h4>
           </div>
           <button type="button" className="annotation-overlay__close" onClick={onClose} aria-label="Close annotation" />
         </div>
-        <div className="annotation-overlay__body">
-          {annotation.combinedRepair && (
-            <section>
-              <p className="annotation-overlay__label">Combined repair</p>
-              <p className="annotation-overlay__corrected">{annotation.combinedRepair}</p>
-            </section>
-          )}
-          <section className="annotation-overlay__stack">
-            {annotation.layers.map((layer, index) => (
-              <div key={`${layer.issueType}-${index}`} className="annotation-overlay__upgrade">
-                <span>{part1AnnotationLayerLabel(layer)} · {formatPart1IssueTypeLabel(layer.issueType)}</span>
-                <b>{layer.original} {'->'} {layer.better}</b>
-                <p>{concisePart1LayerExplanation(layer.explanationZh)}</p>
-                {layer.origin === 'previous_cleaner_answer_conflict' && (
-                  <p>{layer.systemRevisionNoteZh || '这处表达来自上一轮系统提供的修改答案；本次修正属于系统修订不一致，不视为你新引入的错误。'}</p>
-                )}
-                {layer.reuseGuidanceZh && <p>{layer.reuseGuidanceZh}</p>}
-              </div>
-            ))}
-          </section>
-        </div>
+        {(explanationLines.length > 0 || systemRevisionNote) && (
+          <div className="annotation-overlay__body">
+            {explanationLines.map(line => <p key={line}>{line}</p>)}
+            {systemRevisionNote && <p>{systemRevisionNote}</p>}
+          </div>
+        )}
       </aside>
     </>
   );
@@ -844,6 +985,9 @@ export default function SpeakingPractice() {
   const [transcriptCleanupNote, setTranscriptCleanupNote] = useState('');
   const [statusMessage, setStatusMessage] = useState<'Ready' | 'Requesting microphone...' | 'Listening...' | 'No speech detected' | 'Transcription unavailable' | 'Mic denied'>('Ready');
   const [selectedThreadAnnotationId, setSelectedThreadAnnotationId] = useState<string | null>(null);
+  const [hiddenPart1MaterialKeys, setHiddenPart1MaterialKeys] = useState<string[]>([]);
+  const [hiddenPart1DevelopmentKeys, setHiddenPart1DevelopmentKeys] = useState<string[]>([]);
+  const [hiddenPart1ExpressionKeys, setHiddenPart1ExpressionKeys] = useState<string[]>([]);
 
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -2251,8 +2395,12 @@ export default function SpeakingPractice() {
     timestamp: certificationDiagnostics.at(-1)?.timestamp || generationDiagnostic.timestamp,
   });
 
-  const analyzePart1Thread = async (answers: LockedThreadAnswer[] = lockedThreadAnswers) => {
+  const analyzePart1Thread = async (
+    answers: LockedThreadAnswer[] = lockedThreadAnswers,
+    options: { preserveCurrentResultOnFailure?: boolean } = {},
+  ) => {
     if (!part1Thread || answers.length < part1Thread.questions.length) return;
+    const previousFeedback = feedback;
     const combinedTranscript = answers
       .map((answer, index) => `Q${index + 1}: ${answer.question}\nA${index + 1}: ${answer.transcript}`)
       .join('\n\n');
@@ -2260,8 +2408,16 @@ export default function SpeakingPractice() {
     setProviderErrorMessage('');
     setProviderDiagnostic(null);
     addDebugLog('Starting Part 1 topic-thread AI analysis flow...');
+    const restorePreviousResultAfterReanalysisFailure = () => {
+      if (!options.preserveCurrentResultOnFailure || !previousFeedback) return false;
+      setFeedback(previousFeedback);
+      setProviderErrorMessage('Re-analysis could not be completed. The current result is still shown and the locked answers are preserved.');
+      setStep('results');
+      addDebugLog('Part 1 result-page re-analysis failed; previous result kept visible.');
+      return true;
+    };
     try {
-      const { feedback: result, diagnostic } = await routedAnalyzeSpeaking({
+      const analysisRequest = {
         part: 1,
         sessionKind: 'part1_topic_thread',
         topic: part1Thread.topic,
@@ -2274,11 +2430,17 @@ export default function SpeakingPractice() {
           answer: answer.transcript,
         })),
         retryReference: part1RetryReference || undefined,
-      }, false);
+      } as const;
+      let { feedback: result, diagnostic } = await routedAnalyzeSpeaking(analysisRequest, false);
       const expectedThreadAnswers = answers.map(answer => ({
         questionId: answer.questionId,
         question: answer.question,
         transcript: answer.transcript,
+      }));
+      const qualityThreadAnswers = answers.map(answer => ({
+        questionId: answer.questionId,
+        question: answer.question,
+        answer: answer.transcript,
       }));
       const integrity = validatePart1ThreadFeedbackIntegrity(result, expectedThreadAnswers);
       const diagnosticWithIntegrity = {
@@ -2302,6 +2464,7 @@ export default function SpeakingPractice() {
       setProviderDiagnostic(diagnosticWithIntegrity);
 
       if (diagnostic.failureKind === 'provider_unavailable') {
+        if (restorePreviousResultAfterReanalysisFailure()) return;
         setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
         setStep('editing');
         const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
@@ -2340,6 +2503,7 @@ export default function SpeakingPractice() {
       if (integrity.unknownCleanRetryRefs.length) addDebugLog(`Unknown clean retry answer refs: ${integrity.unknownCleanRetryRefs.join(', ')}`);
 
       if (diagnostic.failureKind === 'parse_or_schema' || !integrity.ok) {
+        if (restorePreviousResultAfterReanalysisFailure()) return;
         setFeedbackFallbackUsed(diagnostic.fallbackUsed);
         setFeedback(null);
         setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
@@ -2369,7 +2533,7 @@ export default function SpeakingPractice() {
           saveActiveSpeakingSession(activeSessionRef.current);
           upsertPracticeRecord(failedRecord);
         }
-        addDebugLog(`Part 1 topic-thread feedback incomplete: ${integrity.summary}`);
+        addDebugLog(`Part 1 topic-thread core feedback incomplete: ${integrity.summary}`);
         return;
       }
 
@@ -2386,6 +2550,7 @@ export default function SpeakingPractice() {
       }));
       const certificationDiagnostics: ProviderDiagnostic[] = [];
       const saveCertificationFailure = (finalDiagnostic: ProviderDiagnostic, message: string) => {
+        if (restorePreviousResultAfterReanalysisFailure()) return;
         setFeedbackFallbackUsed(finalDiagnostic.fallbackUsed);
         setFeedback(null);
         setProviderErrorMessage(message);
@@ -2441,12 +2606,15 @@ export default function SpeakingPractice() {
 
       if (attempt1.diagnostic.failureKind) {
         setProviderDiagnostic(finalDiagnostic);
-        saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
-        addDebugLog(`Part 1 clean retry certification provider failure: ${attempt1.diagnostic.failureKind}`);
-        return;
-      }
-
-      if (attempt1.feedback.status === 'failed') {
+        if (options.preserveCurrentResultOnFailure) {
+          finalResult = withPart1CertificationStatus(candidateResult, 'legacy_or_unverified');
+          addDebugLog(`Part 1 clean retry certification provider failure during re-analysis; displaying core feedback and continuing to learning assets: ${attempt1.diagnostic.failureKind}`);
+        } else {
+          saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
+          addDebugLog(`Part 1 clean retry certification provider failure: ${attempt1.diagnostic.failureKind}`);
+          return;
+        }
+      } else if (attempt1.feedback.status === 'failed') {
         const revisedResult = replacePart1CleanRetryAnswers(candidateResult, attempt1.feedback.revisedCleanRetryAnswers || []);
         const revisedIntegrity = validatePart1ThreadFeedbackIntegrity(revisedResult, expectedThreadAnswers);
         if (!revisedIntegrity.ok) {
@@ -2457,46 +2625,156 @@ export default function SpeakingPractice() {
             attempt1.feedback.violations.length,
           );
           setProviderDiagnostic(finalDiagnostic);
-          saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
-          addDebugLog(`Part 1 clean retry certification failed without a complete rewrite: ${revisedIntegrity.summary}`);
-          return;
+          if (options.preserveCurrentResultOnFailure) {
+            finalResult = withPart1CertificationStatus(candidateResult, 'legacy_or_unverified');
+            addDebugLog(`Part 1 clean retry certification rewrite incomplete during re-analysis; displaying original core feedback and continuing to learning assets: ${revisedIntegrity.summary}`);
+          } else {
+            saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
+            addDebugLog(`Part 1 clean retry certification failed without a complete rewrite: ${revisedIntegrity.summary}`);
+            return;
+          }
+        } else {
+          const attempt2 = await routedCertifyPart1CleanRetry({
+            topic: part1Thread.topic,
+            threadId: part1Thread.id,
+            threadAnswers: certificationThreadAnswers,
+            cleanRetryAnswers: revisedResult.threadFeedback?.cleanRetryAnswers || [],
+            attempt: 2,
+          });
+          certificationDiagnostics.push(attempt2.diagnostic);
+          setProviderDiagnostic(attempt2.diagnostic);
+          addDebugLog(`Part 1 clean retry certification attempt 2: ${attempt2.feedback.status}`);
+          addDebugLog(`Part 1 clean retry certification attempt 2 violations: ${attempt2.feedback.violations.length}`);
+
+          finalDiagnostic = mergePart1CertificationDiagnostics(
+            diagnosticWithIntegrity,
+            certificationDiagnostics,
+            attempt2.feedback.status === 'passed' && !attempt2.diagnostic.failureKind
+              ? 'rewritten_then_passed'
+              : 'failed_after_rewrite',
+            attempt1.feedback.violations.length + attempt2.feedback.violations.length,
+          );
+
+          if (attempt2.diagnostic.failureKind || attempt2.feedback.status !== 'passed') {
+            setProviderDiagnostic(finalDiagnostic);
+            if (options.preserveCurrentResultOnFailure) {
+              finalResult = withPart1CertificationStatus(revisedResult, 'legacy_or_unverified');
+              addDebugLog('Part 1 clean retry certification did not pass during re-analysis; displaying rewritten core feedback and continuing to learning assets.');
+            } else {
+              saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
+              addDebugLog('Part 1 clean retry certification failed after one automatic rewrite.');
+              return;
+            }
+          } else {
+            finalResult = withPart1CertificationStatus(revisedResult, 'certified_after_rewrite');
+            addDebugLog('Part 1 clean retry answers required one automatic rewrite before certification.');
+          }
         }
-
-        const attempt2 = await routedCertifyPart1CleanRetry({
-          topic: part1Thread.topic,
-          threadId: part1Thread.id,
-          threadAnswers: certificationThreadAnswers,
-          cleanRetryAnswers: revisedResult.threadFeedback?.cleanRetryAnswers || [],
-          attempt: 2,
-        });
-        certificationDiagnostics.push(attempt2.diagnostic);
-        setProviderDiagnostic(attempt2.diagnostic);
-        addDebugLog(`Part 1 clean retry certification attempt 2: ${attempt2.feedback.status}`);
-        addDebugLog(`Part 1 clean retry certification attempt 2 violations: ${attempt2.feedback.violations.length}`);
-
-        finalDiagnostic = mergePart1CertificationDiagnostics(
-          diagnosticWithIntegrity,
-          certificationDiagnostics,
-          attempt2.feedback.status === 'passed' && !attempt2.diagnostic.failureKind
-            ? 'rewritten_then_passed'
-            : 'failed_after_rewrite',
-          attempt1.feedback.violations.length + attempt2.feedback.violations.length,
-        );
-
-        if (attempt2.diagnostic.failureKind || attempt2.feedback.status !== 'passed') {
-          setProviderDiagnostic(finalDiagnostic);
-          saveCertificationFailure(finalDiagnostic, lockedThreadRecoveryMessage(answers.length));
-          addDebugLog('Part 1 clean retry certification failed after one automatic rewrite.');
-          return;
-        }
-
-        finalResult = withPart1CertificationStatus(revisedResult, 'certified_after_rewrite');
-        addDebugLog('Part 1 clean retry answers required one automatic rewrite before certification.');
       } else {
         finalResult = withPart1CertificationStatus(finalResult, 'certified_first_attempt');
       }
 
-      const carriedMaterial = part1RetryReference?.carriedMyUsableMaterial || [];
+      finalResult = withClearedPart1LearningAssets(finalResult);
+      const learningAssetsBaseRequest = {
+        topic: part1Thread.topic,
+        threadId: part1Thread.id,
+        threadAnswers: certificationThreadAnswers,
+        cleanRetryAnswers: finalResult.threadFeedback?.cleanRetryAnswers || [],
+        annotations: finalResult.threadFeedback?.annotations || [],
+        retryReference: part1RetryReference || undefined,
+        carriedMyUsableMaterial: part1RetryReference?.carriedMyUsableMaterial || [],
+      };
+      const learningDiagnostics: ProviderDiagnostic[] = [];
+      let carriedMaterial = part1RetryReference?.carriedMyUsableMaterial || [];
+      try {
+        addDebugLog('Generating Part 1 learning assets in a separate pass...');
+        const learningRun = await routedAnalyzePart1LearningAssets({
+          ...learningAssetsBaseRequest,
+          attempt: 1,
+        });
+        learningDiagnostics.push(learningRun.diagnostic);
+        setProviderDiagnostic(learningRun.diagnostic);
+        let selectedLearningDiagnostic = learningRun.diagnostic;
+        let selectedLearningSnapshot = summarizePart1LearningCandidate(
+          withPart1LearningAssets(finalResult, learningRun.feedback),
+          qualityThreadAnswers,
+        );
+        addDebugLog(
+          `Part 1 learning-assets attempt 1 visible counts: development ${selectedLearningSnapshot.developmentCount}/${qualityThreadAnswers.length}, chunks ${selectedLearningSnapshot.developmentChunkCount}, expressions ${selectedLearningSnapshot.expressionCount}, materials ${selectedLearningSnapshot.materialCount}`,
+        );
+        if (!learningRun.diagnostic.failureKind && part1LearningSnapshotNeedsRepair(selectedLearningSnapshot, qualityThreadAnswers.length)) {
+          const repairFocus = buildPart1LearningRepairFocus(selectedLearningSnapshot, qualityThreadAnswers.length);
+          addDebugLog(`Part 1 learning-assets attempt 1 underfilled; asking provider for a gap-fill pass: ${repairFocus}`);
+          const repairRun = await routedAnalyzePart1LearningAssets({
+            ...learningAssetsBaseRequest,
+            attempt: 2,
+            repairFocus,
+          });
+          learningDiagnostics.push(repairRun.diagnostic);
+          setProviderDiagnostic(repairRun.diagnostic);
+          const repairSnapshot = summarizePart1LearningCandidate(
+            withPart1LearningAssets(finalResult, repairRun.feedback),
+            qualityThreadAnswers,
+          );
+          addDebugLog(
+            `Part 1 learning-assets attempt 2 visible counts: development ${repairSnapshot.developmentCount}/${qualityThreadAnswers.length}, chunks ${repairSnapshot.developmentChunkCount}, expressions ${repairSnapshot.expressionCount}, materials ${repairSnapshot.materialCount}`,
+          );
+          if (!repairRun.diagnostic.failureKind && repairSnapshot.score >= selectedLearningSnapshot.score) {
+            selectedLearningDiagnostic = repairRun.diagnostic;
+            selectedLearningSnapshot = repairSnapshot;
+            addDebugLog('Part 1 learning-assets gap-fill pass selected for display.');
+          } else {
+            addDebugLog('Part 1 learning-assets gap-fill pass was not better; keeping attempt 1 for display.');
+          }
+        }
+        const learningQuality = selectedLearningSnapshot.quality;
+        finalResult = selectedLearningSnapshot.feedback;
+        carriedMaterial = selectedLearningDiagnostic.failureKind ? [] : carriedMaterial;
+        addDebugLog(
+          learningQuality.ok
+            ? 'Part 1 learning-assets diagnostic quality: ok'
+            : `Part 1 learning-assets diagnostic quality warning only; displaying provider feedback as returned: ${learningQuality.summary}`,
+        );
+        finalDiagnostic = {
+          ...finalDiagnostic,
+          fallbackUsed: finalDiagnostic.fallbackUsed || learningDiagnostics.some(item => item.fallbackUsed),
+          validationErrors: [
+            ...finalDiagnostic.validationErrors,
+            ...learningDiagnostics.flatMap(item => item.validationErrors.map(error => `part1LearningAssets:${error}`)),
+          ],
+          normalizedFields: [
+            ...(finalDiagnostic.normalizedFields || []),
+            ...learningDiagnostics.flatMap((item, index) => [
+              `part1LearningAssetsAttempt:${index + 1}`,
+              `part1LearningAssetsProvider:${item.providerName}`,
+              `part1LearningAssetsOperation:${item.operation}`,
+              ...(item.failureKind ? [`part1LearningAssetsFailure:${item.failureKind}`] : []),
+              ...(item.normalizedFields || []).map(field => `part1LearningAssets:${field}`),
+            ]),
+            `part1LearningPayloadQuality:${learningQuality.ok ? 'ok' : 'warning_only'}`,
+            `part1LearningPayloadDevelopmentTargets:${selectedLearningSnapshot.developmentCount}`,
+            `part1LearningPayloadDevelopmentChunks:${selectedLearningSnapshot.developmentChunkCount}`,
+            `part1LearningPayloadExpressions:${selectedLearningSnapshot.expressionCount}`,
+            `part1LearningPayloadMaterials:${selectedLearningSnapshot.materialCount}`,
+            ...(learningQuality.issues.length ? [`part1LearningPayloadIssues:${learningQuality.issues.join('|')}`] : []),
+          ],
+          timestamp: learningDiagnostics.at(-1)?.timestamp || finalDiagnostic.timestamp,
+        };
+      } catch (learningError) {
+        carriedMaterial = [];
+        addDebugLog(`Part 1 learning-assets generation error during re-analysis; displaying core feedback: ${learningError}`);
+        finalDiagnostic = {
+          ...finalDiagnostic,
+          validationErrors: [
+            ...finalDiagnostic.validationErrors,
+            `part1LearningAssetsException:${learningError instanceof Error ? learningError.message : String(learningError)}`,
+          ],
+          normalizedFields: [
+            ...(finalDiagnostic.normalizedFields || []),
+            'part1LearningAssetsException',
+          ],
+        };
+      }
       const freshMaterialCount = finalResult.threadFeedback?.materialBank.myUsableMaterial.length || 0;
       const materialMerge = withMergedPart1Material(finalResult, carriedMaterial);
       finalResult = withDerivedPart1SessionPriorityState(materialMerge.feedback);
@@ -2564,6 +2842,7 @@ export default function SpeakingPractice() {
       );
     } catch (error) {
       addDebugLog(`Part 1 topic-thread analysis error: ${error}`);
+      if (restorePreviousResultAfterReanalysisFailure()) return;
       setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
       setStep('editing');
     }
@@ -2703,7 +2982,11 @@ export default function SpeakingPractice() {
 
   const exportMarkdown = () => {
     if (!feedback) return;
-    const markdown = buildSpeakingTrainingMarkdown(feedback);
+    const markdown = buildSpeakingTrainingMarkdown(feedback, undefined, {
+      hiddenPart1DevelopmentKeys,
+      hiddenPart1ExpressionKeys,
+      hiddenPart1MaterialKeys,
+    });
     const blob = new Blob([markdown || feedback.obsidianMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2746,20 +3029,19 @@ export default function SpeakingPractice() {
     const entries = (threadFeedback?.cleanRetryAnswers || []).map(item => [item.questionRef, item] as const);
     return new Map(entries);
   }, [threadFeedback?.cleanRetryAnswers]);
+  const part1DisplayModel = buildPart1LearningDisplayModel(threadFeedback, { answers: threadAnswersForReview });
+  useEffect(() => {
+    setHiddenPart1MaterialKeys([]);
+    setHiddenPart1DevelopmentKeys([]);
+    setHiddenPart1ExpressionKeys([]);
+  }, [feedback?.threadId, feedback?.transcript]);
   const hasCleanRetryAnswers = (threadFeedback?.cleanRetryAnswers?.length || 0) > 0;
-  const answerLocalDevelopmentCount = (threadFeedback?.developmentTargets || []).length;
+  const answerLocalDevelopmentCount = part1DisplayModel.answerCoaching.length;
   const hasNoErrorDevelopmentThread = Boolean(answerLocalDevelopmentCount && !threadAnnotations.length);
-  const threadLevelPatterns = (threadFeedback?.threadLevelPatterns || [])
+  const threadLevelPatterns = part1DisplayModel.sessionPatterns
     .filter(item => !isLowValuePart1ThreadPattern(item))
     .filter(() => !hasNoErrorDevelopmentThread);
   const legacyCoachingFallback = !hasCleanRetryAnswers ? threadFeedback?.answerByAnswerCoaching || [] : [];
-  const nextRetryPlan = threadFeedback?.nextRetryPlan;
-  const nextRetryPlanItems = [
-    nextRetryPlan?.priorityAccuracyPatternZh,
-    nextRetryPlan?.answerLengthRuleZh,
-    nextRetryPlan?.materialToTry && `Try naturally: ${nextRetryPlan.materialToTry}`,
-    ...(nextRetryPlan?.actions || []),
-  ].filter((item): item is string => Boolean(item?.trim()));
   const previousCleanerConflictCount = threadFeedback?.previousCleanerConflictCount || 0;
   const part1SessionPriorityState = step === 'results' && !providerErrorMessage
     ? derivePart1SessionPriorityState(feedback)
@@ -2768,28 +3050,25 @@ export default function SpeakingPractice() {
   const part1DevelopmentNeeded = part1SessionPriorityState === 'development_needed';
   const part1CoreRepairNeeded = part1SessionPriorityState === 'core_repair_needed';
   const part1SystemRevisionConflict = part1SessionPriorityState === 'system_revision_conflict';
-  const part1DevelopmentTargets = consolidatePart1DevelopmentTargets(threadFeedback?.developmentTargets || []);
+  const part1DevelopmentTargets = consolidatePart1DevelopmentTargets(part1DisplayModel.answerCoaching);
   const part1DevelopmentTargetByQuestion = useMemo(() => new Map(
     part1DevelopmentTargets.map(target => [target.questionRef, target] as const),
   ), [part1DevelopmentTargets]);
-  const stableOptionalDevelopmentItems = nextRetryPlanItems.filter(isPart1OptionalDevelopmentText);
-  const displayPart1MaterialSeeds = (threadFeedback?.materialBank.myUsableMaterial || []).filter(isUsefulPart1DevelopmentSeed);
-  const displayPart1ReusableMaterials = (threadFeedback?.materialBank.myUsableMaterial || []).filter(isUsefulPart1ReusableMaterial);
-  const shouldShowPart1RetryPlan = Boolean(
-    !part1ThreadStable &&
-    !part1DevelopmentNeeded &&
-    (nextRetryPlanItems.length || threadFeedback?.nextRetryFocusZh),
+  const displayPart1ReusableMaterials = part1DisplayModel.userMaterials.filter(
+    item => !hiddenPart1MaterialKeys.includes(part1LearningItemKey(item)),
+  );
+  const displayPart1ExpressionBank = part1DisplayModel.expressionBank.filter(
+    item => !hiddenPart1ExpressionKeys.includes(part1LearningItemKey(item)),
   );
   const hasPart1MaterialBank = Boolean(
-    displayPart1MaterialSeeds.length || displayPart1ReusableMaterials.length,
+    displayPart1ReusableMaterials.length || displayPart1ExpressionBank.length,
   );
   const shouldShowPart1SessionBank = Boolean(
-    threadLevelPatterns.length ||
-    legacyCoachingFallback.length ||
-    hasPart1MaterialBank ||
-    shouldShowPart1RetryPlan ||
-    (part1ThreadStable && stableOptionalDevelopmentItems.length),
+    hasPart1MaterialBank,
   );
+  const part1AnswerActionByQuestion = useMemo(() => new Map(
+    part1DisplayModel.answerActions.map(action => [action.questionRef, action] as const),
+  ), [part1DisplayModel.answerActions]);
   const part1AnnotationRenderByQuestion = useMemo(() => {
     const entries = threadAnswersForReview.map((answer, index) => {
       const questionRef = `Q${index + 1}`;
@@ -2843,18 +3122,52 @@ export default function SpeakingPractice() {
     : null;
   const isCompletedPart1ThreadRecovery = Boolean(isPart1ThreadPractice && threadCompleted && step === 'editing' && providerErrorMessage);
   const part1RecoveryLockedAnswerCount = isCompletedPart1ThreadRecovery ? lockedThreadAnswers.length : 0;
+  const currentPart1ThreadAnswersForReanalysis: LockedThreadAnswer[] = threadAnswersForReview.map((answer, index) => {
+    const lockedAnswer = lockedThreadAnswers[index];
+    return {
+      questionId: answer.questionId,
+      question: answer.question,
+      transcript: answer.answer,
+      rawTranscript: lockedAnswer?.rawTranscript,
+      audioTranscript: lockedAnswer?.audioTranscript,
+      transcriptOrigin: lockedAnswer?.transcriptOrigin || 'manual',
+      transcriptSource: lockedAnswer?.transcriptSource || 'reviewed',
+      lockedAt: lockedAnswer?.lockedAt || new Date().toISOString(),
+    };
+  });
+  const canReanalyzeCurrentPart1Thread = Boolean(
+    isPart1ThreadResult &&
+    step === 'results' &&
+    part1Thread &&
+    currentPart1ThreadAnswersForReanalysis.length >= part1Thread.questions.length,
+  );
+  const reanalyzeCurrentPart1Thread = () => {
+    if (!canReanalyzeCurrentPart1Thread) return;
+    addDebugLog('Re-analyzing current locked Part 1 topic-thread answers from result page.');
+    void analyzePart1Thread(currentPart1ThreadAnswersForReanalysis, { preserveCurrentResultOnFailure: true });
+  };
   const shouldShowTranscriptCard = (step !== 'idle' && step !== 'analyzing') && !(step === 'results' && isPart1ThreadResult);
   const shouldShowPracticePromptCard = !(step === 'results' && isPart1ThreadResult);
   const renderAnnotatedPart1Answer = (answer: string, questionRef: string) => {
     const spans = part1AnnotationRenderByQuestion.get(questionRef)?.anchored || [];
     if (!spans.length) {
-      return <p className="whitespace-pre-wrap font-serif text-base leading-8 text-paper-ink/75">{answer}</p>;
+      return <p className="whitespace-pre-wrap font-serif text-base leading-8 text-paper-ink/75">{normalizePart1TranscriptDisplayText(answer)}</p>;
     }
+    const needsVisualWordBreak = (left = '', right = '') =>
+      /[A-Za-z0-9]$/.test(left) && /^[A-Za-z0-9]/.test(right);
     const nodes: React.ReactNode[] = [];
     let cursor = 0;
     spans.forEach(span => {
       if (span.start > cursor) {
-        nodes.push(<React.Fragment key={`text-${cursor}`}>{renderTextWithBreaks(answer.slice(cursor, span.start))}</React.Fragment>);
+        nodes.push(
+          <React.Fragment key={`text-${cursor}`}>
+            {renderTextWithBreaks(normalizePart1InlineTranscriptSegment(answer.slice(cursor, span.start), { treatInitialAsSentenceStart: cursor === 0 }))}
+          </React.Fragment>,
+        );
+      }
+      const previousChar = answer.slice(Math.max(0, span.start - 1), span.start);
+      if (needsVisualWordBreak(previousChar, span.visibleText)) {
+        nodes.push(<React.Fragment key={`space-before-${span.start}`}> </React.Fragment>);
       }
       const severity = span.annotation.layers.some(layer => layer.origin === 'previous_cleaner_answer_conflict')
         ? 'better_spoken_choice'
@@ -2869,14 +3182,22 @@ export default function SpeakingPractice() {
           data-severity={severity}
           className={`part1-answer-mark ${selectedThreadAnnotationId === span.annotation.id ? 'part1-answer-mark--active' : ''}`}
           onClick={() => setSelectedThreadAnnotationId(span.annotation.id)}
-        >
-          {span.visibleText}
+      >
+          {normalizePart1InlineTranscriptSegment(span.visibleText, { treatInitialAsSentenceStart: span.start === 0 })}
         </button>,
       );
+      const nextChar = answer.slice(span.end, span.end + 1);
+      if (needsVisualWordBreak(span.visibleText, nextChar)) {
+        nodes.push(<React.Fragment key={`space-after-${span.end}`}> </React.Fragment>);
+      }
       cursor = span.end;
     });
     if (cursor < answer.length) {
-      nodes.push(<React.Fragment key={`text-${cursor}`}>{renderTextWithBreaks(answer.slice(cursor))}</React.Fragment>);
+      nodes.push(
+        <React.Fragment key={`text-${cursor}`}>
+          {renderTextWithBreaks(normalizePart1InlineTranscriptSegment(answer.slice(cursor), { treatInitialAsSentenceStart: cursor === 0 }))}
+        </React.Fragment>,
+      );
     }
     return <p className="whitespace-pre-wrap font-serif text-base leading-8 text-paper-ink/75">{nodes}</p>;
   };
@@ -3312,79 +3633,76 @@ export default function SpeakingPractice() {
                       {threadAnswersForReview.map((answer, index) => {
                         const questionRef = `Q${index + 1}`;
                         const renderData = part1AnnotationRenderByQuestion.get(questionRef) || { anchored: [], unanchored: [] };
-                        const answerAnnotationCount = renderData.anchored.length + renderData.unanchored.length;
                         const cleanRetry = cleanRetryByQuestion.get(questionRef);
                         const developmentTarget = part1DevelopmentTargetByQuestion.get(questionRef);
-                        const shouldRenderDevelopmentCoaching = Boolean(developmentTarget && answerAnnotationCount === 0);
-                        const cleanRetryRepeatsStableAnswer = Boolean(
-                          (part1ThreadStable || part1DevelopmentNeeded) &&
+                        const answerAction = part1AnswerActionByQuestion.get(questionRef);
+                        const developmentChunks = [
+                          ...(developmentTarget?.phraseChunks || []),
+                          ...(answerAction?.examples || []),
+                        ]
+                          .map(chunk => {
+                            const text = normalizePart1TranscriptDisplayText(chunk.text);
+                            const purposeZh = normalizePart1LearnerText(chunk.purposeZh || '');
+                            return text ? { text, purposeZh } : null;
+                          })
+                          .filter((chunk): chunk is { text: string; purposeZh: string } => Boolean(chunk))
+                          .filter((chunk, chunkIndex, chunks) => chunks.findIndex(candidate => candidate.text === chunk.text) === chunkIndex)
+                          .filter(chunk => !hiddenPart1DevelopmentKeys.includes(part1DevelopmentChunkKey(questionRef, chunk)))
+                          .slice(0, 12);
+                        const shouldRenderDevelopmentCoaching = Boolean(developmentChunks.length);
+                        const cleanRetryRepeatsCurrentAnswer = Boolean(
                           cleanRetry &&
-                          answerAnnotationCount === 0 &&
                           isPart1CleanerAnswerEquivalent(answer.answer, cleanRetry.answer),
                         );
-                        const shouldRenderCleanRetry = Boolean(cleanRetry && !cleanRetryRepeatsStableAnswer && answerAnnotationCount > 0);
+                        const shouldRenderCleanRetry = Boolean(cleanRetry && !cleanRetryRepeatsCurrentAnswer);
                         return (
                           <section key={`${answer.questionId}-${index}`} className="border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                               <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">{questionRef}</p>
-                              {(renderData.anchored.length > 0 || answerAnnotationCount > 0 || shouldRenderDevelopmentCoaching) && (
+                              {(renderData.anchored.length > 0 || shouldRenderDevelopmentCoaching) && (
                                 <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
                                   {renderData.anchored.length
                                     ? `${renderData.anchored.length} marked ${renderData.anchored.length === 1 ? 'span' : 'spans'}`
-                                    : answerAnnotationCount
-                                      ? `${renderData.unanchored.length} unanchored ${renderData.unanchored.length === 1 ? 'repair' : 'repairs'}`
-                                      : 'Development coaching'}
+                                    : 'Development coaching'}
                                 </p>
                               )}
                             </div>
                             <p className="mb-3 text-lg leading-8 text-paper-ink">{answer.question}</p>
                             {renderAnnotatedPart1Answer(answer.answer, questionRef)}
-                            {shouldRenderDevelopmentCoaching && developmentTarget && (
-                              <div className="mt-4 border-l-2 border-l-amber-700/45 bg-amber-50/60 px-4 py-3">
-                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-amber-900/60">发展建议</p>
-                                <p className="mt-2 text-sm leading-7 text-paper-ink/70">{developmentTarget.reasonZh}</p>
-                                <p className="mt-1 text-base leading-7 text-paper-ink">{developmentTarget.developmentMoveZh}</p>
-                                {developmentTarget.phraseScaffolds?.length ? (
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    {developmentTarget.phraseScaffolds.slice(0, 3).map(frame => (
-                                      <span key={frame} className="border border-amber-700/15 bg-paper-50/80 px-2 py-1 text-xs leading-5 text-paper-ink/65">
-                                        {frame}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            )}
                             {shouldRenderCleanRetry && cleanRetry && (
                               <div className="mt-4 border border-accent-terracotta/15 bg-paper-50/80 p-4">
                                 <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">
                                   A CLEANER ANSWER FOR YOUR NEXT TRY
                                 </p>
                                 <p className="mt-2 text-lg leading-8 text-paper-ink">{cleanRetry.answer}</p>
-                                {cleanRetry.noteZh && (
-                                  <p className="mt-2 text-sm leading-7 text-paper-ink/60">{cleanRetry.noteZh}</p>
-                                )}
                               </div>
                             )}
-                            {renderData.unanchored.length > 0 && (
-                              <div className="mt-4 space-y-3 border-t border-paper-ink/10 pt-4">
-                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">Unanchored repair</p>
-                                {renderData.unanchored.map(annotation => (
-                                  <button
-                                    key={annotation.id}
-                                    type="button"
-                                    className="block w-full border border-paper-ink/10 bg-paper-50/60 p-3 text-left hover:bg-paper-ink/[0.03]"
-                                    onClick={() => setSelectedThreadAnnotationId(annotation.id)}
-                                  >
-                                    <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">
-                                      {annotation.layers.map(part1AnnotationLayerLabel).filter((label, labelIndex, labels) => labels.indexOf(label) === labelIndex).join(' / ')}
-                                    </p>
-                                    <p className="mt-2 text-sm leading-6 text-paper-ink/65">Your words: {annotation.sourceQuote}</p>
-                                    <p className="mt-1 text-base leading-7 text-paper-ink">
-                                      {annotation.combinedRepair || annotation.layers[0]?.better}
-                                    </p>
-                                  </button>
-                                ))}
+                            {shouldRenderDevelopmentCoaching && (
+                              <div className="mt-4 border-l-2 border-l-accent-terracotta/35 bg-paper-50/70 px-4 py-3">
+                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">DEVELOPMENT</p>
+                                {developmentChunks.length ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {developmentChunks.map(frame => (
+                                      <span key={frame.text} className="inline-flex items-start gap-2 border border-accent-terracotta/15 bg-paper-ink/[0.02] px-2 py-1 text-xs leading-5 text-paper-ink/70">
+                                        <span>
+                                          {frame.purposeZh && <span className="mr-1 text-paper-ink/45">{frame.purposeZh}:</span>}
+                                          <span className="font-bold">{frame.text}</span>
+                                        </span>
+                                        <button
+                                          type="button"
+                                          aria-label="Remove development expression"
+                                          className="-mr-1 shrink-0 px-1 text-xs font-bold leading-5 text-paper-ink/35 hover:text-accent-terracotta"
+                                          onClick={() => {
+                                            const key = part1DevelopmentChunkKey(questionRef, frame);
+                                            setHiddenPart1DevelopmentKeys(keys => keys.includes(key) ? keys : [...keys, key]);
+                                          }}
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
                               </div>
                             )}
                           </section>
@@ -3397,113 +3715,80 @@ export default function SpeakingPractice() {
                   <PaperCard className="border-l-2 border-l-accent-terracotta/45">
                     <div className="mb-5 border-b border-paper-ink/10 pb-4">
                       <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">PART 1 · SESSION REVIEW</p>
-                      <h4 className="mt-1 text-xl font-bold tracking-wide text-paper-ink">SESSION PATTERNS & MATERIAL DEVELOPMENT</h4>
+                      <h4 className="mt-1 text-xl font-bold tracking-wide text-paper-ink">MATERIAL DEVELOPMENT</h4>
                     </div>
-
-                    {(threadLevelPatterns.length > 0 || legacyCoachingFallback.length > 0) && (
-                    <section className="mb-6">
-                      <h5 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">THREAD-LEVEL PATTERNS</h5>
-                      {threadLevelPatterns.length > 0 ? (
-                        <div className="space-y-3">
-                          {threadLevelPatterns.map((item, index) => (
-                            <div key={`${item.retryRule}-${index}`} className="border-l-2 border-l-paper-ink/20 bg-paper-ink/[0.02] py-3 pl-4 pr-3">
-                              <p className="text-base font-bold leading-7 text-paper-ink">{item.observationZh}</p>
-                              <p className="mt-1 text-base leading-8 text-paper-ink/75">{item.whyItMattersZh}</p>
-                              <p className="mt-2 text-sm leading-7 text-paper-ink/65">Retry rule: {item.retryRule}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : legacyCoachingFallback.length > 0 ? (
-                        <div className="space-y-3">
-                          {legacyCoachingFallback.map((item, index) => (
-                            <div key={`${item.issue}-${index}`} className="border-l-2 border-l-paper-ink/20 bg-paper-ink/[0.02] py-3 pl-4 pr-3">
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35 mb-1">{item.questionRefs.join(' / ')}</p>
-                              <p className="text-base font-bold leading-7 text-paper-ink">{item.issue}</p>
-                              <p className="mt-1 text-base leading-8 text-paper-ink/75">{item.coachingZh}</p>
-                              {item.exampleFrame && <p className="mt-2 text-sm leading-7 text-paper-ink/60">Retry frame: {item.exampleFrame}</p>}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </section>
-                    )}
 
                     {hasPart1MaterialBank && (
                     <section className="border border-paper-ink/10 bg-paper-ink/[0.02] p-5">
-                      {displayPart1MaterialSeeds.length > 0 && (
-                        <div>
-                          <h5 className="text-sm font-bold leading-7 text-paper-ink">可继续发展的个人线索</h5>
-                          <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                            {displayPart1MaterialSeeds.map((item, index) => (
-                              <div key={`${item.materialKey || item.sourceWording || item.reusableVersion}-${index}`} className="border-l-2 border-l-amber-700/30 bg-paper-50/60 py-3 pl-4 pr-3">
-                                <p className="text-base font-bold leading-7 text-paper-ink">{item.materialCore || item.sourceWording || item.reusableVersion}</p>
-                                <p className="mt-1 text-sm leading-7 text-paper-ink/70">{part1MaterialDevelopmentMove(item)}</p>
-                                {item.expressionFrames?.length ? (
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    {item.expressionFrames.slice(0, 3).map(frame => (
-                                      <span key={frame} className="border border-amber-700/15 bg-paper-ink/[0.03] px-2 py-1 text-xs leading-5 text-paper-ink/60">
-                                        {frame}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                       {displayPart1ReusableMaterials.length > 0 && (
-                        <div className={displayPart1MaterialSeeds.length > 0 ? 'mt-6 border-t border-paper-ink/10 pt-5' : ''}>
+                        <div>
                           <h5 className="text-sm font-bold leading-7 text-paper-ink">可积累素材</h5>
                           <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                            {displayPart1ReusableMaterials.map((item, index) => (
-                              <div key={`${item.materialKey || item.reusableVersion}-${index}`} className="border-l-2 border-l-accent-terracotta/30 bg-paper-50/60 py-3 pl-4 pr-3">
-                                <p className="text-base font-bold leading-7 text-paper-ink">{item.materialCore || item.sourceWording || item.reusableVersion}</p>
-                                <p className="mt-1 text-sm leading-7 text-paper-ink/60">{part1MaterialUseCases(item).join(' / ')}</p>
-                                <p className="mt-2 text-sm leading-7 text-paper-ink/70">{part1MaterialDevelopmentMove(item)}</p>
-                                {item.expressionFrames?.length ? (
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    {item.expressionFrames.slice(0, 2).map(frame => (
-                                      <span key={frame} className="border border-paper-ink/10 bg-paper-ink/[0.03] px-2 py-1 text-xs leading-5 text-paper-ink/55">
-                                        {frame}
-                                      </span>
-                                    ))}
+                            {displayPart1ReusableMaterials.map((item, index) => {
+                              const materialKey = part1LearningItemKey(item) || `${item.reusableVersion}-${index}`;
+                              const materialEnglish = normalizePart1TranscriptDisplayText(item.developedExample || item.reusableVersion || item.materialCore || item.sourceWording);
+                              const materialChinese = normalizePart1LearnerText(item.explanationZh || '');
+                              return (
+                                <div key={materialKey} className="border-l-2 border-l-accent-terracotta/30 bg-paper-50/60 py-3 pl-4 pr-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <p className="text-base font-bold leading-7 text-paper-ink">{materialEnglish}</p>
+                                    <button
+                                      type="button"
+                                      aria-label="Remove material from this export"
+                                      className="shrink-0 px-2 py-1 text-xs font-bold leading-none text-paper-ink/35 hover:text-accent-terracotta"
+                                      onClick={() => setHiddenPart1MaterialKeys(keys => keys.includes(materialKey) ? keys : [...keys, materialKey])}
+                                    >
+                                      ×
+                                    </button>
                                   </div>
-                                ) : null}
-                                {item.developedExample && (
-                                  <p className="mt-3 text-base leading-7 text-paper-ink">{part1MaterialDevelopedExample(item)}</p>
-                                )}
+                                  {materialChinese && (
+                                    <p className="mt-1 text-sm leading-7 text-paper-ink/60">{materialChinese}</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {displayPart1ExpressionBank.length > 0 && (
+                        <div className={displayPart1ReusableMaterials.length > 0 ? 'mt-6 border-t border-paper-ink/10 pt-5' : ''}>
+                          <h5 className="text-sm font-bold leading-7 text-paper-ink">可积累表达</h5>
+                          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                            {displayPart1ExpressionBank.map((item, index) => {
+                              const expressionKey = part1LearningItemKey(item) || `${item.reusableVersion}-${index}`;
+                              return (
+                              <div key={expressionKey} className="border-l-2 border-l-accent-terracotta/30 bg-paper-50/60 py-3 pl-4 pr-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <p className="text-base font-bold leading-7 text-paper-ink">{normalizePart1TranscriptDisplayText(item.reusableVersion)}</p>
+                                  <button
+                                    type="button"
+                                    aria-label="Remove expression from this export"
+                                    className="shrink-0 px-2 py-1 text-xs font-bold leading-none text-paper-ink/35 hover:text-accent-terracotta"
+                                    onClick={() => setHiddenPart1ExpressionKeys(keys => keys.includes(expressionKey) ? keys : [...keys, expressionKey])}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
                               </div>
-                            ))}
+                            );})}
                           </div>
                         </div>
                       )}
                     </section>
                     )}
 
-                    {(shouldShowPart1RetryPlan || (part1ThreadStable && stableOptionalDevelopmentItems.length > 0)) && (
-                    <section className="mt-6 border-t border-paper-ink/10 pt-5">
-                      <h5 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-3">
-                        {part1ThreadStable ? 'OPTIONAL IMPROVEMENT GUIDANCE' : 'NEXT RETRY PLAN'}
-                      </h5>
-                      {(part1ThreadStable ? stableOptionalDevelopmentItems : nextRetryPlanItems).length ? (
-                        <ul className="space-y-2">
-                          {(part1ThreadStable ? stableOptionalDevelopmentItems : nextRetryPlanItems).map((item, index) => (
-                            <li key={`${item}-${index}`} className="border-l-2 border-l-accent-terracotta/25 pl-3 text-base leading-8 text-paper-ink/75">
-                              {item}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-lg leading-8 text-paper-ink/80">{threadFeedback.nextRetryFocusZh}</p>
-                      )}
-                    </section>
-                    )}
-
-                    <div className="mt-6 flex flex-wrap gap-3 border-t border-paper-ink/10 pt-5">
+                  </PaperCard>
+                  )}
+                  <PaperCard className="border-l-2 border-l-accent-terracotta/30">
+                    <div className="flex flex-wrap gap-3">
                       <SerifButton onClick={exportMarkdown} className="text-xs flex items-center justify-center gap-2 py-3" variant="outline">
                         <FileDown className="w-4 h-4" /> Export Markdown
                       </SerifButton>
+                      {canReanalyzeCurrentPart1Thread && (
+                        <SerifButton onClick={reanalyzeCurrentPart1Thread} variant="outline" className="text-xs">
+                          重新分析当前答案（测试）
+                        </SerifButton>
+                      )}
                       {part1ThreadStable ? (
                         <>
                           <SerifButton onClick={changeQuestion} className="text-xs">Practise a New Topic</SerifButton>
@@ -3519,7 +3804,6 @@ export default function SpeakingPractice() {
                       )}
                     </div>
                   </PaperCard>
-                  )}
                 </>
               )}
 

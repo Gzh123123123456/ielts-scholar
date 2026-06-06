@@ -34,6 +34,32 @@ Product runtime evidence and source code override stale documentation.
 - For an approved ordinary implementation or fix slice, use `$ielts-implement`.
 - For an explicitly requested daily closeout, use `$ielts-closeout`.
 - Do not use closeout behavior during ordinary implementation.
+## Work Mode
+
+Before implementation, choose one mode:
+
+1. Scout mode
+   - Read-only.
+   - Use when the task is ambiguous, risky, or architecture-sensitive.
+   - Output: likely files, current behavior, options, risks, and recommended next step.
+   - Do not edit files.
+
+2. Implement mode
+   - Use only after the scope is clear.
+   - Read relevant docs and the smallest relevant source path.
+   - Make a small, testable diff.
+   - Run verification.
+
+3. Review mode
+   - Use after another agent or earlier session changed code.
+   - Compare the diff against source of truth, product rules, and runtime evidence.
+   - Output MUST FIX / SHOULD FIX / OPTIONAL only.
+
+4. Goal mode
+   - Use only for work bigger than one prompt but smaller than an open backlog.
+   - Define objective, non-goals, checkpoints, validation commands, and stop conditions.
+   - Pause at checkpoints if the next step changes product behavior or architecture.
+
 ## Source Reading Budget
 
 - Start with docs/CODEBASE_MAP.md and targeted search.
@@ -46,7 +72,7 @@ Product runtime evidence and source code override stale documentation.
 When there is uncertainty:
 - State the disputed point.
 - State the evidence from code/docs/runtime.
-- Give 2–3 options in plain language.
+- Give 2鈥? options in plain language.
 - Recommend one option.
 - Ask the user to decide only if the decision is product-level, destructive, or cannot be proven from source.
 

@@ -1,6 +1,7 @@
 import {
   AIProvider,
   Part1CleanRetryCertificationRequest,
+  Part1LearningAssetsRequest,
   SpeakingAudioTranscriptionRequest,
   SpeakingAnalysisRequest,
   SpeakingScoreOnlyRequest,
@@ -25,6 +26,7 @@ import {
   Part1DevelopmentStatus,
   Part1DevelopmentTarget,
   Part1DisplayedCleanRetryCertificationStatus,
+  Part1LearningAssetsResult,
   Part1RetryReferenceContext,
   Part1SessionPriorityState,
   SpeakingAudioTranscriptionResult,
@@ -62,6 +64,7 @@ import {
 
 type SpeakingRequest = SpeakingAnalysisRequest;
 type Part1CertificationRequest = Part1CleanRetryCertificationRequest;
+type Part1LearningAssetsSafeRequest = Part1LearningAssetsRequest;
 type SpeakingTranscriptionRequest = SpeakingAudioTranscriptionRequest;
 type SpeakingScoreRequest = SpeakingScoreOnlyRequest;
 type WritingRequest = WritingAnalysisRequest;
@@ -898,7 +901,19 @@ const calibratePart1AnnotationSeverity = (
   better = '',
 ): Part1AnnotationSeverity => {
   if (severity !== 'must_fix') return severity;
+  const originalKey = original.toLowerCase();
+  const betterKey = better.toLowerCase();
   const evidence = `${issueType} ${explanationZh} ${original} ${better}`.toLowerCase();
+  const reportedSpeechPresentState = /\b(knew|thought|said|told|realized|realised|learned|found out|remembered|mentioned|noticed|felt)\s+that\s+(?:i|he|she|they|we)\s+(?:am|is|are)\b/.test(originalKey);
+  const reportedSpeechPastState = /\b(knew|thought|said|told|realized|realised|learned|found out|remembered|mentioned|noticed|felt)\s+(?:that\s+)?(?:i|he|she|they|we)\s+(?:was|were)\b/.test(betterKey);
+  if (
+    /\b(tense|backshift|reported speech|sequence of tenses)\b/.test(evidence) &&
+    reportedSpeechPresentState &&
+    reportedSpeechPastState &&
+    !/\b(dead|ended|finished|over|no longer|used to)\b/.test(originalKey)
+  ) {
+    return 'optional_polish';
+  }
   const hardGrammarEvidence = /\b(article|determiner|plural|singular|countability|agreement|subject-verb|tense|verb form|word form|missing verb|missing article|grammar|grammatical)\b/.test(evidence) ||
     /\b(this kind of opportunities|this kind of opportunity|those opportunities|someone invite|someone invites|team i support win|team i support wins)\b/.test(evidence);
   const naturalnessEvidence = /\b(natural|more natural|better spoken|spoken choice|optional|polish|wordy|wordiness|restructur|awkward|verbose|concise|clearer|clarity|style|preference)\b/.test(evidence) ||
@@ -917,6 +932,8 @@ type Part1DevelopmentDiagnostics = {
   ungroundedScaffoldsFiltered: number;
 };
 
+const MAX_PART1_DEVELOPMENT_CHUNK_WORDS = 12;
+
 type Part1AnnotationDiagnostics = {
   severityDowngradedFromMustFix: number;
   cleanerConflictsFound: number;
@@ -926,10 +943,10 @@ type Part1AnnotationDiagnostics = {
 const isPart1FullSentenceScaffold = (text: string) => {
   const clean = safeLearningText(text);
   const words = part1Words(clean);
-  if (words.length > 8) return true;
-  if (/[.!?]\s*$/.test(clean) && words.length >= 5) return true;
+  if (words.length > MAX_PART1_DEVELOPMENT_CHUNK_WORDS) return true;
+  if (/[.!?]\s*$/.test(clean) && words.length > MAX_PART1_DEVELOPMENT_CHUNK_WORDS) return true;
   return /^(i|my|we|our|it|there|this|that)\b/i.test(clean) &&
-    words.length >= 5 &&
+    words.length > MAX_PART1_DEVELOPMENT_CHUNK_WORDS &&
     /\b(am|is|are|was|were|have|has|had|feel|felt|like|liked|prefer|preferred|live|lived|spent|grew|enjoy|enjoyed|miss|missed)\b/i.test(clean) &&
     !/\.\.\./.test(clean);
 };
@@ -952,55 +969,6 @@ const part1DevelopmentClaimContradictsAnswer = (reasonZh: string, developmentMov
   const evidence = `${reasonZh} ${developmentMoveZh}`.toLowerCase();
   return /\b(no detail|without detail|only (?:gave|provided|answered|mentions?)|only a place name|only the name|just says?|just names?|bare answer)\b/.test(evidence);
 };
-
-const part1CoreDevelopmentIdea = (question: string, answer: string) => {
-  const text = `${question} ${answer}`.toLowerCase();
-  if (/\b(born|raised|grew up|childhood|lived|living|live)\b/.test(text)) return 'long-term living background';
-  if (/\b(college|university|school|moved|returned|spent|compared|contrast)\b/.test(text)) return 'experience or contrast clue';
-  if (/\b(family|friend|friends|parents|close|stay|leave|long-term)\b/.test(text)) return 'relationship or staying reason';
-  if (/\b(team|basketball|football|sport|club|game|match|point guard|role)\b/.test(text)) return 'specific experience and role';
-  if (/\b(nba|esports?|cs2|dota|watch|viewing)\b/.test(text)) return 'viewing habit or interest';
-  if (/\b(prefer|like|enjoy|favorite|favourite|rather than|instead of|depends)\b/.test(text)) return 'personal preference and condition';
-  if (/\b(city|coastal|place|where|hometown|what kind|what type)\b/.test(text)) return 'specific feature clue';
-  return 'personal development clue';
-};
-
-const part1GroundedDevelopmentReasonZh = (questionRef: string, question: string, answer: string) => {
-  const text = `${question} ${answer}`.toLowerCase();
-  if (/\b(born|raised|grew up|childhood|lived|living)\b/.test(text)) {
-    return `${questionRef} 已经给出了长期生活或成长背景；下一步可以补一句这种经历带来的熟悉感、归属感或个人连接。`;
-  }
-  if (/\b(college|university|school|moved|returned|spent|compared|contrast)\b/.test(text)) {
-    return `${questionRef} 已经提到具体经历或地点变化；下一步可以补一句真实感受或前后对比。`;
-  }
-  if (/\b(family|friend|friends|parents|close|stay|leave|long-term)\b/.test(text)) {
-    return `${questionRef} 已经给出了关系或原因；下一步可以说明这个因素为什么会影响你的选择。`;
-  }
-  if (/\b(team|basketball|football|sport|club|game|match|point guard|role)\b/.test(text)) {
-    return `${questionRef} 已经有具体经历或角色；下一步可以补一句当时做了什么或为什么重要。`;
-  }
-  if (/\b(nba|esports?|cs2|dota|watch)\b/.test(text)) {
-    return `${questionRef} 已经有具体兴趣来源；下一步可以补一句你通常怎么看、为什么喜欢或什么时候会看。`;
-  }
-  if (/\b(prefer|like|enjoy|favorite|favourite|rather than|instead of|depends)\b/.test(text)) {
-    return `${questionRef} 已经表达了偏好；下一步可以补一个真实原因、条件或小例子。`;
-  }
-  if (/\b(city|coastal|place|where|hometown|what kind|what type)\b/.test(text)) {
-    return `${questionRef} 已经说明了基本信息；下一步可以补一句你真实感受到的特点。`;
-  }
-  return `${questionRef} 的意思可以理解；下一步补一个真实原因、例子、感受或对比即可。`;
-};
-
-const buildFallbackPart1DevelopmentTarget = (
-  questionRef: string,
-  question: string,
-  answer: string,
-): Part1DevelopmentTarget => ({
-  questionRef,
-  reasonZh: part1GroundedDevelopmentReasonZh(questionRef, question, answer),
-  developmentMoveZh: part1DevelopmentMoveZh(question, answer),
-  phraseScaffolds: part1DevelopmentPhraseScaffolds(question, answer),
-});
 
 const normalizeTranscriptFormatText = (text: string) =>
   safeLearningText(text)
@@ -1303,6 +1271,8 @@ const normalizePart1RepairLayer = (
 ) => {
   const polishedBetter = polishPart1RepairText(better);
   if (!original || !polishedBetter || !explanationZh) return null;
+  if (isInvalidPart1Repair(original, polishedBetter)) return null;
+  if (isStateDependentPart1PresentRepair(original, polishedBetter, issueType, explanationZh)) return null;
   if (isAcceptablePart1RegionalOrStyleVariant(original, polishedBetter, issueType, explanationZh)) {
     return {
       original,
@@ -1320,6 +1290,8 @@ const normalizePart1RepairLayer = (
       ? contextSafePart1Explanation(issueType, explanationZh)
       : '');
   if (!original || !polishedBetter || !safeExplanation) return null;
+  if (isInvalidPart1Repair(original, polishedBetter)) return null;
+  if (isStateDependentPart1PresentRepair(original, polishedBetter, issueType, safeExplanation)) return null;
   if (isLikelyTranscriptFormatOnlyLayer(original, polishedBetter, issueType, safeExplanation)) return null;
   const narrowed = safeNarrowUnsupportedPart1Repair(original, polishedBetter, issueType, safeExplanation, answerText);
   if (narrowed === null) return null;
@@ -1335,6 +1307,36 @@ const normalizePart1RepairLayer = (
       ? contextSafePart1Explanation(issueType, safeExplanation, polishedBetter) || safeExplanation
       : safeExplanation,
   };
+};
+
+const isInvalidPart1Repair = (original: string, better: string) => {
+  const source = normalizeTranscriptFormatText(original);
+  const repair = normalizeTranscriptFormatText(better);
+  if (!source || !repair || source === repair) return true;
+  if (/\bconsider as\b/.test(source) && /\bconsider is\b/.test(repair)) return true;
+  if ((/\bhand make\b|\bhandmake\b/.test(source)) && !(/\bby hand\b|\bhandmade\b/.test(repair))) return true;
+  if (/\bplaces?\s+where\b/.test(repair) && /\bthere\b/.test(repair)) return true;
+  if (/\bwhere i enjoy eating there\b/.test(repair)) return true;
+  if (/\bhand make\b|\bhandmake\b/.test(repair)) return true;
+  if (/\bkeen on eating\b/.test(repair) && !/\bkeen on eating (?:at|in)\b/.test(repair)) return true;
+  return false;
+};
+
+const isStateDependentPart1PresentRepair = (
+  original: string,
+  better: string,
+  issueType: string,
+  explanationZh: string,
+) => {
+  const source = normalizeTranscriptFormatText(original);
+  const repair = normalizeTranscriptFormatText(better);
+  const evidence = normalizeTranscriptFormatText(`${issueType} ${explanationZh}`);
+  const reportedSpeech = /\b(knew|thought|said|told|mentioned|realized|noticed|found|felt)\s+that\b/.test(source);
+  const presentState = /\b(i|he|she|they|we)\s+(am|is|are)\b/.test(source);
+  const backshift = /\b(i|he|she|they|we)\s+(was|were)\b/.test(repair);
+  const tenseClaim = /\b(reported speech|tense|backshift|sequence of tense)\b/.test(evidence);
+  const endedState = /\b(dead|ended|finished|over|no longer|used to)\b/.test(source);
+  return reportedSpeech && presentState && backshift && tenseClaim && !endedState;
 };
 
 const containsUnsupportedSpeakingBoundaryClaim = (text: string | undefined) => {
@@ -1401,15 +1403,41 @@ const isGroundedInPart1Answers = (
   return answers.some(answer => normalizeTranscriptFormatText(answer.answer).includes(normalized));
 };
 
-const hasConcretePart1PersonalMaterialSignal = (text: string) => {
+const PART1_MATERIAL_OVERLAP_STOP_WORDS = new Set([
+  'about', 'after', 'again', 'also', 'answer', 'because', 'before', 'being', 'could', 'every', 'from',
+  'have', 'just', 'like', 'more', 'most', 'much', 'really', 'should', 'some', 'than', 'that', 'their',
+  'there', 'these', 'they', 'this', 'those', 'through', 'usually', 'very', 'where', 'which', 'with',
+  'would', 'your',
+]);
+
+const part1MaterialOverlapWords = (text = '') =>
+  Array.from(new Set(
+    (normalizeTranscriptFormatText(text).match(/[a-z]+(?:'[a-z]+)?|[0-9]+/g) || [])
+      .map(word => word.toLowerCase())
+      .filter(word => word.length > 3 && !PART1_MATERIAL_OVERLAP_STOP_WORDS.has(word)),
+  ));
+
+const hasPart1CurrentThreadMaterialOverlap = (
+  text: string,
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+) => {
+  const materialText = normalizeTranscriptFormatText(text);
+  if (!materialText) return false;
+  const threadWords = part1MaterialOverlapWords(answers.map(answer => `${answer.question} ${answer.answer}`).join(' '));
+  if (!threadWords.length) return false;
+  return threadWords.some(word => materialText.includes(word));
+};
+
+const hasPart1PersonalMaterialSignal = (text: string) => {
   const normalized = normalizeTranscriptFormatText(text);
   const compact = normalized.replace(/['.?!,;]/g, '');
+  const wordCount = compact.split(/\s+/).filter(Boolean).length;
   if (!compact) return false;
   const hasPersonalSignal = /\b(i|im|ive|id|me|my|mine|we|were|weve|our|us|where i|when i)\b/.test(compact);
-  const hasExperience = /\b(years?|months?|weeks?|college|university|school|childhood|team|club|competition|match|game|trip|visit|moved|returned|grew up|born|raised|lived|studied|worked|learned|used to)\b/.test(compact);
-  const hasRoleOrEvent = /\b(point guard|captain|member|teammate|classmate|roommate|teacher|coach|project|exam|event|practice|training|nba|e-?sports?)\b/.test(compact);
-  const hasReasonContrastPreferenceFeeling = /\b(because|so|although|though|but|rather than|instead of|prefer|like|enjoy|miss|missed|feel|felt|reason|mainly|what i|why i|helps me|close friends|family)\b/.test(compact);
-  return hasPersonalSignal && (hasExperience || hasRoleOrEvent || hasReasonContrastPreferenceFeeling);
+  const hasRecoverableIdea =
+    /\b(because|so|although|though|but|rather than|instead of|prefer|like|enjoy|miss|missed|feel|felt|reason|mainly|what i|why i|helps me|want|need|usually|often|sometimes|always|never|used to|would|personally|taste|style|habit|routine|family|friend|girlfriend|boyfriend|partner)\b/.test(compact) ||
+    /\b(years?|months?|weeks?|college|university|school|childhood|team|club|competition|match|game|trip|visit|moved|returned|grew up|born|raised|lived|studied|worked|learned|gift|present|album|photo|photos|polaroid|anniversary|birthday|handmade|souvenir|point guard|captain|member|teammate|classmate|roommate|teacher|coach|project|exam|event|practice|training|nba|e-?sports?)\b/.test(compact);
+  return hasPersonalSignal && wordCount >= 3 && (hasRecoverableIdea || wordCount >= 5);
 };
 
 const isOrdinaryPart1FactMaterial = (item: SpeakingMaterialBankItem) => {
@@ -1429,11 +1457,13 @@ const isValidGroundedPart1PersonalMaterial = (
 ) => {
   const source = item.sourceWording || '';
   const reusable = item.reusableVersion || '';
+  const displayText = `${source} ${reusable} ${item.developedExample || ''} ${item.materialCore || ''}`;
   if (!reusable || !item.reuseFor.length || containsUnsupportedSpeakingBoundaryClaim(reusable)) return false;
-  if (!isGroundedInPart1Answers(source || reusable, answers)) return false;
+  const hasGroundedAnchor = [source, item.materialCore, reusable].some(candidate => isGroundedInPart1Answers(candidate, answers));
+  if (!hasGroundedAnchor && !hasPart1CurrentThreadMaterialOverlap(displayText, answers)) return false;
   if (isOrdinaryPart1FactMaterial(item)) return false;
-  if (isLowValuePart1Material(source || reusable) && !hasConcretePart1PersonalMaterialSignal(`${source} ${reusable}`)) return false;
-  return hasConcretePart1PersonalMaterialSignal(`${source} ${reusable}`);
+  if (isLowValuePart1Material(source || reusable) && !hasPart1PersonalMaterialSignal(displayText)) return false;
+  return hasPart1PersonalMaterialSignal(displayText);
 };
 
 const normalizePart1MaterialKind = (
@@ -1443,7 +1473,7 @@ const normalizePart1MaterialKind = (
   if (value === 'development_seed' || value === 'reusable_personal_material') return value;
   const text = `${item.sourceWording || ''} ${item.reusableVersion || ''} ${item.developedExample || ''}`;
   if (!item.developedExample && item.developmentMoveZh && item.expressionFrames?.length) return 'development_seed';
-  return hasConcretePart1PersonalMaterialSignal(text)
+  return hasPart1PersonalMaterialSignal(text)
     ? 'reusable_personal_material'
     : 'development_seed';
 };
@@ -1469,7 +1499,7 @@ const part1MaterialValueRank = (item: SpeakingMaterialBankItem) => {
   if (/\b(prefer|rather than|instead of|depends|when i|if i|as long as|condition)\b/.test(text)) score += 16;
   if (/\b(family|friend|friends|support network|belonging|close to)\b/.test(text)) score += 12;
   if (/\b(energy|passion|motivation|excited|happy|relaxed)\b/.test(text)) score += 4;
-  if (!hasConcretePart1PersonalMaterialSignal(text)) score -= 20;
+  if (!hasPart1PersonalMaterialSignal(text)) score -= 20;
   if (isOrdinaryPart1FactMaterial(item)) score -= 30;
   return score;
 };
@@ -1478,15 +1508,32 @@ const isLowValueReusableSpokenLanguage = (text: string) => {
   const normalized = normalizeTranscriptFormatText(text);
   const compact = normalized.replace(/['.?!,;]/g, '');
   const wordCount = compact.split(/\s+/).filter(Boolean).length;
+  const hasSlot = /\[[^\]]+\]/.test(normalized);
+  const expressiveFrame = /\b(?:interested|keen|fond|drawn|open|attached|suited)\s+(?:to|on|of|for)\b|\b(?:matters?|comes?|fits?|suits?|depends?|changes?|evolves?|lasts?)\b|\b(?:comfort|taste|style|routine|habit|priority|preference|budget|quality|function|design)\b/i.test(compact);
   if (!normalized) return true;
   if (isBarePart1Starter(normalized)) return true;
   if (/^(yes|yeah|no|sure|maybe|probably|absolutely|definitely)$/i.test(compact)) return true;
+  if (/^(because|for example|a specific reason|one reason|one example|one detail|some detail|a concrete personal reason|a clearer personal feeling|a simple but useful contrast|one memorable supporting detail|comfortable to wear|good for me|nice place|big mall|quiet place|relaxed place|quiet and relaxed place|that is one reason|a great way|said good vocabulary|find a peaceful spot|a popular tourist destination|commute during rush hour|heavy traffic congestion|overwhelming numbers of people visiting|for college for university|for university for college|for college|for university)$/i.test(compact)) return true;
+  if (/^(which|that|where|when|because|for example)\b/i.test(compact)) return true;
+  if (/\b(?:because|after|before|when|where|which|that|if|so|and|but|to|for|with|about|said|required)\s*$/i.test(compact)) return true;
   if (/^\[[^\]]+\]$/.test(normalized)) return true;
   if (wordCount > 12) return true;
-  const hasTransferableFrame = /\[[^\]]+\]|\b(keen on|switch off|tend to|used to|prefer to|one of the reasons|the main reason|when i want to|im into|i am into|a big fan of|end up|depends on|from time to time|every now and then|as long as|rather than)\b/.test(compact);
-  if (/^(i|im|i am|ive|i have|id|i would|my|we|were|we are|weve|we have|our)\b/.test(compact) && !hasTransferableFrame) return true;
+  if (/^(it|this|that|there)\s+(?:is|was|are|were|required|helps?)\b/i.test(compact) && !hasSlot && !expressiveFrame) return true;
+  if (/^(?:do|did|doing|done) a good job$|^play as a team$|^encourage someone$|^encourage teammates$|^(?:win|won) a scholarship(?: at university)?$|^presentation went well$|^went well$|^prepare a final presentation in english$|^learn vocabulary about\b/i.test(compact)) return true;
+  const hasTransferableFrame = hasSlot ||
+    /\b(be|being|been|have|having|had|get|make|take|give|keep|hold|come|go|feel|look|sound|turn|end|tend|put|choose|spend|buy|purchase|send|receive|watch|play|practice|use|visit|shop|wear|invest|used to|keen on|into|look forward to|rather than|instead of|compared with|compared to|in contrast|in terms of|when it comes to|as long as|from time to time|every now and then|a [a-z]+ (?:of|for|with|to)|the [a-z]+ (?:of|for|with|to))\b/.test(compact);
+  if (/^(i|im|i am|ive|i have|id|i would|my|we|were|we are|weve|we have|our)\b/.test(compact) && !hasTransferableFrame && !expressiveFrame) return true;
   if (/^(it is|this is|there is|there are)\b/.test(compact) && wordCount > 6) return true;
+  if (!hasTransferableFrame && !expressiveFrame && wordCount < 2) return true;
   return false;
+};
+
+const isCorrectionLikePart1DevelopmentPurpose = (text = '') =>
+  /修正|改正|纠正|错误|错|语法|单复数|冠词|介词|时态|替代|替换|换掉|改为|改成|correct|correction|fix|repair|replace|instead of|grammar|plural|singular|article|preposition|tense|mistake|error/i.test(text);
+
+const sanitizePart1DevelopmentPurpose = (text: string | undefined) => {
+  const clean = sanitizePart1FeedbackText(text);
+  return clean && !isCorrectionLikePart1DevelopmentPurpose(clean) ? clean : undefined;
 };
 
 const part1AnnotationKeyText = (text: string) =>
@@ -1615,6 +1662,7 @@ const withPart1PreviousCleanerConflictAttribution = (
 const mergePart1AnswerAnnotations = (
   providerAnnotations: Part1AnswerAnnotation[],
   fallbackAnnotations: Part1AnswerAnnotation[],
+  ...extraAnnotationGroups: Part1AnswerAnnotation[][]
 ) => {
   const merged: Part1AnswerAnnotation[] = [];
   const representedLayers = new Map<string, Part1AnswerAnnotationLayer>();
@@ -1709,6 +1757,7 @@ const mergePart1AnswerAnnotations = (
   };
   providerAnnotations.forEach(addAnnotation);
   fallbackAnnotations.forEach(addAnnotation);
+  extraAnnotationGroups.flat().forEach(addAnnotation);
   return merged.filter(item => item.layers.length);
 };
 
@@ -1802,6 +1851,9 @@ const normalizePart1AnswerAnnotations = (
       const issueType = safeLearningText(asString(layerRecord.issueType ?? severity, severity, `threadFeedback.annotations[${index}].layers[${layerIndex}].issueType`, validationErrors));
       const repair = normalizePart1RepairLayer(original, better, issueType, explanationZh, answerText);
       if (!repair) return null;
+      const layerGroundedInAnswer = textKeyContains(answerText, repair.original);
+      const sourceGroundedInAnswer = textKeyContains(answerText, sourceQuote);
+      if (!layerGroundedInAnswer && !sourceGroundedInAnswer) return null;
       const unsafeContextDependentTeaching = severity === 'must_fix' &&
         hasOverAbsoluteContextDependentClaim(explanationZh) &&
         /\b(collocation|word choice|natural|countability|article)\b/.test(`${issueType} ${explanationZh}`.toLowerCase());
@@ -2054,6 +2106,9 @@ const hasPositivePart1DevelopmentEvidence = (text: string) =>
 const normalizePart1DevelopmentStatus = (value: unknown): Part1DevelopmentStatus | undefined =>
   value === 'needed' || value === 'sufficient' ? value : undefined;
 
+const normalizePart1DevelopmentMode = (value: unknown): Part1DevelopmentTarget['developmentMode'] | undefined =>
+  value === 'needs_content' || value === 'expression_upgrade' || value === 'no_extra_content' ? value : undefined;
+
 const normalizePart1DevelopmentTargets = (
   value: unknown,
   answers: NonNullable<SpeakingRequest['threadAnswers']>,
@@ -2074,11 +2129,13 @@ const normalizePart1DevelopmentTargets = (
       const developmentMoveZh = sanitizePart1FeedbackText(
         safeLearningText(asString(record.developmentMoveZh ?? record.developmentMove, '', `threadFeedback.developmentTargets[${index}].developmentMoveZh`, validationErrors)),
       ) || '';
+      const developmentMode = normalizePart1DevelopmentMode(record.developmentMode ?? record.mode);
+      const topicFrameZh = sanitizePart1FeedbackText(optionalSafeString(record.topicFrameZh ?? record.topicFrame));
       const phraseScaffolds = optionalSafeStringArray(record.phraseScaffolds ?? record.expressionFrames ?? record.scaffolds)
         ?.map(item => safeLearningText(item))
         .filter(item => {
           if (!item || containsUnsupportedSpeakingBoundaryClaim(item)) return false;
-          if (part1AnswerWords(item).length > 8 || isPart1FullSentenceScaffold(item)) {
+          if (part1AnswerWords(item).length > MAX_PART1_DEVELOPMENT_CHUNK_WORDS || isPart1FullSentenceScaffold(item)) {
             diagnostics && (diagnostics.fullSentenceScaffoldsFiltered += 1);
             return false;
           }
@@ -2088,25 +2145,84 @@ const normalizePart1DevelopmentTargets = (
           }
           return true;
         })
-        .slice(0, 3);
-      if (!questionRef || !expectedRefs.includes(questionRef) || !reasonZh || !developmentMoveZh) return null;
-      const fallbackTarget = buildFallbackPart1DevelopmentTarget(questionRef, answers[answerIndex]?.question || '', learnerAnswer);
+        .slice(0, 12);
+      const providerPhraseChunks = (Array.isArray(record.phraseChunks) ? record.phraseChunks : [])
+        .map((chunk): NonNullable<Part1DevelopmentTarget['phraseChunks']>[number] | null => {
+          const chunkRecord = isRecord(chunk) ? chunk : {};
+          const text = safeLearningText(isRecord(chunk) ? asString(chunkRecord.text ?? chunkRecord.phrase, '', `threadFeedback.developmentTargets[${index}].phraseChunks.text`, validationErrors) : '');
+          if (!text || containsUnsupportedSpeakingBoundaryClaim(text) || isPart1FullSentenceScaffold(text) || isLowValueReusableSpokenLanguage(text)) return null;
+          if (part1AnswerWords(text).length > MAX_PART1_DEVELOPMENT_CHUNK_WORDS) return null;
+          const purposeZh = sanitizePart1DevelopmentPurpose(optionalSafeString(chunkRecord.purposeZh ?? chunkRecord.purpose));
+          return purposeZh ? { text, purposeZh } : { text };
+        })
+        .filter((item): item is NonNullable<Part1DevelopmentTarget['phraseChunks']>[number] => Boolean(item))
+        .slice(0, 12);
+      const phraseChunks = providerPhraseChunks.length
+        ? providerPhraseChunks
+        : (phraseScaffolds || []).map(text => ({ text })).slice(0, 12);
+      const hasVisibleDevelopmentPayload = Boolean(phraseChunks.length);
+      if (!questionRef || !expectedRefs.includes(questionRef)) return null;
+      if (!hasVisibleDevelopmentPayload) return null;
       if (part1DevelopmentClaimContradictsAnswer(reasonZh, developmentMoveZh, learnerAnswer)) {
         diagnostics && (diagnostics.replacedForGrounding += 1);
-        return fallbackTarget;
+        return null;
       }
       diagnostics && (diagnostics.accepted += 1);
-      const safeScaffolds = phraseScaffolds?.length ? phraseScaffolds : fallbackTarget.phraseScaffolds;
       return {
         questionRef,
+        ...(developmentMode ? { developmentMode } : {}),
+        ...(topicFrameZh ? { topicFrameZh } : {}),
         reasonZh,
         developmentMoveZh,
-        ...(safeScaffolds?.length ? { phraseScaffolds: safeScaffolds.slice(0, 3) } : {}),
+        ...(phraseScaffolds?.length ? { phraseScaffolds: phraseScaffolds.slice(0, 12) } : {}),
+        ...(phraseChunks.length ? { phraseChunks } : {}),
       };
     })
     .filter((item): item is Part1DevelopmentTarget => Boolean(item))
     .filter((item, index, items) => items.findIndex(candidate => candidate.questionRef === item.questionRef) === index);
 };
+
+const normalizePart1MaterialItems = (
+  value: unknown,
+  path: string,
+  kind: 'personal' | 'language',
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+  validationErrors: string[],
+): SpeakingMaterialBankItem[] => asArray(value, path, validationErrors).map((item, index) => {
+  const record = isRecord(item) ? item : {};
+  if (!isRecord(item)) validationErrors.push(`${path}[${index}] missing or invalid object`);
+  const built: SpeakingMaterialBankItem = {
+    sourceWording: optionalSafeString(record.sourceWording ?? record.originalIdea),
+    reusableVersion: polishPart1RepairText(asString(record.reusableVersion ?? record.naturalReusableVersion, FALLBACK_TEXT, `${path}[${index}].reusableVersion`, validationErrors)),
+    reuseFor: optionalSafeStringArray(record.reuseFor ?? record.whereItMayBeReused) || [],
+    explanationZh: sanitizePart1FeedbackText(optionalSafeString(record.explanationZh)),
+    translationZh: sanitizePart1FeedbackText(optionalSafeString(record.translationZh ?? record.translation)),
+    materialCore: optionalSafeString(record.materialCore ?? record.personalMaterialCore),
+    part1UseCases: optionalSafeStringArray(record.part1UseCases ?? record.part1UseCase),
+    developmentMoveZh: sanitizePart1FeedbackText(optionalSafeString(record.developmentMoveZh ?? record.developmentMove)),
+    developedExample: optionalSafeString(record.developedExample),
+    expressionFrames: optionalSafeStringArray(record.expressionFrames)
+      ?.map(frame => safeLearningText(frame))
+      .filter(frame => frame && !containsUnsupportedSpeakingBoundaryClaim(frame) && !isPart1FullSentenceScaffold(frame) && !isLowValueReusableSpokenLanguage(frame))
+      .slice(0, 3),
+    materialKey: optionalSafeString(record.materialKey ?? record.identityKey),
+  };
+  built.materialKind = kind === 'personal'
+    ? normalizePart1MaterialKind(record.materialKind ?? record.kind, built)
+    : undefined;
+  if (built.materialKind === 'development_seed') {
+    built.developedExample = undefined;
+  }
+  return built;
+}).filter(item => {
+  if (!item.reusableVersion || !item.reuseFor.length || containsUnsupportedSpeakingBoundaryClaim(item.reusableVersion)) return false;
+  if (kind === 'personal') {
+    return item.materialKind === 'development_seed'
+      ? isValidPart1DevelopmentSeed(item, answers)
+      : isValidGroundedPart1PersonalMaterial(item, answers);
+  }
+  return !isLowValueReusableSpokenLanguage(item.reusableVersion);
+});
 
 const consolidatePart1DevelopmentTargets = (targets: Part1DevelopmentTarget[]): Part1DevelopmentTarget[] => {
   const byQuestion = new Map<string, Part1DevelopmentTarget>();
@@ -2163,22 +2279,6 @@ const hasPart1RangeOrDevelopmentEvidence = (answer: string) => {
     (words.length >= 14 && /\b(college|university|school|team|work|job|moved|returned|spent|years?|months?|usually|often|prefer|enjoy|missed|felt)\b/i.test(clean));
 };
 
-const part1QuestionInvitesDevelopment = (question: string) =>
-  /\b(why|how long|how often|how much|what do you like|do you like|do you enjoy|would you|prefer|favorite|favourite|feel|think|important|usually|often|experience|tell me about)\b/i.test(question);
-
-const part1DevelopmentPriorityScore = (question: string, answer: string) => {
-  const cleanQuestion = safeLearningText(question);
-  const cleanAnswer = safeLearningText(answer);
-  let score = 0;
-  if (part1QuestionInvitesDevelopment(cleanQuestion)) score += 4;
-  if (/\b(why|do you like|do you enjoy|would you|prefer|feel|think)\b/i.test(cleanQuestion)) score += 3;
-  if (/\b(how long|where|who|what kind|what type)\b/i.test(cleanQuestion)) score += 1;
-  if (/\b(family|friends|college|university|school|team|work|job|moved|returned|spent|years?|months?|born|raised|lived|prefer|enjoy|missed|felt)\b/i.test(cleanAnswer)) score += 2;
-  if (/\b(because|so|although|though|but|rather than|instead of)\b/i.test(cleanAnswer)) score += 1;
-  if (isBarePart1Answer(cleanAnswer)) score += 5;
-  return score;
-};
-
 const isPart1EvidenceLimitedAccurateThread = (
   answers: NonNullable<SpeakingRequest['threadAnswers']>,
   hasOrdinaryMustFix: boolean,
@@ -2204,135 +2304,6 @@ const isBarePart1Answer = (answer: string) => {
   if (/^(it'?s|it is|this is|that is|there is)?\s*(a\s+)?(city|place|thing|sport|hobby|subject|person|one)$/.test(normalized)) return true;
   if (words.length <= 3 && part1AnswerContentWords(clean).length <= 1) return true;
   return false;
-};
-
-const isPart1AnswerDevelopmentGap = (answer: string, strictBareOnly: boolean) => {
-  if (isBarePart1Answer(answer)) return true;
-  if (strictBareOnly) return false;
-  const words = part1AnswerWords(answer);
-  if (words.length <= 18 && !hasPart1GroundedAnswerDetail(answer)) return true;
-  return false;
-};
-
-const part1DevelopmentPhraseScaffolds = (question: string, answer: string): string[] => {
-  const text = `${question} ${answer}`.toLowerCase();
-  const frames: string[] = [];
-  const push = (...items: string[]) => {
-    items.forEach(item => {
-      if (!frames.includes(item)) frames.push(item);
-    });
-  };
-  if (/\b(hometown|city|where|place|live|lived|born|raised|childhood)\b/.test(text)) {
-    push('since childhood', 'feel familiar with', 'local lifestyle');
-  }
-  if (/\b(college|university|school|moved|returned|compared|contrast)\b/.test(text)) {
-    push('compared with ...', 'after moving back', 'what I missed most was ...');
-  }
-  if (/\b(family|friend|friends|parents|close|stay|leave|future|would you|long-term)\b/.test(text)) {
-    push('close to my family', 'sense of belonging', 'that is one reason ...');
-  }
-  if (/\b(sport|team|basketball|football|game|match|club|nba|esports?|cs2|dota|point guard|role)\b/.test(text)) {
-    push('when I was at school', 'my role was ...', 'I usually watch ...');
-  }
-  if (/\b(prefer|like|enjoy|favorite|favourite|do you|would you)\b/.test(text)) {
-    push('the main reason is ...', 'I prefer ... because ...', 'it depends on ...');
-  }
-  if (/\b(how often|usually|often|routine|habit|free time|weekend)\b/.test(text)) {
-    push('from time to time', 'when I have time', 'part of my routine');
-  }
-  if (!frames.length) push('one real reason', 'for example', 'what matters most is ...');
-  return frames.slice(0, 3);
-};
-
-const part1DevelopmentMoveZh = (question: string, answer: string) => {
-  const text = `${question} ${answer}`.toLowerCase();
-  if (/\b(how long|college|university|moved|returned|compared|contrast)\b/.test(text)) {
-    return '可以补一句真实经历、时间变化或前后对比；只加一个细节，不要写成完整范文。';
-  }
-  if (/\b(why|would you|prefer|like|enjoy|favorite|favourite|family|friend|friends)\b/.test(text)) {
-    return '可以补一句真实原因或影响：为什么这个点会影响你的选择。';
-  }
-  if (/\b(what kind|what type|city|place|sport|hobby|subject)\b/.test(text)) {
-    return '可以补一个具体特点或例子，不要只停在分类、大小或名称。';
-  }
-  if (isBarePart1Answer(answer)) {
-    return '这个回答没有语法问题，但还需要一个真实原因、例子或感受。';
-  }
-  return '保留原意，再补一个真实原因、感受、例子或对比。';
-};
-
-const fallbackPart1DevelopmentTargets = (
-  answers: NonNullable<SpeakingRequest['threadAnswers']>,
-  shouldBuild: boolean,
-  strictBareOnly = false,
-  singleHighestValueOnly = false,
-): Part1DevelopmentTarget[] => {
-  if (!shouldBuild) return [];
-  const candidates = answers
-    .map((answer, index) => ({
-      questionRef: `Q${index + 1}`,
-      question: answer.question,
-      answer: answer.answer.trim(),
-      words: countWords(answer.answer),
-      priority: part1DevelopmentPriorityScore(answer.question, answer.answer),
-    }))
-    .filter(item => item.answer && item.words <= 18 && (
-      isPart1AnswerDevelopmentGap(item.answer, strictBareOnly) ||
-      (!strictBareOnly && part1QuestionInvitesDevelopment(item.question)) ||
-      (!strictBareOnly && hasPart1GroundedAnswerDetail(item.answer)) ||
-      (singleHighestValueOnly && part1QuestionInvitesDevelopment(item.question))
-    ))
-    .sort((a, b) => b.priority - a.priority || a.words - b.words)
-    .slice(0, singleHighestValueOnly ? 1 : answers.length)
-    .sort((a, b) => Number(a.questionRef.replace(/^Q/i, '')) - Number(b.questionRef.replace(/^Q/i, '')))
-    .map(item => ({
-      questionRef: item.questionRef,
-      question: item.question,
-      answer: item.answer,
-      reasonZh: `${item.questionRef} is understandable, but it still needs one real supporting detail or reason.`,
-      developmentMoveZh: 'Keep the original meaning and add one real reason, feeling, example, or contrast.',
-    }));
-  const groundedTargets = candidates.map(item => buildFallbackPart1DevelopmentTarget(item.questionRef, item.question, item.answer));
-  return groundedTargets;
-};
-
-const fallbackPart1MaterialCore = (question: string, answer: string) => {
-  const text = `${question} ${answer}`.toLowerCase();
-  if (/\b(born|raised|grew up|childhood|lived|live)\b/.test(text)) return '长期生活背景';
-  if (/\b(college|university|moved|returned|spent|compared)\b/.test(text)) return '经历或对比线索';
-  if (/\b(family|friend|friends|parents|close|stay|leave)\b/.test(text)) return '关系和留下来的理由';
-  if (/\b(sport|team|basketball|football|club|game|match|point guard|nba|esports?|cs2|dota)\b/.test(text)) return '具体经历和角色';
-  if (/\b(prefer|like|enjoy|favorite|favourite)\b/.test(text)) return '个人偏好和条件';
-  return part1CoreDevelopmentIdea(question, answer);
-};
-
-const fallbackPart1MaterialDevelopmentItems = (
-  answers: NonNullable<SpeakingRequest['threadAnswers']>,
-  developmentTargets: Part1DevelopmentTarget[],
-): SpeakingMaterialBankItem[] => {
-  const targetByRef = new Map(developmentTargets.map(target => [target.questionRef, target] as const));
-  return answers
-    .map((answer, index) => {
-      const questionRef = `Q${index + 1}`;
-      const target = targetByRef.get(questionRef);
-      const source = answer.answer.trim();
-      const scaffolds = target?.phraseScaffolds?.length
-        ? target.phraseScaffolds
-        : part1DevelopmentPhraseScaffolds(answer.question, answer.answer);
-      return {
-        sourceWording: source,
-        reusableVersion: source,
-        reuseFor: [`Part 1 ${questionRef}`],
-        explanationZh: '这是一条可以继续发展的个人线索；训练价值在于补一个真实原因、感受、对比或具体例子，而不是把原句当成已完成素材。',
-        materialCore: fallbackPart1MaterialCore(answer.question, answer.answer),
-        materialKind: 'development_seed' as const,
-        part1UseCases: [answer.question],
-        developmentMoveZh: target?.developmentMoveZh || part1DevelopmentMoveZh(answer.question, answer.answer),
-        expressionFrames: scaffolds,
-        materialKey: `${questionRef}_${part1AnnotationKeyText(fallbackPart1MaterialCore(answer.question, answer.answer))}`,
-      };
-    })
-    .filter(item => hasConcretePart1PersonalMaterialSignal(`${item.sourceWording} ${(item.expressionFrames || []).join(' ')}`));
 };
 
 const derivePart1SessionPriorityState = (
@@ -2534,44 +2505,6 @@ const normalizePart1TopicThreadFeedback = (
     };
   }).filter(item => item.questionRefs.length && item.issue && item.coachingZh);
   const materialSource = isRecord(threadSource.materialBank) ? threadSource.materialBank : {};
-  const materialItems = (
-    value: unknown,
-    path: string,
-    kind: 'personal' | 'language',
-  ) => asArray(value, path, validationErrors).map((item, index) => {
-    const record = isRecord(item) ? item : {};
-    if (!isRecord(item)) validationErrors.push(`${path}[${index}] missing or invalid object`);
-    const built: SpeakingMaterialBankItem = {
-      sourceWording: optionalSafeString(record.sourceWording ?? record.originalIdea),
-      reusableVersion: polishPart1RepairText(asString(record.reusableVersion ?? record.naturalReusableVersion, FALLBACK_TEXT, `${path}[${index}].reusableVersion`, validationErrors)),
-      reuseFor: optionalSafeStringArray(record.reuseFor ?? record.whereItMayBeReused) || [],
-      explanationZh: sanitizePart1FeedbackText(optionalSafeString(record.explanationZh)),
-      materialCore: optionalSafeString(record.materialCore ?? record.personalMaterialCore),
-      part1UseCases: optionalSafeStringArray(record.part1UseCases ?? record.part1UseCase),
-      developmentMoveZh: sanitizePart1FeedbackText(optionalSafeString(record.developmentMoveZh ?? record.developmentMove)),
-      developedExample: optionalSafeString(record.developedExample),
-      expressionFrames: optionalSafeStringArray(record.expressionFrames)
-        ?.map(frame => safeLearningText(frame))
-        .filter(frame => frame && !containsUnsupportedSpeakingBoundaryClaim(frame) && !isPart1FullSentenceScaffold(frame) && !isLowValueReusableSpokenLanguage(frame))
-        .slice(0, 3),
-      materialKey: optionalSafeString(record.materialKey ?? record.identityKey),
-    };
-    built.materialKind = kind === 'personal'
-      ? normalizePart1MaterialKind(record.materialKind ?? record.kind, built)
-      : undefined;
-    if (built.materialKind === 'development_seed') {
-      built.developedExample = undefined;
-    }
-    return built;
-  }).filter(item => {
-    if (!item.reusableVersion || !item.reuseFor.length || containsUnsupportedSpeakingBoundaryClaim(item.reusableVersion)) return false;
-    if (kind === 'personal') {
-      return item.materialKind === 'development_seed'
-        ? isValidPart1DevelopmentSeed(item, answers)
-        : isValidGroundedPart1PersonalMaterial(item, answers);
-    }
-    return !isLowValueReusableSpokenLanguage(item.reusableVersion);
-  });
   const highImpactPhraseFixes = normalizeThreadPhraseItems(threadSource.highImpactPhraseFixes, answers, validationErrors, 'threadFeedback.highImpactPhraseFixes');
   const optionalPolish = normalizeThreadPhraseItems(threadSource.optionalPolish, answers, validationErrors, 'threadFeedback.optionalPolish');
   const cleanRetryAnswers = normalizePart1CleanRetryAnswers(threadSource.cleanRetryAnswers ?? [], answers, validationErrors);
@@ -2623,7 +2556,6 @@ const normalizePart1TopicThreadFeedback = (
     ungroundedScaffoldsFiltered: 0,
   };
   const providerDevelopmentTargets = normalizePart1DevelopmentTargets(threadSource.developmentTargets, answers, validationErrors, developmentDiagnostics);
-  const providerReturnedSufficientWithoutTargets = providerDevelopmentStatus === 'sufficient' && providerDevelopmentTargets.length === 0;
   const providerSaysDevelopmentSufficient = providerDevelopmentStatus === 'sufficient' &&
     providerDevelopmentTargets.length === 0 &&
     hasPositivePart1DevelopmentEvidence(normalizedRationaleText) &&
@@ -2638,24 +2570,7 @@ const normalizePart1TopicThreadFeedback = (
       thinAnswerCount >= Math.max(1, Math.ceil(answers.length / 2))
     )
   );
-  const shouldBuildFallbackDevelopmentTargets = providerDevelopmentTargets.length === 0 &&
-    (
-      providerDevelopmentStatus === 'needed' ||
-      limitedByThinDevelopment ||
-      hasOptionalDevelopmentGuidance ||
-      providerReturnedSufficientWithoutTargets
-    );
-  const fallbackDevelopmentTargets = fallbackPart1DevelopmentTargets(
-    answers,
-    shouldBuildFallbackDevelopmentTargets || (providerDevelopmentTargets.length > 0 && limitedByThinDevelopment),
-    providerDevelopmentStatus === 'sufficient' && !limitedByThinDevelopment && !hasOptionalDevelopmentGuidance,
-    false,
-  );
-  const providerTargetRefs = new Set(providerDevelopmentTargets.map(target => target.questionRef));
-  const rawDevelopmentTargets = [
-    ...providerDevelopmentTargets,
-    ...fallbackDevelopmentTargets.filter(target => !providerTargetRefs.has(target.questionRef)),
-  ];
+  const rawDevelopmentTargets = providerDevelopmentTargets;
   const developmentTargets = consolidatePart1DevelopmentTargets(rawDevelopmentTargets);
   normalizedFields.push(`part1DevelopmentTargetsAccepted:${developmentDiagnostics.accepted}`);
   normalizedFields.push(`part1DevelopmentTargetsReplacedForGrounding:${developmentDiagnostics.replacedForGrounding}`);
@@ -2689,32 +2604,17 @@ const normalizePart1TopicThreadFeedback = (
   if (coherentNextRetryPlan && coherentNextRetryPlan !== nextRetryPlan) {
     normalizedFields.push('part1OptionalDevelopmentGuidanceAdded');
   }
-  const providerMyUsableMaterial = materialItems(materialSource.myUsableMaterial, 'threadFeedback.materialBank.myUsableMaterial', 'personal');
-  const fallbackMyUsableMaterial = fallbackPart1MaterialDevelopmentItems(answers, developmentTargets)
-    .filter(item => item.materialKind === 'development_seed'
-      ? isValidPart1DevelopmentSeed(item, answers)
-      : isValidGroundedPart1PersonalMaterial(item, answers));
+  const providerMyUsableMaterial = normalizePart1MaterialItems(materialSource.myUsableMaterial, 'threadFeedback.materialBank.myUsableMaterial', 'personal', answers, validationErrors);
   const myUsableMaterial: SpeakingMaterialBankItem[] = [...providerMyUsableMaterial];
-  let materialSemanticDuplicatesRemoved = 0;
-  fallbackMyUsableMaterial.forEach(item => {
-    const key = item.materialKey || part1AnnotationKeyText(item.sourceWording || item.reusableVersion);
-    const alreadyCovered = myUsableMaterial.some(existing => (
-      existing.materialKey && existing.materialKey === key
-    ) || (
-      part1AnnotationKeyText(existing.sourceWording || existing.reusableVersion) === part1AnnotationKeyText(item.sourceWording || item.reusableVersion)
-    ));
-    if (!alreadyCovered) myUsableMaterial.push(item);
-    else materialSemanticDuplicatesRemoved += 1;
-  });
   myUsableMaterial.sort((left, right) => part1MaterialValueRank(right) - part1MaterialValueRank(left));
   normalizedFields.push(`part1MaterialSeedsDisplayed:${myUsableMaterial.filter(item => item.materialKind === 'development_seed').length}`);
   normalizedFields.push(`part1ReusableMaterialsDisplayed:${myUsableMaterial.filter(item => item.materialKind !== 'development_seed').length}`);
-  normalizedFields.push(`part1MaterialSemanticDuplicatesRemoved:${materialSemanticDuplicatesRemoved}`);
+  normalizedFields.push('part1MaterialSemanticDuplicatesRemoved:0');
   const personalMaterialKeys = new Set(myUsableMaterial.flatMap(item => [
     part1AnnotationKeyText(item.sourceWording || ''),
     part1AnnotationKeyText(item.reusableVersion),
   ]).filter(Boolean));
-  const reusableSpokenLanguage = materialItems(materialSource.reusableSpokenLanguage, 'threadFeedback.materialBank.reusableSpokenLanguage', 'language')
+  const reusableSpokenLanguage = normalizePart1MaterialItems(materialSource.reusableSpokenLanguage, 'threadFeedback.materialBank.reusableSpokenLanguage', 'language', answers, validationErrors)
     .filter(item => {
       const sourceKey = part1AnnotationKeyText(item.sourceWording || '');
       const reusableKey = part1AnnotationKeyText(item.reusableVersion);
@@ -4604,6 +4504,77 @@ export const normalizePart1CleanRetryCertificationResult = (
 
 const normalizePart1CleanRetryCertification = normalizePart1CleanRetryCertificationResult;
 
+export const normalizePart1LearningAssetsResult = (
+  value: unknown,
+  request: Part1LearningAssetsSafeRequest,
+  validationErrors: string[] = [],
+  normalizedFields: string[] = [],
+): Part1LearningAssetsResult => {
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) validationErrors.push('response root missing or invalid object');
+  if (source.operation !== undefined && source.operation !== 'part1_learning_assets') {
+    validationErrors.push('operation mismatch for part1_learning_assets');
+  }
+  const answers = request.threadAnswers || [];
+  const materialSource = isRecord(source.materialBank) ? source.materialBank : {};
+  const developmentDiagnostics: Part1DevelopmentDiagnostics = {
+    accepted: 0,
+    replacedForGrounding: 0,
+    fullSentenceScaffoldsFiltered: 0,
+    ungroundedScaffoldsFiltered: 0,
+  };
+  const rawDevelopmentTargets = normalizePart1DevelopmentTargets(source.developmentTargets, answers, validationErrors, developmentDiagnostics);
+  const developmentTargets = consolidatePart1DevelopmentTargets(rawDevelopmentTargets);
+  normalizedFields.push(`part1LearningAssetsDevelopmentTargetsAccepted:${developmentDiagnostics.accepted}`);
+  normalizedFields.push(`part1LearningAssetsDevelopmentTargets:${developmentTargets.length}`);
+  normalizedFields.push(`part1LearningAssetsFullSentenceScaffoldsFiltered:${developmentDiagnostics.fullSentenceScaffoldsFiltered}`);
+  normalizedFields.push(`part1LearningAssetsUngroundedScaffoldsFiltered:${developmentDiagnostics.ungroundedScaffoldsFiltered}`);
+  if (rawDevelopmentTargets.length !== developmentTargets.length) {
+    normalizedFields.push(`part1LearningAssetsDevelopmentTargetsConsolidated:${rawDevelopmentTargets.length}->${developmentTargets.length}`);
+  }
+
+  const myUsableMaterial = normalizePart1MaterialItems(
+    materialSource.myUsableMaterial,
+    'materialBank.myUsableMaterial',
+    'personal',
+    answers,
+    validationErrors,
+  ).sort((left, right) => part1MaterialValueRank(right) - part1MaterialValueRank(left));
+  const personalMaterialKeys = new Set(myUsableMaterial.flatMap(item => [
+    part1AnnotationKeyText(item.sourceWording || ''),
+    part1AnnotationKeyText(item.reusableVersion),
+  ]).filter(Boolean));
+  const reusableSpokenLanguage = normalizePart1MaterialItems(
+    materialSource.reusableSpokenLanguage,
+    'materialBank.reusableSpokenLanguage',
+    'language',
+    answers,
+    validationErrors,
+  ).filter(item => {
+    const sourceKey = part1AnnotationKeyText(item.sourceWording || '');
+    const reusableKey = part1AnnotationKeyText(item.reusableVersion);
+    return !personalMaterialKeys.has(sourceKey) && !personalMaterialKeys.has(reusableKey);
+  });
+  normalizedFields.push(`part1LearningAssetsMaterials:${myUsableMaterial.length}`);
+  normalizedFields.push(`part1LearningAssetsExpressions:${reusableSpokenLanguage.length}`);
+
+  return {
+    module: 'speaking',
+    operation: 'part1_learning_assets',
+    topic: request.topic || optionalSafeString(source.topic) || 'Part 1 Topic',
+    threadId: request.threadId || optionalSafeString(source.threadId) || 'part1_thread',
+    questionCount: answers.length,
+    developmentTargets,
+    materialBank: {
+      myUsableMaterial,
+      reusableSpokenLanguage,
+    },
+    rationaleZh: sanitizePart1FeedbackText(optionalSafeString(source.rationaleZh)),
+  };
+};
+
+const normalizePart1LearningAssets = normalizePart1LearningAssetsResult;
+
 const normalizeWritingTargetValidation = (
   value: unknown,
   request: WritingValidationRequest,
@@ -4864,6 +4835,53 @@ export const safeCertifyPart1CleanRetry = async (
     diagnostic: buildDiagnostic({
       module: 'speaking',
       operation: 'part1_clean_retry_certification',
+      providerName,
+      requestPayload,
+      rawResponse,
+      parsedJson,
+      parseError,
+      validationErrors,
+      fallbackUsed,
+      failureKind,
+      normalizedFields,
+      timestamp: new Date().toISOString(),
+    }),
+  };
+};
+
+export const safeAnalyzePart1LearningAssets = async (
+  provider: AIProvider,
+  providerName: string,
+  requestPayload: Part1LearningAssetsSafeRequest,
+): Promise<SafeAnalyzeResult<Part1LearningAssetsResult>> => {
+  let rawResponse: unknown = null;
+  let parsedJson: unknown = null;
+  let parseError: string | undefined;
+  const validationErrors: string[] = [];
+  const normalizedFields: string[] = [];
+
+  try {
+    if (!provider.generatePart1LearningAssets) {
+      throw new Error('Provider does not implement generatePart1LearningAssets');
+    }
+
+    rawResponse = await provider.generatePart1LearningAssets(requestPayload);
+    const parsed = parseRawResponse(rawResponse);
+    parsedJson = parsed.parsedJson;
+    parseError = parsed.parseError;
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const feedback = normalizePart1LearningAssets(parsedJson, requestPayload, validationErrors, normalizedFields);
+  const fallbackUsed = Boolean(parseError) || validationErrors.length > 0;
+  const failureKind = getFailureKind(parseError, validationErrors);
+
+  return {
+    feedback,
+    diagnostic: buildDiagnostic({
+      module: 'speaking',
+      operation: 'part1_learning_assets',
       providerName,
       requestPayload,
       rawResponse,

@@ -4,6 +4,7 @@ import { DeepSeekProvider } from './providers/deepseekProvider';
 import {
   AIProvider,
   Part1CleanRetryCertificationRequest,
+  Part1LearningAssetsRequest,
   SpeakingAudioTranscriptionRequest,
   SpeakingAnalysisRequest,
   SpeakingScoreOnlyRequest,
@@ -18,6 +19,7 @@ import {
   ProviderDiagnostic,
   ProviderOperation,
   Part1CleanRetryCertificationResult,
+  Part1LearningAssetsResult,
   SpeakingAudioTranscriptionResult,
   SpeakingFeedback,
   SpeakingScoreOnlyResult,
@@ -38,6 +40,7 @@ import {
 } from './usage';
 import {
   safeAnalyzeSpeaking,
+  safeAnalyzePart1LearningAssets,
   safeScoreSpeakingOnly,
   safeTranscribeSpeakingAudio,
   safeAnalyzeWriting,
@@ -470,6 +473,14 @@ export const routedCertifyPart1CleanRetry = (
   const route = chooseRoute('part1_clean_retry_certification', request, { reserveGemini: true });
   return runWithGeminiRetry('part1_clean_retry_certification', request, route, (provider, providerName) =>
     safeCertifyPart1CleanRetry(provider, providerName, request));
+};
+
+export const routedAnalyzePart1LearningAssets = (
+  request: Part1LearningAssetsRequest,
+): Promise<RoutedResult<Part1LearningAssetsResult>> => {
+  const route = chooseRoute('part1_learning_assets', request, { reserveGemini: true });
+  return runWithGeminiRetry('part1_learning_assets', request, route, (provider, providerName) =>
+    safeAnalyzePart1LearningAssets(provider, providerName, request));
 };
 
 export const routedAnalyzeWriting = (

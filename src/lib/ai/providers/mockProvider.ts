@@ -1,5 +1,6 @@
 ﻿import { AIProvider } from './base';
 import {
+  Part1LearningAssetsResult,
   Part1CleanRetryCertificationResult,
   SpeakingFeedback,
   SpeakingScoreOnlyResult,
@@ -58,6 +59,72 @@ export class MockProvider implements AIProvider {
       transcript: `[mock audio transcript] This is a mock transcription for Speaking Part ${params.part}. Replace it with what you actually said before analysis.`,
       uncertaintyNotes: ['Mock provider does not listen to audio. Use Gemini mode for real audio transcription.'],
       providerDiagnostic: `Mock audio transcription only; received ${params.mimeType || 'unknown audio'} for "${shorten(params.question, 60)}".`,
+    };
+  }
+
+  async generatePart1LearningAssets(params: import('./base').Part1LearningAssetsRequest): Promise<Part1LearningAssetsResult> {
+    await new Promise(r => setTimeout(r, 800));
+    const answers = params.threadAnswers || [];
+    const topicWords = normalizeMockText(`${params.topic} ${answers.map(answer => answer.question).join(' ')}`)
+      .split(' ')
+      .filter(word => word.length >= 4 && !['have', 'your', 'when', 'what', 'where', 'there', 'about', 'with'].includes(word));
+    const topicNoun = topicWords[0] || 'topic';
+    const topicFrame = topicWords.slice(0, 2).join(' ') || 'Part 1 topic';
+    const expressionSeeds = [
+      `a ${topicFrame} habit that fits into my routine`,
+      `something I have stuck with for years`,
+      `the part I enjoy most about ${topicNoun}`,
+      `a small detail that makes it feel personal`,
+      `it depends on my mood and schedule`,
+      `a good way to switch off after a busy day`,
+      `I go through phases with ${topicNoun}`,
+      `it has become part of my weekly routine`,
+      `I would not call myself obsessed with it`,
+      `it feels more practical than fashionable`,
+    ];
+
+    return {
+      module: 'speaking',
+      operation: 'part1_learning_assets',
+      topic: params.topic || 'Part 1 Topic',
+      threadId: params.threadId || 'mock_thread',
+      questionCount: answers.length,
+      developmentTargets: answers.map((answer, index) => ({
+        questionRef: `Q${index + 1}`,
+        developmentMode: answer.answer.trim().split(/\s+/).length <= 12 ? 'needs_content' : 'expression_upgrade',
+        topicFrameZh: '当前题目范围',
+        reasonZh: '',
+        developmentMoveZh: '补一个贴题细节，或把原意换成更自然的口语块。',
+        phraseChunks: [
+          { text: `what I like most about ${topicNoun}`, purposeZh: '具体喜好' },
+          { text: `fit naturally into my routine`, purposeZh: '习惯关联' },
+          { text: `a small detail that stands out to me`, purposeZh: '补充细节' },
+          { text: `depending on my mood and schedule`, purposeZh: '条件变化' },
+        ],
+        phraseScaffolds: [],
+        optionalDevelopedAnswer: '',
+      })),
+      materialBank: {
+        myUsableMaterial: answers.slice(0, 2).map((answer, index) => ({
+          sourceWording: answer.answer,
+          reusableVersion: `I can connect this topic to my own routine because it is something I actually do in daily life.`,
+          reuseFor: ['Part 1 topic practice'],
+          explanationZh: '我可以把这个话题和自己的日常习惯联系起来，因为这是我生活中真实会做的事。',
+          materialCore: `mock_personal_material_${index + 1}`,
+          materialKind: 'reusable_personal_material',
+          part1UseCases: ['Part 1 personal detail'],
+          developmentMoveZh: '',
+          developedExample: `I can connect this topic to my own routine because it is something I actually do in daily life.`,
+          expressionFrames: [],
+          materialKey: `mock_material_${index + 1}`,
+        })),
+        reusableSpokenLanguage: expressionSeeds.map(seed => ({
+          reusableVersion: seed,
+          reuseFor: ['Part 1 current topic'],
+          explanationZh: '',
+        })),
+      },
+      rationaleZh: 'Mock learning-assets payload generated for local structure verification.',
     };
   }
 

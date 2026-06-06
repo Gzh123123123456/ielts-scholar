@@ -97,6 +97,16 @@ User-provided questions, answers, screenshots, transcripts, and Debug Panel outp
 - Fixes should apply through shared logic and be checked beyond the reported sample where practical.
 - Never claim another module is fixed by a change that only touched one module.
 
+
+## Product Decision Discipline
+
+Product and feedback changes must solve the underlying learner/product problem, not only the visible symptom.
+
+- If the learner goal, product role, or acceptance state is unclear, stop and clarify before implementation.
+- If the requested path is slower, riskier, or more fragile than another route, state the better route directly.
+- Every product decision should answer “why”: why this section exists, why this content belongs here, why this layer should change, and why the change helps the learner.
+- Avoid blacklist-style product rules such as “do not show X” as the primary solution. Define the positive contract: what the section should contain, what evidence it should use, how to transform internal fields into learner-facing output, and what to do when evidence is insufficient.
+- Keep learner-facing UI and agent reports low-noise. Remove text that does not change the learner's action or the next product decision.
 ## Agent Role Boundary
 
 - Codex is the current primary implementation agent for scoped product work.

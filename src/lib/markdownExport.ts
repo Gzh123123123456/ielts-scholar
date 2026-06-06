@@ -1,6 +1,14 @@
 ﻿import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from './bands';
-import type { Part1DevelopmentTarget, SpeakingFeedback, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
+import type { Part1DevelopmentTarget, SpeakingFeedback, SpeakingMaterialBankItem, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
 import { validatePart1ThreadFeedbackIntegrity } from './ai/part1ThreadIntegrity';
+import {
+  buildPart1LearningDisplayModel,
+  normalizePart1ComparableText,
+  normalizePart1LearnerText,
+  normalizePart1TranscriptDisplayText,
+  part1DevelopmentChunkKey,
+  part1LearningItemKey,
+} from './part1LearningDisplayModel';
 import type { WritingTask1AcademicPrompt } from '../data/questions/bank';
 import type { WritingTask1QuickPlan } from './practiceRecords';
 import {
@@ -801,16 +809,16 @@ const part1MaterialItemLines = (item: {
   developedExample?: string;
   expressionFrames?: string[];
 }) => {
-  const isSeed = item.materialKind === 'development_seed';
+  const english = normalizePart1TranscriptDisplayText(item.developedExample || item.reusableVersion || item.materialCore || item.sourceWording);
+  const chinese = normalizePart1LearnerText(item.explanationZh || '');
   return [
-    `- ${cleanLearningText(item.materialCore || item.sourceWording || item.reusableVersion)}`,
-    item.sourceWording && !isSeed && `  - 来源表达：${item.sourceWording}`,
-    !isSeed && `  - 可用于: ${cleanLearningLines(item.part1UseCases?.length ? item.part1UseCases : item.reuseFor.filter(useCase => !/part\s*2|part\s*3|cue\s*card|long\s*turn|discussion|society|abstract/i.test(useCase))).join('；') || '当前话题相关 Part 1 问题'}`,
-    `  - 发展方向: ${cleanLearningText(item.developmentMoveZh || item.explanationZh || '补一个真实原因、感受、对比或具体细节。')}`,
-    !isSeed && item.developedExample && `  - 可复用说法: ${cleanLearningText(item.developedExample)}`,
-    item.expressionFrames?.length && `  - 短语支架: ${cleanLearningLines(item.expressionFrames).slice(0, isSeed ? 3 : 2).join(' / ')}`,
+    english && `- ${english}`,
+    chinese && `  - ${chinese}`,
   ].filter((line): line is string => Boolean(line && line.trim())).join('\n');
 };
+
+const part1ExpressionItemLines = (item: SpeakingMaterialBankItem) =>
+  `- ${normalizePart1LearnerText(item.reusableVersion)}`;
 
 const normalizePart1MaterialExportText = (item: {
   sourceWording?: string;
@@ -922,6 +930,11 @@ const isLowValuePart1ExportPattern = (item: { observationZh: string; whyItMatter
 const buildPart1TopicThreadMarkdown = (
   feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
   timestamp?: string | Date,
+  options: {
+    hiddenPart1DevelopmentKeys?: string[];
+    hiddenPart1ExpressionKeys?: string[];
+    hiddenPart1MaterialKeys?: string[];
+  } = {},
 ) => {
   const thread = feedback.threadFeedback;
   const answers = feedback.threadAnswers || [];
@@ -929,30 +942,20 @@ const buildPart1TopicThreadMarkdown = (
   const estimateText = range && Number.isFinite(range.lower) && Number.isFinite(range.upper)
     ? `${formatConservativeBandEstimate(range.lower)}-${formatConservativeBandEstimate(range.upper)}`
     : `${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右`;
-  const material = thread?.materialBank;
-  const exportMaterialSeeds = (material?.myUsableMaterial || []).filter(isPart1ExportSeedMaterial);
-  const exportReusableMaterial = (material?.myUsableMaterial || []).filter(isPart1ExportReusableMaterial);
+  const exportDisplay = buildPart1LearningDisplayModel(thread, { answers });
+  const hiddenDevelopmentKeys = new Set(options.hiddenPart1DevelopmentKeys || []);
+  const hiddenExpressionKeys = new Set(options.hiddenPart1ExpressionKeys || []);
+  const hiddenMaterialKeys = new Set(options.hiddenPart1MaterialKeys || []);
+  const exportReusableMaterial = exportDisplay.userMaterials.filter(item => !hiddenMaterialKeys.has(part1LearningItemKey(item)));
+  const exportExpressions = exportDisplay.expressionBank.filter(item => !hiddenExpressionKeys.has(part1LearningItemKey(item)));
   const priorityState = derivePart1ThreadExportState(feedback);
   const threadStable = priorityState === 'topic_complete';
-  const developmentTargets = consolidatePart1DevelopmentTargets(thread?.developmentTargets || []);
-  const hasNoErrorDevelopmentThread = Boolean(developmentTargets.length && !(thread?.annotations || []).length);
-  const exportPatterns = hasNoErrorDevelopmentThread
-    ? []
-    : (thread?.threadLevelPatterns || []).filter(item => !isLowValuePart1ExportPattern(item));
+  const developmentTargets = consolidatePart1DevelopmentTargets(exportDisplay.answerCoaching);
   const developmentTargetByQuestion = new Map(developmentTargets.map(target => [target.questionRef, target] as const));
+  const answerActionByQuestion = new Map(exportDisplay.answerActions.map(action => [action.questionRef, action] as const));
 
   const cleanRetryByQuestion = new Map((thread?.cleanRetryAnswers || []).map(item => [item.questionRef, item] as const));
-  const nextRetryPlan = thread?.nextRetryPlan;
-  const nextRetryPlanItems = cleanLines([
-    nextRetryPlan?.priorityAccuracyPatternZh,
-    nextRetryPlan?.answerLengthRuleZh,
-    nextRetryPlan?.materialToTry && `Try naturally: ${nextRetryPlan.materialToTry}`,
-    ...(nextRetryPlan?.actions || []),
-    !nextRetryPlan && (thread?.nextRetryFocusZh || feedback.nextStepZh),
-  ]);
-  const shouldExportRetryPlan = priorityState !== 'development_needed' || developmentTargets.length === 0;
-  const legacyCoachingFallback = cleanRetryByQuestion.size ? [] : thread?.answerByAnswerCoaching || [];
-  const shouldExportSessionReview = exportPatterns.length || legacyCoachingFallback.length || exportMaterialSeeds.length || exportReusableMaterial.length || (shouldExportRetryPlan && nextRetryPlanItems.length);
+  const shouldExportSessionReview = exportReusableMaterial.length || exportExpressions.length;
   const integrity = validatePart1ThreadFeedbackIntegrity(feedback, answers);
   const legacyCompletenessNote = integrity.ok
     ? ''
@@ -975,7 +978,21 @@ ${answers.map((answer, index) => {
     const annotations = thread?.annotations?.filter(item => item.questionRef === questionRef) || [];
     const cleanRetry = cleanRetryByQuestion.get(questionRef);
     const developmentTarget = developmentTargetByQuestion.get(questionRef);
-    const suppressStableCleaner = Boolean((threadStable || priorityState === 'development_needed') && cleanRetry && !annotations.length && isPart1ExportCleanerEquivalent(answer.answer, cleanRetry.answer));
+    const answerAction = answerActionByQuestion.get(questionRef);
+    const developmentChunks = [
+      ...(developmentTarget?.phraseChunks || []),
+      ...(answerAction?.examples || []),
+    ]
+      .filter(chunk => !hiddenDevelopmentKeys.has(part1DevelopmentChunkKey(questionRef, chunk)))
+      .map(chunk => {
+        const text = normalizePart1LearnerText(chunk.text);
+        const purposeZh = normalizePart1LearnerText(chunk.purposeZh || '');
+        return text ? (purposeZh ? `${purposeZh}: ${text}` : text) : '';
+      })
+      .filter(Boolean)
+      .filter((chunk, chunkIndex, chunks) => chunks.indexOf(chunk) === chunkIndex)
+      .slice(0, 12);
+    const suppressUnsafeCleaner = Boolean(cleanRetry && isPart1ExportCleanerEquivalent(answer.answer, cleanRetry.answer));
     const annotationLines = annotations.length
       ? annotations.map(item => [
         `- Source: "${item.sourceQuote}"`,
@@ -983,34 +1000,23 @@ ${answers.map((answer, index) => {
         ...item.layers.map(layer => `  - ${part1AnnotationLayerLabel(layer)} / ${formatPart1IssueTypeLabel(layer.issueType)}: ${layer.original} -> ${layer.better}\n    - ${layer.explanationZh}${layer.origin === 'previous_cleaner_answer_conflict' ? `\n    - System revision note: This wording came from a previous cleaner answer and is corrected here for consistency; it is not counted as a new learner-introduced error.` : ''}${layer.reuseGuidanceZh ? `\n    - Reuse: ${layer.reuseGuidanceZh}` : ''}`),
       ].filter(Boolean).join('\n')).join('\n')
       : '';
-    const cleanRetryBlock = cleanRetry
-      ? suppressStableCleaner
-        ? ''
-        : annotations.length
-          ? `\n\n### A Cleaner Answer for Your Next Try\n${cleanRetry.answer}${cleanRetry.noteZh ? `\n\n${cleanRetry.noteZh}` : ''}`
-          : ''
+    const cleanRetryBlock = cleanRetry && !suppressUnsafeCleaner
+      ? `\n\n### A Cleaner Answer for Your Next Try\n${cleanRetry.answer}`
       : '';
-    const developmentBlock = developmentTarget && !annotations.length
-      ? `\n\n### 发展建议\n- ${developmentTarget.reasonZh}\n- 训练动作: ${developmentTarget.developmentMoveZh}${developmentTarget.phraseScaffolds?.length ? `\n- 短语支架: ${cleanLearningLines(developmentTarget.phraseScaffolds).slice(0, 3).join(' / ')}` : ''}`
+    const developmentBlock = developmentChunks.length
+      ? `\n\n### Development\n${developmentChunks.length ? `- 可用表达: ${developmentChunks.join(' / ')}` : ''}`
       : '';
-    return `## ${questionRef}. ${answer.question}\n> Original answer: ${answer.answer}${annotationLines ? `\n\n### Annotations\n${annotationLines}` : ''}${developmentBlock}${cleanRetryBlock}`;
+    return `## ${questionRef}. ${answer.question}\n> Original answer: ${answer.answer}${annotationLines ? `\n\n### Annotations\n${annotationLines}` : ''}${cleanRetryBlock}${developmentBlock}`;
   }).join('\n\n')}
 
 ${shouldExportSessionReview ? `
-# Topic-Thread Review｜Session Patterns & Part 1 Material Development
-${exportPatterns.length || legacyCoachingFallback.length ? `## 线程层面模式\n${exportPatterns.length ? exportPatterns.map(item => `- ${item.observationZh}\n  - 为什么重要: ${item.whyItMattersZh}\n  - 下次规则: ${item.retryRule}`).join('\n') : legacyCoachingFallback.map(item => `- ${questionRefLine(item.questionRefs)}${item.issue}\n  - ${item.coachingZh}${item.exampleFrame ? `\n  - 下次句架: ${item.exampleFrame}` : ''}`).join('\n')}\n` : ''}
-
-${exportMaterialSeeds.length ? `## 可继续发展的个人线索
-这些不是已完成素材，只是下次可以补充真实细节的方向。
-
-${exportMaterialSeeds.map(part1MaterialItemLines).join('\n')}\n` : ''}
+# Topic-Thread Review｜Part 1 Material Development
 
 ${exportReusableMaterial.length ? `## 可积累素材
-这些内容已经足够具体，可以整理成以后可复用的个人素材。
-
 ${exportReusableMaterial.map(part1MaterialItemLines).join('\n')}\n` : ''}
 
-${shouldExportRetryPlan && nextRetryPlanItems.length ? `## ${threadStable ? 'Optional Improvement Guidance' : 'Next Retry Plan'}\n${nextRetryPlanItems.map(item => `- ${item}`).join('\n')}` : ''}
+${exportExpressions.length ? `## 可积累表达
+${exportExpressions.map(part1ExpressionItemLines).join('\n')}\n` : ''}
 ` : ''}
 
 _Exported: ${formatExportDate(timestamp)}_`;
@@ -1019,9 +1025,14 @@ _Exported: ${formatExportDate(timestamp)}_`;
 export const buildSpeakingTrainingMarkdown = (
   feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
   timestamp?: string | Date,
+  options: {
+    hiddenPart1DevelopmentKeys?: string[];
+    hiddenPart1ExpressionKeys?: string[];
+    hiddenPart1MaterialKeys?: string[];
+  } = {},
 ) => {
   if (feedback.sessionKind === 'part1_topic_thread' && feedback.threadFeedback) {
-    return buildPart1TopicThreadMarkdown(feedback, timestamp);
+    return buildPart1TopicThreadMarkdown(feedback, timestamp, options);
   }
 
   const shortQuestion = limitWords(feedback.question, 9);

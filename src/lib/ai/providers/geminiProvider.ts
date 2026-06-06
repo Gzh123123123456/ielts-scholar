@@ -89,13 +89,13 @@ export const speakingPart1TopicThreadSchemaInstruction = `The JSON object must m
     }],
     "cleanRetryAnswers": [{ "questionRef": "Q1", "answer": "short natural retry answer preserving the learner's meaning", "noteZh": "optional short Chinese note only for meaningful compression or reorganisation" }],
     "developmentStatus": "needed | sufficient",
-    "developmentTargets": [{ "questionRef": "Q1", "reasonZh": "concise Chinese guidance that first acknowledges information already present in this answer, then names the missing development direction", "developmentMoveZh": "concise Chinese task only; not a model answer", "phraseScaffolds": ["short English phrase or half-open frame only"], "optionalDevelopedAnswer": "" }],
-    "threadLevelPatterns": [{ "observationZh": "string", "whyItMattersZh": "string", "retryRule": "Direct answer -> one key detail -> stop." }],
+    "developmentTargets": [{ "questionRef": "Q1", "developmentMode": "needs_content | expression_upgrade | no_extra_content", "topicFrameZh": "short Chinese boundary for this exact question", "reasonZh": "optional concise Chinese; empty when it would repeat the obvious", "developmentMoveZh": "concise Chinese task, not a model answer", "phraseScaffolds": ["legacy short English phrase only when phraseChunks cannot be filled"], "phraseChunks": [{ "text": "English chunk, not a full answer", "purposeZh": "brief Chinese purpose tied to the question" }], "optionalDevelopedAnswer": "" }],
+    "threadLevelPatterns": [],
     "mustFix": [{ "questionRefs": ["Q1"], "learnerWording": "string", "betterVersion": "string", "explanationZh": "string", "recurring": false }],
     "answerByAnswerCoaching": [],
     "highImpactPhraseFixes": [{ "questionRefs": ["Q3"], "original": "string", "better": "string", "explanationZh": "string" }],
     "materialBank": {
-      "myUsableMaterial": [{ "sourceWording": "string", "reusableVersion": "string", "reuseFor": ["Part 1 use case"], "explanationZh": "string", "materialCore": "distinct personal fact or idea", "materialKind": "development_seed | reusable_personal_material", "part1UseCases": ["current Part 1 question/use case"], "developmentMoveZh": "one-step development move", "developedExample": "direct answer plus one grounded detail only for reusable_personal_material", "expressionFrames": ["short reusable frame"], "materialKey": "stable semantic identity" }],
+      "myUsableMaterial": [{ "sourceWording": "exact learner wording or shortest grounded source phrase", "reusableVersion": "polished English sentence or short paragraph preserving the learner's stance/idea", "reuseFor": ["Part 1 use case"], "explanationZh": "one concise Chinese translation or meaning paraphrase of the English material", "translationZh": "Chinese translation of developedExample/reusableVersion only", "materialCore": "distinct personal stance, idea, reason, preference, habit, fact, or answer angle", "materialKind": "development_seed | reusable_personal_material", "part1UseCases": ["current Part 1 question/use case"], "developmentMoveZh": "one-step development move", "developedExample": "paraphrased or lightly expanded English sentence/short paragraph for reusable_personal_material", "expressionFrames": ["short reusable frame"], "materialKey": "stable semantic identity" }],
       "reusableSpokenLanguage": [{ "sourceWording": "string", "reusableVersion": "string", "reuseFor": ["string"], "explanationZh": "string" }]
     },
     "optionalPolish": [{ "questionRefs": ["Q1"], "original": "string", "better": "string", "explanationZh": "string" }],
@@ -108,6 +108,48 @@ export const speakingPart1TopicThreadSchemaInstruction = `The JSON object must m
   "band9Refinements": [],
   "preservedStyle": [],
   "reusableExample": null
+}`;
+
+export const speakingPart1LearningAssetsSchemaInstruction = `The JSON object must match this exact key structure:
+{
+  "module": "speaking",
+  "operation": "part1_learning_assets",
+  "topic": "string",
+  "threadId": "string",
+  "questionCount": 4,
+  "developmentTargets": [{
+    "questionRef": "Q1",
+    "developmentMode": "needs_content | expression_upgrade | no_extra_content",
+    "topicFrameZh": "short Chinese boundary for this exact question",
+    "reasonZh": "optional concise Chinese; empty when it would repeat the obvious",
+    "developmentMoveZh": "concise Chinese task, not a model answer",
+    "phraseChunks": [{ "text": "English chunk, not a full answer", "purposeZh": "brief Chinese purpose tied to the question" }],
+    "phraseScaffolds": [],
+    "optionalDevelopedAnswer": ""
+  }],
+  "materialBank": {
+    "myUsableMaterial": [{
+      "sourceWording": "exact learner wording or shortest grounded source phrase",
+      "reusableVersion": "polished English sentence or short paragraph preserving the learner's stance/idea",
+      "reuseFor": ["current Part 1 use case"],
+      "explanationZh": "one concise Chinese translation or meaning paraphrase of reusableVersion/developedExample",
+      "translationZh": "Chinese translation of developedExample/reusableVersion only",
+      "materialCore": "distinct personal stance, idea, reason, preference, habit, fact, or answer angle",
+      "materialKind": "reusable_personal_material",
+      "part1UseCases": ["current Part 1 question/use case"],
+      "developmentMoveZh": "",
+      "developedExample": "paraphrased or lightly expanded English sentence/short paragraph",
+      "expressionFrames": [],
+      "materialKey": "stable semantic identity"
+    }],
+    "reusableSpokenLanguage": [{
+      "sourceWording": "",
+      "reusableVersion": "current-topic spoken phrase/chunk/frame",
+      "reuseFor": ["current Part 1 topic use"],
+      "explanationZh": ""
+    }]
+  },
+  "rationaleZh": "brief internal Chinese summary of coverage"
 }`;
 
 export const part1CleanRetryCertificationSchemaInstruction = `The JSON object must match this exact key structure:
@@ -172,6 +214,7 @@ Return actionable topic-session feedback only:
 - If a local repair is mentioned in coaching, retry advice, or a clean retry answer and can be grounded to exact learner wording, it must also appear as an annotation. Do not create a second duplicate annotation for the same original -> better repair.
 - For complex broken stretches where several issues interact, anchor one larger meaningful phrase or sentence instead of several isolated token swaps. Put the detailed local layers inside the same annotation, and use combinedRepair for the complete better spoken version of that span.
 - Severity rules: tense, article, determiner/pronoun choice, plurality/countability, preposition, agreement, missing verb/component, wrong word form, fixed-collocation error, or clearly broken structure = must_fix. A natural spoken alternative without an accuracy error = better_spoken_choice. Minor stylistic variation only = optional_polish.
+- Lexical precision is part of local feedback. Do a sentence-level semantic wording audit before returning JSON: for every content-bearing noun, identity/role word, place/category word, verb phrase, collocation, and translated-sounding chunk, ask whether it is merely understandable or genuinely precise in natural spoken English for this whole answer. Pay special attention when a job-status noun is being used to mean a commute/lifestyle role, or when a place/category noun is paired with an unnatural traffic/transport collocation. Anchor imprecise but teachable wording as BETTER SPOKEN CHOICE, or MUST FIX when it distorts meaning. Do not rely on examples or memorized cases; infer the learner's intended meaning from the question and answer context.
 - Regional/style variants: if two variants are both acceptable in ordinary spoken English, do not penalize one as an accuracy error just to standardize style or region. A preferred variant for consistency or naturalness may appear only as better_spoken_choice, never learner-fault must_fix.
 - Do not treat ASR casing, punctuation, spacing, capitalization, transcript spelling, or written-form cleanup as learner language errors. Do not recommend inflated, essay-like, or "more formal" Part 1 wording; prefer short, natural, direct spoken English.
 - Do not annotate or discuss transcript-only artifacts as learner errors anywhere in the result: capitalization, punctuation, spacing, ASR casing noise, spelling-only forms that cannot be confirmed in speech, or homophone spelling such as to/too when the spoken form is indistinguishable. If a span has a real structural issue plus casing/spelling cleanup, keep only the real structural issue and anchor only the real spoken-language problem.
@@ -186,21 +229,70 @@ Return actionable topic-session feedback only:
 - FINAL CLEAN-ANSWER STANCE CHECK: if the learner explicitly begins with a clear stance such as Yes, No, Not really, I would, or I wouldn't, do not silently reverse that stance merely because the supporting explanation is unclear or poorly phrased. Prefer repairing the supporting logic while preserving the stated position. If the answer contains a genuine contradiction and the intended stance cannot be recovered safely, preserve the uncertainty in noteZh or a feedback explanation rather than inventing a new personal preference. Do not use OPTIONAL POLISH to disguise a reversal of the learner's answer stance.
 - FINAL CLEAN-ANSWER QUESTION SATISFACTION CHECK: after drafting cleanRetryAnswers, reread each original question. Each clean retry answer must directly answer that exact question and include a complete reason or detail when the question asks for or naturally requires one. If the learner implies a useful reason but states it unclearly, preserve that meaning and make the relationship explicit without inventing facts. Do not output a grammatically improved answer that leaves a "yes/no" stance unsupported, internally contradictory, or unrelated to the question. Do not preserve unrelated background merely because it is true personal material.
 - FINAL GRAMMAR-TEACHING CONSISTENCY CHECK: when an annotation teaches a grammar repair also used in a clean retry answer, combinedRepair, explanationZh, and the clean retry answer must reflect the same grammatical meaning. For an experience extending from the past up to now, do not explain the correction as simple past if the clean retry answer uses present-perfect meaning.
+- CONTEXTUAL GRAMMAR CHECK: distinguish a real grammar error from an acceptable tense/style choice. If a reported-speech or story-flow rewrite changes present wording into past wording but the learner's present-state meaning can still be true now, do not turn that stylistic rewrite into a local MUST FIX annotation.
 - FINAL ANNOTATION COVERAGE CHECK: compare every clean retry answer against the learner's original answer before returning JSON. Every important locally teachable grammar, collocation, pronoun/reference, agreement, tense, missing-component, article/determiner, singular/plural, preposition, or word-form repair used in the clean retry answer must also appear in annotations when it can be grounded to exact learner wording. Do not annotate deletion of filler, broad compression, or a rewritten sentence unless there is a genuine teachable local problem. Do not add duplicate repair cards, and do not create spelling, capitalization, punctuation, or pronunciation annotations during this check.
+- LEXICAL PRECISION CHECK: actively look for words that are grammatically possible but semantically imprecise for the learner's intended meaning, especially role/identity words, place/category words, object names, action verbs, and Chinese-influenced category phrases. Read the whole sentence before deciding whether the issue is real. If the clean retry answer changes such a word or phrase into a more accurate spoken category, create a local annotation with issueType "lexical precision" or "word choice" anchored to the exact learner wording.
 - Only mark recurring when the same underlying error pattern appears across multiple answers.
 - This is transcript-based. Do not assert pause length/frequency, speed, pronunciation, or delivery quality unless the transcript itself shows visible fillers/repetition/broken structure.
 - MUST FIX: every important grammar, meaning, repeated low-level, word-form, collocation, or relevance/control issue. Do not cap meaningful items. Use questionRefs such as Q1 or Q1 / Q3.
-- THREAD-LEVEL PATTERNS: concise macro behavior only: answer length, buried direct answers, useful material that needs compression, written/lecture-like tone, or accuracy collapse during overextension. Each pattern needs observationZh, whyItMattersZh, and one retryRule. Do not duplicate grammar lists from annotations.
+- THREAD-LEVEL PATTERNS: return [] for Part 1 topic-thread results. Answer-local development belongs in developmentTargets; material and language assets belong in materialBank.
 - ANSWER-BY-ANSWER COACHING: return [] for new results. Per-question retry guidance belongs in cleanRetryAnswers.
-- HIGH-IMPACT PHRASE FIXES: separate useful spoken-language upgrades with question provenance.
-- DEVELOPMENT STATUS: decide from the learner's current submitted answers, not cleaner answers or material bank. Return developmentStatus "needed" when an accurate answer set is still materially thin or under-responsive for questions that invite a reason, example, preference, frequency, experience, description, contrast, feeling, or future intention. This is not a grammar-error state. Return "sufficient" only when the submitted answers already show enough real Part 1 detail and spoken language range for the topic thread. Do not use numeric score alone. If grammar errors and thin content coexist, still return developmentTargets so the retry can repair accuracy and add one grounded development step.
-- DEVELOPMENT TARGETS: return an item for each submitted answer that has no priority language repair but can naturally be expanded with one small real detail, reason, example, feeling, contrast, frequency, or condition. For an accurate-but-thin thread, this often means Q1-Q4 can each have compact answer-local coaching. Do not artificially choose only one target. Do not force already sufficiently developed answers. Each target must name the questionRef, explain in concise Chinese why the current answer is thin, give one concrete Chinese development move, and include 1-3 short English phraseScaffolds. The Chinese reason must acknowledge what the learner already said before suggesting the next detail; never say "only a place/name/no detail" if the answer already contains background, reason, contrast, role, concrete description, relationship, or experience. phraseScaffolds must be short fragments or half-open frames, not complete model sentences, and must not introduce unconfirmed facts such as population, climate, province, beaches, atmosphere, feelings, or lifestyle unless the learner supplied them. Leave optionalDevelopedAnswer empty for no-error content-development cards. Do not treat optional polish as a development target.
-- SPEAKING MATERIAL BANK: this is Part 1 personal-material development, not a sentence archive. Be selective; sparse or empty is acceptable. Use materialKind "development_seed" for short accurate answers that only provide clues for future development; these items should contain materialCore, part1UseCases, developmentMoveZh, and short expressionFrames, but no developedExample by default. Use materialKind "reusable_personal_material" only when the learner already supplied specific enough content to preserve and polish, such as concrete experiences, roles, named activities, viewing habits, conditional preferences, reasons, contrasts, or feelings tied to a situation. myUsableMaterial must be distinct grounded learner ideas with real current-Part-1 development value. Do not archive ordinary facts, bare identity/location statements, generic topic labels, trivial grammar-preserving rewrites, "Yes, definitely" type phrases, or standalone descriptors such as "My hometown is Xiamen" / "It is a medium-sized coastal city" as reusable_personal_material; if useful, classify them only as development_seed tied to a real next move. For reusable_personal_material, include materialCore, part1UseCases, developmentMoveZh, developedExample, and at most two expressionFrames when genuinely useful. Consolidate paraphrases and generic templates into one semantic item; concrete experience and role should outrank abstract emotion phrases. On this Part 1 page, reuseFor and part1UseCases should describe Part 1 use only; do not claim Part 2 or Part 3 transfer here. When input.retryReference includes carriedMyUsableMaterial, do not return the same personal fact again merely as a paraphrase, shorter abstraction, determiner/inflection variation, or less detailed version. Return only genuinely new personal content or a clearly more specific, natural reusable version. Do not collect weak generalized claims or awkward pseudo-factual assertions merely because they appear in the answer. Do not save material the clean retry answer should omit as conceptually distracting. Keep short concrete grounded material when useful. Never invent personal facts.
-- reusableSpokenLanguage should contain only short, natural, content-bearing expressions genuinely worth imitating or transferring, such as a useful collocation, compact sentence frame, or idiomatic phrase. Exclude generic starters/openers, bare affirmative responses such as "Yes, of course" or "Of course", bare "It depends", "I think", "I would say", "In my opinion", empty templates, unnecessarily formal wording, plain autobiographical facts already better captured in myUsableMaterial, and long model mini-answers. Each reuseFor item should explicitly name transfer use across Part 1 / Part 2 / Part 3 when applicable.
+- HIGH-IMPACT PHRASE FIXES: return [] in this core pass unless a phrase fix is needed to support a local annotation. The separate part1_learning_assets pass builds the learning expression bank.
+- DEVELOPMENT STATUS / DEVELOPMENT TARGETS / SPEAKING MATERIAL BANK: this core pass must not generate learner-facing learning assets. Return developmentTargets [], materialBank.myUsableMaterial [], and materialBank.reusableSpokenLanguage []. A separate part1_learning_assets pass will generate per-answer development, reusable personal material, and the expression bank after cleanRetryAnswers are certified.
 - OPTIONAL POLISH: minor low-priority naturalness only; never put serious issues here.
 - NEXT RETRY PLAN: return concise grounded actions: one priority accuracy pattern, one answer-length/focus rule, and one useful expression or personal material item to try naturally next time. Do not advise more complexity when the problem is overexpansion. If developmentStatus is "needed", the plan must say that core accuracy may be stable but answer development limits the current result. This is a training blocker for topic completion, not a red grammar error, and must not demand long prepared responses.
 - NEXT RETRY FOCUS: keep as a compact legacy summary of nextRetryPlan.
 Current estimate is a low-key transcript-based topic-session practice estimate excluding pronunciation. Base it on the learner's current submitted answers, not on your cleaner answers or Material Bank. Absence of MUST FIX does not automatically justify 6.5-7.0 or 7.0+ if the answers are consistently thin or show limited language range. Accurate but very concise answer sets should keep a numerical practice estimate, but the estimate must be conservative and the rationale should say in concise Chinese that the language is accurate but there is not yet enough real-detail development / language range. Natural Part 1 answers do not need to be long: direct answer plus one relevant detail/reason is sufficient for many questions. If you return a higher range, the rationale must cite actual evidence from the submitted answers: specific personal details, natural elaboration, flexible but spoken-appropriate wording, or coherent direct answers. Never return "no issues" plus no optional improvement path while lowering the estimate only with vague simple-vocabulary reasoning. If evidence genuinely straddles two adjacent half-bands, return a bandEstimateRange with exactly one half-band step, for example 4.5-5.0 or 5.0-5.5, never a wider range.`;
+
+export const speakingPart1LearningAssetsInstruction = `This is the independent IELTS Speaking Part 1 learning-assets pass.
+The core Part 1 analysis has already produced annotations and certified clean retry answers. Do not rescore, do not rewrite clean answers, do not create annotations, and do not discuss internal diagnostics.
+Return operation exactly "part1_learning_assets".
+
+Think like a strong IELTS Speaking coach responding to this exact Part 1 topic thread. Read the exact topic, each question, the learner's original answer, the clean retry answer, and annotations. Then produce the learning assets that should appear under the result UI.
+
+Use this private workflow before writing JSON:
+1. Internally brainstorm 20-30 useful spoken-language candidates for this exact topic thread, as if a Chinese IELTS learner asked: "在这样的 Part 1 topic 下，有哪些 7 分以上也实用、不小众、不文绉绉的口语表达？"
+2. Group the candidates by the real semantic jobs in the questions and answers: preference/taste, frequency, past-vs-now change, reason, budget, shopping channel, comfort/function, identity/object category, feeling, contrast, habit/routine, or any better categories that fit this topic.
+3. Remove items that are too easy, too obscure, too essay-like, too long, or already said by the learner.
+4. Fill developmentTargets and reusableSpokenLanguage from the best remaining candidates. The final JSON must reflect this candidate-generation work; do not return the first few obvious phrases that come to mind.
+
+Per-answer DEVELOPMENT:
+- Return exactly one developmentTargets item for every submitted answer.
+- For each question, decide the real coaching job: add one on-topic angle when the answer is too thin; upgrade wording when the content is already enough; tighten the direction if the learner's detail drifts away from the question.
+- developmentTargets are not the correction area. Do not put grammar fixes, local error repairs, source -> replacement pairs, or labels such as "fix", "correct", "replace", "instead of", "修正", or "替代" here. Those belong only in annotations and cleanRetryAnswers from the core pass.
+- If a wording improvement is already used as a correction in annotations or the clean retry answer, do not repeat that repair as a development chunk. Instead give alternative topic-useful expressions that are not framed as learner errors.
+- Correct but plain learner wording still deserves development. Notice reusable plain phrases in the learner answer and offer natural alternatives that preserve the same semantic job: interest, preference, degree, time/change, reason, contrast, habit, feeling, identity, or condition. Do not copy stock idioms mechanically; generate wording from the actual topic and answer.
+- phraseChunks are the payload. Give 6-10 chunks per answer. Each chunk should be a reusable spoken corpus block, not a full answer and not a bare noun. Combine verbs with objects, adjectives with concrete nouns, collocations, or short sentence frames.
+- It is useful to give several natural ways to express the same learner meaning. For each answer, include at least 2-3 alternative phrasings for the learner's own plain wording when possible, plus 2-4 topic-adjacent chunks the learner did not say.
+- Do not answer with only one chunk such as "Handmade gifts have a special charm." If one chunk is useful, add nearby alternatives and continuations: a feeling chunk, a reason chunk, a contrast chunk, and a more natural replacement for one plain learner phrase.
+- purposeZh should be a short Chinese concept label, not a long instruction.
+- Make chunks question-specific. Do not paste the same set into every answer unless the exact meaning genuinely repeats.
+- For each answer, include both kinds when possible: anchored upgrades for wording the learner already attempted, and topic-adjacent chunks the learner did not say but could use in that answer. Do not leave a submitted answer without development just because the clean retry answer is grammatically acceptable.
+
+Reusable MATERIAL:
+- myUsableMaterial is for reusable personal answer material derived from the learner's own answer. It may be a polished stance, preference, reason, contrast, habit, feeling, fact, or short answer angle; it does not require a time/place/event/person.
+- When the learner's answer is short but has a clear anchor such as a hometown, city, activity, preference, family reason, or role, you may create useful topic-anchored material around that confirmed anchor. It does not need to be a literal paraphrase of the original sentence. For example, a confirmed hometown/city may support a richer hometown answer angle. Do not mark it "pending confirmation"; the UI lets the learner delete items they do not want.
+- Do not invent highly specific personal experiences, exact routines, dates, people, private facts, or emotions that are not reasonably suggested by the answer/topic. Keep generated material plausible, topic-relevant, and anchored to confirmed nouns/stances from the answer.
+- Do not put the learner's original sentence or the clean retry sentence into developedExample unchanged, even when it is already correct. Paraphrase it, lightly expand it without inventing facts, or express the same idea in a more polished way.
+- Each material item displayed to the learner must have developedExample as one polished English sentence or compact short paragraph, and translationZh as the Chinese translation/meaning of that English material. If you also fill explanationZh, it must be the same translation-like meaning, not a usage note.
+- For every submitted answer with a recoverable stance, preference, reason, habit, feeling, fact, or answer angle, normally return at least one myUsableMaterial item. Use the clean retry only as meaning evidence; the displayed developedExample must be a new polished version, not a copied clean answer.
+- developedExample must not start with disposable response lead-ins such as bare yes/no/absolutely/definitely/of course/not really. Preserve the real stance inside the sentence instead, for example through prefer, avoid, enjoy, tend to, would rather, or usually.
+- Do not store raw transcript fragments or Chinese usage notes as explanationZh/translationZh. Do not write Chinese like "this phrase can be used for..." or "on the basis of..."; write the Chinese meaning of the displayed English material. Return [] only when the answer is blank, nonsensical, or has no recoverable learner meaning.
+
+Reusable SPOKEN LANGUAGE:
+- reusableSpokenLanguage is the current-topic expression bank. Return 12-20 useful current-topic spoken chunks whenever possible; 10 is the minimum for a normal Part 1 topic thread.
+- Include the strongest phraseChunks from developmentTargets, then add more current-topic language that the learner did not say but could use for nearby Part 1 questions under the same topic.
+- The learner may not have said these chunks. They should be tightly relevant to the current questions and useful for IELTS Part 1, with a mix of solid mid-level chunks and several natural/native-sounding but not obscure chunks. Think "useful 7+ spoken corpus", not rare literary vocabulary.
+- Prefer corpus-like chunks and frames that a learner can actively reuse. Avoid plain words, complete model answers, and phrases already used by the learner or already shown in cleanRetryAnswers/material.
+- Good expression-bank items can be compact first-person spoken frames when the frame itself is reusable and richer than the learner's wording. Prefer topic-shaped wording for preference, change, reason, comparison, habit, condition, and evaluation instead of stock idiom lists.
+- Prefer canonical reusable frames over filled first-person examples: use base forms, noun phrases, or slots such as "be into sth", "be keen on sth", "spend time doing sth", "a lifelong pursuit", "bring sb joy and satisfaction", "not be one's cup of tea", "one's main pastime", not full personal sentences like "I'm really into [doing something]" or "It brings me immense joy".
+
+Quality self-check before returning JSON:
+- Every answered Q has a developmentTargets item with at least 5 meaningful phraseChunks.
+- reusableSpokenLanguage has at least 10 current-topic items unless the topic is genuinely too narrow; if fewer, explain why in rationaleZh.
+- No item comes from a different topic merely because the transcript mentions family, hometown, school, hobby, gifts, places, or work.
+- No item is a machine placeholder such as "a specific reason", "a small detail", or "what matters to me most".
+- Materials are polished English plus matching Chinese meaning, not raw transcript storage.`;
 
 export const speakingTargetValidationSchemaInstruction = `The JSON object must match this exact key structure:
 {
@@ -609,6 +701,20 @@ ${speakingSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`, 0.1);
+  }
+
+  async generatePart1LearningAssets(params: import('./base').Part1LearningAssetsRequest): Promise<string> {
+    return this.generateJson(`${strictJsonInstruction}
+
+You are an IELTS Speaking Part 1 learning-assets engine for a local-first practice app.
+Chinese is for short concept labels and translations. English is for reusable spoken chunks and polished learner material.
+${params.repairFocus ? `This is automatic attempt ${params.attempt || 2} because the previous visible learning-assets payload was too sparse. Fill these missing learner-facing assets before returning JSON: ${params.repairFocus}. Do not mention this internal repair pass to the learner; produce the corrected full JSON payload.` : ''}
+${speakingPart1LearningAssetsInstruction}
+
+${speakingPart1LearningAssetsSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`, 0.45);
   }
 
   async scoreSpeakingOnly(params: {

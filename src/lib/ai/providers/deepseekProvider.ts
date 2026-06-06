@@ -4,6 +4,8 @@ import {
   frameworkSchemaInstruction,
   part1CleanRetryCertificationInstruction,
   part1CleanRetryCertificationSchemaInstruction,
+  speakingPart1LearningAssetsInstruction,
+  speakingPart1LearningAssetsSchemaInstruction,
   speakingFeedbackDepthInstruction,
   speakingPart1TopicThreadInstruction,
   speakingPart1TopicThreadSchemaInstruction,
@@ -202,6 +204,20 @@ ${part1CleanRetryCertificationSchemaInstruction}
 
 Input:
 ${JSON.stringify(params, null, 2)}`, 0.1);
+  }
+
+  async generatePart1LearningAssets(params: import('./base').Part1LearningAssetsRequest): Promise<string> {
+    return this.generateJson(`${strictJsonInstruction}
+
+You are an IELTS Speaking Part 1 learning-assets engine for a local-first practice app.
+Chinese is for short concept labels and translations. English is for reusable spoken chunks and polished learner material.
+${params.repairFocus ? `This is automatic attempt ${params.attempt || 2} because the previous visible learning-assets payload was too sparse. Fill these missing learner-facing assets before returning JSON: ${params.repairFocus}. Do not mention this internal repair pass to the learner; produce the corrected full JSON payload.` : ''}
+${speakingPart1LearningAssetsInstruction}
+
+${speakingPart1LearningAssetsSchemaInstruction}
+
+Input:
+${JSON.stringify(params, null, 2)}`, 0.45);
   }
 
   async analyzeWriting(params: {

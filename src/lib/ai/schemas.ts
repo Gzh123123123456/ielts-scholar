@@ -7,6 +7,7 @@ export type ProviderOperation =
   | 'speaking_score_only'
   | 'speaking_analysis'
   | 'part1_clean_retry_certification'
+  | 'part1_learning_assets'
   | 'writing_analysis'
   | 'writing_task1_analysis'
   | 'writing_framework_coach'
@@ -251,11 +252,38 @@ export interface Part1CleanRetryCertificationResult {
   rationaleZh?: string;
 }
 
+export interface Part1LearningAssetsResult {
+  module: 'speaking';
+  operation: 'part1_learning_assets';
+  topic: string;
+  threadId: string;
+  questionCount: number;
+  developmentTargets: Part1DevelopmentTarget[];
+  materialBank: {
+    myUsableMaterial: SpeakingMaterialBankItem[];
+    reusableSpokenLanguage: SpeakingMaterialBankItem[];
+  };
+  rationaleZh?: string;
+}
+
+export type Part1DevelopmentMode =
+  | 'needs_content'
+  | 'expression_upgrade'
+  | 'no_extra_content';
+
+export interface Part1DevelopmentPhraseChunk {
+  text: string;
+  purposeZh?: string;
+}
+
 export interface Part1DevelopmentTarget {
   questionRef: string;
+  developmentMode?: Part1DevelopmentMode;
+  topicFrameZh?: string;
   reasonZh: string;
   developmentMoveZh: string;
   phraseScaffolds?: string[];
+  phraseChunks?: Part1DevelopmentPhraseChunk[];
   optionalDevelopedAnswer?: string;
 }
 
@@ -264,6 +292,7 @@ export interface SpeakingMaterialBankItem {
   reusableVersion: string;
   reuseFor: string[];
   explanationZh?: string;
+  translationZh?: string;
   materialCore?: string;
   materialKind?: 'development_seed' | 'reusable_personal_material';
   part1UseCases?: string[];

@@ -1,8 +1,10 @@
 import {
   SpeakingFeedback,
   SpeakingAudioTranscriptionResult,
+  Part1AnswerAnnotation,
   Part1CleanRetryAnswer,
   Part1CleanRetryCertificationResult,
+  Part1LearningAssetsResult,
   Part1RetryReferenceContext,
   SpeakingScoreOnlyResult,
   SpeakingTargetValidationResult,
@@ -53,6 +55,18 @@ export interface Part1CleanRetryCertificationRequest {
   threadAnswers: SpeakingThreadAnswer[];
   cleanRetryAnswers: Part1CleanRetryAnswer[];
   attempt: 1 | 2;
+}
+
+export interface Part1LearningAssetsRequest {
+  topic: string;
+  threadId: string;
+  threadAnswers: SpeakingThreadAnswer[];
+  cleanRetryAnswers: Part1CleanRetryAnswer[];
+  annotations?: Part1AnswerAnnotation[];
+  retryReference?: Part1RetryReferenceContext;
+  carriedMyUsableMaterial?: Part1RetryReferenceContext['carriedMyUsableMaterial'];
+  attempt?: 1 | 2;
+  repairFocus?: string;
 }
 
 export interface WritingAnalysisRequest {
@@ -118,6 +132,8 @@ export interface AIProvider {
   validateSpeakingTarget?(params: SpeakingTargetValidationRequest): Promise<SpeakingTargetValidationResult | string>;
 
   certifyPart1CleanRetry?(params: Part1CleanRetryCertificationRequest): Promise<Part1CleanRetryCertificationResult | string>;
+
+  generatePart1LearningAssets?(params: Part1LearningAssetsRequest): Promise<Part1LearningAssetsResult | string>;
   
   analyzeWriting(params: WritingAnalysisRequest): Promise<WritingFeedback | string>;
 
