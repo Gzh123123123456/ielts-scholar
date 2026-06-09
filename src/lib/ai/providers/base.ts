@@ -16,6 +16,12 @@ import {
   WritingTask1Feedback,
 } from '../schemas';
 
+export interface MasteredSpeakingExpressionHint {
+  expression: string;
+  signal?: string;
+  count?: number;
+}
+
 export interface SpeakingAnalysisRequest {
   part: number;
   question: string;
@@ -29,6 +35,7 @@ export interface SpeakingAnalysisRequest {
   targetRepairFocus?: string;
   targetAttempt?: number;
   priorTargetAnswer?: string;
+  masteredExpressions?: MasteredSpeakingExpressionHint[];
 }
 
 export interface SpeakingScoreOnlyRequest {

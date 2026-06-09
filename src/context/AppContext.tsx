@@ -7,6 +7,19 @@ interface UserProfile {
   estimatedBandHistory: { date: string; band: number }[];
   errorTags: Record<string, number>;
   lastPracticed: string | null;
+  masteredExpressions: MasteredExpressionMemory[];
+}
+
+export interface MasteredExpressionMemory {
+  id: string;
+  expression: string;
+  source: 'part2_signal' | 'manual';
+  signal?: string;
+  module?: string;
+  part?: number;
+  createdAt: string;
+  updatedAt: string;
+  count: number;
 }
 
 interface BrowserCapabilities {
@@ -23,6 +36,14 @@ interface AppContextType {
   sessions: any[];
   debugLogs: string[];
   addDebugLog: (log: string) => void;
+  markMasteredExpression: (item: {
+    expression: string;
+    source?: MasteredExpressionMemory['source'];
+    signal?: string;
+    module?: string;
+    part?: number;
+  }) => void;
+  forgetMasteredExpression: (item: { expression: string; signal?: string }) => void;
   providerDiagnostic: ProviderDiagnostic | null;
   setProviderDiagnostic: (diagnostic: ProviderDiagnostic | null) => void;
   providerDiagnostics: ProviderDiagnostic[];
@@ -37,7 +58,11 @@ const defaultProfile = (): UserProfile => ({
   estimatedBandHistory: [],
   errorTags: {},
   lastPracticed: null,
+  masteredExpressions: [],
 });
+
+const profileExpressionKey = (expression: string, signal?: string) =>
+  `${signal || 'any'}:${expression.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
 
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
@@ -65,6 +90,33 @@ const sanitizeProfile = (value: unknown): UserProfile => {
       ? source.errorTags
       : {},
     lastPracticed: typeof source.lastPracticed === 'string' ? source.lastPracticed : null,
+    masteredExpressions: Array.isArray(source.masteredExpressions)
+      ? source.masteredExpressions
+        .filter(item => (
+          item &&
+          typeof item === 'object' &&
+          typeof (item as { expression?: unknown }).expression === 'string'
+        ))
+        .map((item): MasteredExpressionMemory => {
+          const record = item as Partial<MasteredExpressionMemory>;
+          const expression = record.expression?.trim() || '';
+          const signal = typeof record.signal === 'string' ? record.signal : undefined;
+          const now = new Date().toISOString();
+          return {
+            id: typeof record.id === 'string' && record.id ? record.id : profileExpressionKey(expression, signal),
+            expression,
+            source: record.source === 'manual' || record.source === 'part2_signal' ? record.source : 'part2_signal',
+            signal,
+            module: typeof record.module === 'string' ? record.module : undefined,
+            part: typeof record.part === 'number' ? record.part : undefined,
+            createdAt: typeof record.createdAt === 'string' ? record.createdAt : now,
+            updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : now,
+            count: typeof record.count === 'number' && record.count > 0 ? record.count : 1,
+          };
+        })
+        .filter(item => item.expression)
+        .slice(0, 100)
+      : [],
   };
 };
 
@@ -97,6 +149,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const recordProviderDiagnostic = (diagnostic: ProviderDiagnostic | null) => {
     setProviderDiagnostic(diagnostic);
     setProviderDiagnostics(prev => diagnostic ? [diagnostic, ...prev].slice(0, 12) : []);
+  };
+
+  const markMasteredExpression: AppContextType['markMasteredExpression'] = ({
+    expression,
+    source = 'part2_signal',
+    signal,
+    module,
+    part,
+  }) => {
+    const cleanExpression = expression.replace(/\s+/g, ' ').trim();
+    if (!cleanExpression) return;
+    const key = profileExpressionKey(cleanExpression, signal);
+    const now = new Date().toISOString();
+    setProfile(prev => {
+      const existing = prev.masteredExpressions.find(item =>
+        profileExpressionKey(item.expression, item.signal) === key
+      );
+      if (existing) {
+        return {
+          ...prev,
+          masteredExpressions: [
+            {
+              ...existing,
+              updatedAt: now,
+              count: existing.count + 1,
+            },
+            ...prev.masteredExpressions.filter(item => item !== existing),
+          ].slice(0, 100),
+        };
+      }
+      return {
+        ...prev,
+        masteredExpressions: [
+          {
+            id: key,
+            expression: cleanExpression,
+            source,
+            signal,
+            module,
+            part,
+            createdAt: now,
+            updatedAt: now,
+            count: 1,
+          },
+          ...prev.masteredExpressions,
+        ].slice(0, 100),
+      };
+    });
+  };
+
+  const forgetMasteredExpression: AppContextType['forgetMasteredExpression'] = ({ expression, signal }) => {
+    const key = profileExpressionKey(expression, signal);
+    setProfile(prev => ({
+      ...prev,
+      masteredExpressions: prev.masteredExpressions.filter(item =>
+        profileExpressionKey(item.expression, item.signal) !== key
+      ),
+    }));
   };
 
   useEffect(() => {
@@ -153,6 +263,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sessions,
       debugLogs,
       addDebugLog,
+      markMasteredExpression,
+      forgetMasteredExpression,
       providerDiagnostic,
       setProviderDiagnostic: recordProviderDiagnostic,
       providerDiagnostics,

@@ -1,4 +1,5 @@
 ﻿import { AIProvider } from './base';
+import type { SpeakingAnalysisRequest } from './base';
 import {
   Part1LearningAssetsResult,
   Part1CleanRetryCertificationResult,
@@ -128,20 +129,7 @@ export class MockProvider implements AIProvider {
     };
   }
 
-  async analyzeSpeaking(params: {
-    part: number;
-    question: string;
-    transcript: string;
-    sessionKind?: 'single_question' | 'part1_topic_thread';
-    topic?: string;
-    threadId?: string;
-    threadAnswers?: { questionId: string; question: string; answer: string }[];
-    retryReference?: import('./base').SpeakingAnalysisRequest['retryReference'];
-    authoritativeScore?: SpeakingScoreOnlyResult;
-    targetRepairFocus?: string;
-    targetAttempt?: number;
-    priorTargetAnswer?: string;
-  }): Promise<SpeakingFeedback> {
+  async analyzeSpeaking(params: SpeakingAnalysisRequest): Promise<SpeakingFeedback> {
     await new Promise(r => setTimeout(r, 1500));
     if (params.sessionKind === 'part1_topic_thread') {
       const answers = params.threadAnswers || [];

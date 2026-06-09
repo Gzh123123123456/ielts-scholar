@@ -122,7 +122,7 @@ Score, diagnosis, target layer, target output, UI, export, and history must stay
 - The stable record key is `ielts_practice_records_v1`.
 - Active attempts are also stored there through module-specific helpers for Speaking, Writing Task 2, and Writing Task 1.
 - History display and restore/delete behavior live in `src/pages/PracticeHistory.tsx`.
-- A lightweight global history drawer lives in `src/components/ui/HistoryPanel.tsx` and is mounted from `src/App.tsx`; it provides quick filtering, restore entry points, backup export, and a link to the full History page.
+- A lightweight global storage/backup drawer lives in `src/components/ui/HistoryPanel.tsx` and is mounted from `src/App.tsx`; full filtering, restore, and delete behavior live on `/practice-history`.
 - Progress summaries and coverage are data-derived in `src/pages/Progress.tsx`.
 - Question-bank practice counts are computed in `src/components/practice/QuestionBankModal.tsx` from analyzed records with feedback. Do not hardcode counts.
 
@@ -135,7 +135,8 @@ IELTS Scholar 正在进行从 localStorage 到 IndexedDB 的 local-first 持久�
 - `src/lib/practiceRecords.ts` — 旧版 localStorage 练习记录持久化（配额安全写入、备份导出/导入 helper、`getAllPracticeRecords()` 消除 80 条截断）
 - `src/lib/practiceRepository.ts` — **新文件**：IndexedDB-backed PracticeRepository（规范练习记录 + 活跃状态 + 旧版归档会话 + 元数据）
 - `src/lib/storage/indexedDb.ts` — **新文件**：IndexedDB 包装层（数据库打开/升级、事务、存储操作）
-- `src/pages/PracticeHistory.tsx` — History UI（迁移摘要、备份导出/导入、恢复导入、存储健康面板）
+- `src/pages/PracticeHistory.tsx` — full practice history UI（筛选、分页、打开/恢复、删除）
+- `src/components/ui/HistoryPanel.tsx` — global storage/backup maintenance drawer（迁移状态、备份导出/导入、恢复导入、存储健康面板）
 - `src/context/AppContext.tsx` — 应用级 localStorage 写入的配额保护
 
 ### IndexedDB stores
@@ -158,7 +159,8 @@ IELTS Scholar 正在进行从 localStorage 到 IndexedDB 的 local-first 持久�
 
 - 检查 `practiceRepository.ts` 了解当前 IndexedDB store schema
 - 检查 `indexedDb.ts` 了解数据库版本和升级逻辑
-- 检查 `PracticeHistory.tsx` 了解迁移摘要、备份导入/导出、恢复导入 UI
+- 检查 `HistoryPanel.tsx` 了解迁移摘要、备份导入/导出、恢复导入 UI
+- 检查 `PracticeHistory.tsx` 了解完整历史筛选、分页、打开/恢复、删除 UI
 - 检查 `practiceRecords.ts` 了解旧版 localStorage 兼容性和配额安全模式
 - 在未确认最终备份的情况下，不要运行破坏性 IndexedDB 操作
 

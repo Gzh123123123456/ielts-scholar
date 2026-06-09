@@ -1900,6 +1900,8 @@ const normalizePart1AnswerAnnotations = (
 }).filter(item => item.sourceQuote && item.layers.length);
 
 type NormalizedPart2Feedback = NonNullable<SpeakingFeedback['part2Feedback']>;
+type NormalizedPart2LanguageSignal = NormalizedPart2Feedback['languageSignals'][number];
+type NormalizedPart2AlternativeUpgrade = NonNullable<NormalizedPart2LanguageSignal['alternativeUpgrades']>[number];
 
 const normalizePart2MaterialType = (value: unknown): NormalizedPart2Feedback['materialType'] => {
   const normalized = typeof value === 'string'
@@ -1967,6 +1969,387 @@ const normalizePart2LanguageSignalStatus = (value: unknown): NormalizedPart2Feed
   if (normalized === 'missing' || normalized === 'absent') return 'missing';
   if (normalized === 'not_needed' || normalized === 'not_necessary') return 'not_needed';
   return 'thin';
+};
+
+const LOW_VALUE_PART2_CONNECTOR_KEYS = new Set(['and', 'but', 'so', 'also', 'then', 'and then']);
+
+const part2SignalUpgradeKey = (text: string | undefined): string =>
+  part1AnnotationKeyText(text || '');
+
+const part2MasteredUpgradeKeys = (items: SpeakingRequest['masteredExpressions'] | undefined): Set<string> =>
+  new Set((items || [])
+    .map(item => part2SignalUpgradeKey(item.expression))
+    .filter(Boolean));
+
+const notePart2SignalRepair = (normalizedFields: string[], field: string) => {
+  if (!normalizedFields.includes(field)) normalizedFields.push(field);
+};
+
+const hasCjkText = (text: string): boolean =>
+  /[\u3400-\u9fff]/.test(text);
+
+const isPart2MetaUpgradeText = (text: string): boolean => {
+  const cleaned = safeLearningText(text);
+  if (!cleaned) return false;
+  if (hasCjkText(cleaned)) return true;
+
+  const lower = cleaned.toLowerCase().trim();
+  const grammarLabelPattern =
+    /\b(?:connector|transition|tense|timeline|clause|collocation|idiom(?:atic expression)?|phrasal verb|adverb\s*\+\s*adjective|adv\s*\+\s*adj|future influence|past event|present reflection|grammar signal|language signal)\b/i;
+  const instructionPattern =
+    /^(?:use|add|insert|include|show|demonstrate|provide|create|write|mention|put|try)\b/i;
+  const bareLabelPattern =
+    /^(?:a\s+|an\s+|the\s+)?(?:connector|transition|tense|timeline|clause|collocation|idiom(?:atic expression)?|phrasal verb|future influence|present reflection|adverb\s*\+\s*adjective|adv\s*\+\s*adj)(?:\b|$)/i;
+
+  return (
+    (instructionPattern.test(lower) && grammarLabelPattern.test(lower)) ||
+    bareLabelPattern.test(lower) ||
+    /\b(?:future|past|present)\s+(?:tense|influence|reflection)\s+(?:clause|frame|with)\b/i.test(lower) ||
+    /\b(?:adverb\s*\+\s*adjective|adv\s*\+\s*adj)\s+collocation\b/i.test(lower)
+  );
+};
+
+const isLowValuePart2ConnectorUpgrade = (
+  signal: NormalizedPart2LanguageSignal['signal'],
+  upgrade: string,
+): boolean =>
+  signal === 'connector' && LOW_VALUE_PART2_CONNECTOR_KEYS.has(part2SignalUpgradeKey(upgrade));
+
+const LIKELY_PART2_PHRASAL_PARTICLE_PATTERN =
+  /\b(?:about|across|after|along|around|away|back|by|down|for|forward|in|into|off|on|out|over|through|to|together|up|with)\b/i;
+const LEADING_LY_MODIFIER_PATTERN =
+  /^(?:(?:[A-Za-z][A-Za-z'-]*ly)\s+)+([A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*)+)$/;
+
+const narrowPart2PhrasalVerbCore = (
+  signal: NormalizedPart2LanguageSignal['signal'],
+  value: string,
+  normalizedFields: string[],
+  field: string,
+): string => {
+  const cleaned = safeLearningText(value);
+  if (signal !== 'phrasal_verb' || !cleaned) return cleaned;
+  const match = cleaned.match(LEADING_LY_MODIFIER_PATTERN);
+  if (!match) return cleaned;
+  const candidate = safeLearningText(match[1]);
+  if (
+    !candidate ||
+    candidate === cleaned ||
+    candidate.split(/\s+/).length < 2 ||
+    !LIKELY_PART2_PHRASAL_PARTICLE_PATTERN.test(candidate)
+  ) {
+    return cleaned;
+  }
+  notePart2SignalRepair(normalizedFields, field);
+  return candidate;
+};
+
+const SEMANTIC_DEDUPE_PART2_SIGNAL_KEYS = new Set<NormalizedPart2LanguageSignal['signal']>([
+  'connector',
+  'tense',
+  'clause',
+]);
+
+const isSamePart2TeachingFrame = (
+  signal: NormalizedPart2LanguageSignal['signal'],
+  left: string,
+  right: string,
+): boolean => {
+  const leftKey = part2SignalUpgradeKey(left);
+  const rightKey = part2SignalUpgradeKey(right);
+  if (!leftKey || !rightKey) return false;
+  if (leftKey === rightKey) return true;
+  if (!SEMANTIC_DEDUPE_PART2_SIGNAL_KEYS.has(signal)) return false;
+  if (leftKey.length < 10 || rightKey.length < 10) return false;
+  return leftKey.startsWith(rightKey) || rightKey.startsWith(leftKey);
+};
+
+const isInvalidPart2SignalUpgrade = (
+  signal: NormalizedPart2LanguageSignal['signal'],
+  upgrade: string,
+): 'lowValueConnector' | 'metaUpgrade' | null => {
+  if (!upgrade.trim()) return null;
+  if (isLowValuePart2ConnectorUpgrade(signal, upgrade)) return 'lowValueConnector';
+  if (isPart2MetaUpgradeText(upgrade)) return 'metaUpgrade';
+  return null;
+};
+
+const repairPart2SignalTextList = (
+  signal: NormalizedPart2LanguageSignal['signal'],
+  values: string[],
+  blockedKeys: Set<string>,
+  blockedUpgradeTexts: string[],
+  masteredUpgradeKeys: Set<string>,
+  normalizedFields: string[],
+): string[] => {
+  const seen = new Set(blockedKeys);
+  const acceptedUpgradeTexts = [...blockedUpgradeTexts];
+  return values
+    .map(value => narrowPart2PhrasalVerbCore(
+      signal,
+      value,
+      normalizedFields,
+      'part2SignalAlternativeNarrowed:phrasalVerbCore',
+    ))
+    .filter(Boolean)
+    .filter(value => {
+      const invalidReason = isInvalidPart2SignalUpgrade(signal, value);
+      if (invalidReason) {
+        notePart2SignalRepair(normalizedFields, `part2SignalAlternativeRemoved:${invalidReason}`);
+        return false;
+      }
+      const key = part2SignalUpgradeKey(value);
+      if (acceptedUpgradeTexts.some(item => isSamePart2TeachingFrame(signal, item, value))) {
+        notePart2SignalRepair(normalizedFields, 'part2SignalAlternativeRemoved:sameTeachingFrame');
+        return false;
+      }
+      if (masteredUpgradeKeys.has(key)) {
+        notePart2SignalRepair(normalizedFields, 'part2SignalAlternativeRemoved:masteredExpression');
+        return false;
+      }
+      if (!key || seen.has(key)) {
+        notePart2SignalRepair(normalizedFields, 'part2SignalAlternativesDeduped');
+        return false;
+      }
+      seen.add(key);
+      acceptedUpgradeTexts.push(value);
+      return true;
+    })
+    .slice(0, 3);
+};
+
+const repairPart2AlternativeSampleHighlight = (
+  signal: NormalizedPart2LanguageSignal['signal'],
+  sampleUpgrade: string | undefined,
+  sampleUpgradeHighlight: string | undefined,
+  upgrade: string,
+  normalizedFields: string[],
+): string | undefined => {
+  if (!sampleUpgrade) return undefined;
+  if (signal === 'phrasal_verb' && upgrade && textKeyContains(sampleUpgrade, upgrade)) {
+    if (sampleUpgradeHighlight && part2SignalUpgradeKey(sampleUpgradeHighlight) !== part2SignalUpgradeKey(upgrade)) {
+      notePart2SignalRepair(normalizedFields, 'part2SignalAlternativeSampleHighlightNarrowed:phrasalVerbCore');
+    }
+    return upgrade;
+  }
+  if (!sampleUpgradeHighlight) return undefined;
+  if (textKeyContains(sampleUpgrade, sampleUpgradeHighlight)) return sampleUpgradeHighlight;
+  if (upgrade && textKeyContains(sampleUpgrade, upgrade)) {
+    notePart2SignalRepair(normalizedFields, 'part2SignalSampleHighlightRepaired');
+    return upgrade;
+  }
+  notePart2SignalRepair(normalizedFields, 'part2SignalSampleHighlightRemoved');
+  return undefined;
+};
+
+const repairPart2AlternativeUpgrades = (
+  signal: NormalizedPart2LanguageSignal['signal'],
+  values: NormalizedPart2AlternativeUpgrade[],
+  transcript: string,
+  blockedKeys: Set<string>,
+  blockedUpgradeTexts: string[],
+  masteredUpgradeKeys: Set<string>,
+  normalizedFields: string[],
+): NormalizedPart2AlternativeUpgrade[] => {
+  const seen = new Set(blockedKeys);
+  const acceptedUpgradeTexts = [...blockedUpgradeTexts];
+  return values
+    .map((item): NormalizedPart2AlternativeUpgrade | null => {
+      const upgrade = narrowPart2PhrasalVerbCore(
+        signal,
+        item.upgrade,
+        normalizedFields,
+        'part2SignalAlternativeUpgradeNarrowed:phrasalVerbCore',
+      );
+      const invalidReason = isInvalidPart2SignalUpgrade(signal, upgrade);
+      if (invalidReason) {
+        notePart2SignalRepair(normalizedFields, `part2SignalAlternativeUpgradeRemoved:${invalidReason}`);
+        return null;
+      }
+
+      const upgradeKey = part2SignalUpgradeKey(upgrade);
+      if (acceptedUpgradeTexts.some(item => isSamePart2TeachingFrame(signal, item, upgrade))) {
+        notePart2SignalRepair(normalizedFields, 'part2SignalAlternativeUpgradeRemoved:sameTeachingFrame');
+        return null;
+      }
+      if (masteredUpgradeKeys.has(upgradeKey)) {
+        notePart2SignalRepair(normalizedFields, 'part2SignalAlternativeUpgradeRemoved:masteredExpression');
+        return null;
+      }
+      if (!upgradeKey || seen.has(upgradeKey)) {
+        notePart2SignalRepair(normalizedFields, 'part2SignalAlternativeUpgradesDeduped');
+        return null;
+      }
+      seen.add(upgradeKey);
+
+      const sourceQuote = item.sourceQuote && transcript && textKeyContains(transcript, item.sourceQuote)
+        ? item.sourceQuote
+        : undefined;
+      if (item.sourceQuote && !sourceQuote) {
+        notePart2SignalRepair(normalizedFields, 'part2SignalAlternativeSourceRemoved');
+      }
+
+      const kind: NormalizedPart2AlternativeUpgrade['kind'] = sourceQuote ? 'replace' : 'add';
+      if (item.kind !== kind) {
+        notePart2SignalRepair(normalizedFields, 'part2SignalAlternativeKindRepaired');
+      }
+      acceptedUpgradeTexts.push(upgrade);
+
+      return {
+        ...item,
+        upgrade,
+        kind,
+        sourceQuote,
+        sampleUpgradeHighlight: repairPart2AlternativeSampleHighlight(
+          signal,
+          item.sampleUpgrade,
+          item.sampleUpgradeHighlight,
+          upgrade,
+          normalizedFields,
+        ),
+      };
+    })
+    .filter((item): item is NormalizedPart2AlternativeUpgrade => Boolean(item))
+    .slice(0, 3);
+};
+
+const repairPart2SignalSampleHighlight = (
+  signal: NormalizedPart2LanguageSignal,
+  normalizedFields: string[],
+): string | undefined => {
+  if (!signal.sampleUpgrade) return undefined;
+  if (signal.signal === 'phrasal_verb' && signal.bestUpgrade && textKeyContains(signal.sampleUpgrade, signal.bestUpgrade)) {
+    if (
+      signal.sampleUpgradeHighlight &&
+      part2SignalUpgradeKey(signal.sampleUpgradeHighlight) !== part2SignalUpgradeKey(signal.bestUpgrade)
+    ) {
+      notePart2SignalRepair(normalizedFields, 'part2SignalSampleHighlightNarrowed:phrasalVerbCore');
+    }
+    return signal.bestUpgrade;
+  }
+  if (!signal.sampleUpgradeHighlight) return undefined;
+  if (textKeyContains(signal.sampleUpgrade, signal.sampleUpgradeHighlight)) return signal.sampleUpgradeHighlight;
+  if (signal.bestUpgrade && textKeyContains(signal.sampleUpgrade, signal.bestUpgrade)) {
+    notePart2SignalRepair(normalizedFields, 'part2SignalSampleHighlightRepaired');
+    return signal.bestUpgrade;
+  }
+  notePart2SignalRepair(normalizedFields, 'part2SignalSampleHighlightRemoved');
+  return undefined;
+};
+
+const repairPart2LanguageSignalOutput = (
+  signals: NormalizedPart2LanguageSignal[],
+  transcript: string,
+  nextSpeakableVersion: string,
+  masteredUpgradeKeys: Set<string>,
+  normalizedFields: string[],
+): NormalizedPart2LanguageSignal[] => {
+  const claimedUpgradeKeys = new Set<string>();
+  const claimedUpgradeTexts: string[] = [];
+
+  return signals.map((signal): NormalizedPart2LanguageSignal => {
+    let bestUpgrade = narrowPart2PhrasalVerbCore(
+      signal.signal,
+      signal.bestUpgrade,
+      normalizedFields,
+      'part2SignalBestUpgradeNarrowed:phrasalVerbCore',
+    );
+    const invalidBestReason = bestUpgrade
+      ? isInvalidPart2SignalUpgrade(signal.signal, bestUpgrade)
+      : null;
+
+    if (invalidBestReason) {
+      notePart2SignalRepair(normalizedFields, `part2SignalBestUpgradeRemoved:${invalidBestReason}`);
+      bestUpgrade = '';
+    }
+
+    let bestUpgradeKey = part2SignalUpgradeKey(bestUpgrade);
+    if (bestUpgradeKey && masteredUpgradeKeys.has(bestUpgradeKey)) {
+      notePart2SignalRepair(normalizedFields, 'part2SignalBestUpgradeRemoved:masteredExpression');
+      bestUpgrade = '';
+      bestUpgradeKey = '';
+    }
+
+    if (bestUpgradeKey && claimedUpgradeKeys.has(bestUpgradeKey)) {
+      notePart2SignalRepair(normalizedFields, 'part2SignalDuplicateOwnershipRemoved');
+      bestUpgrade = '';
+      bestUpgradeKey = '';
+    }
+
+    if (bestUpgradeKey) {
+      claimedUpgradeKeys.add(bestUpgradeKey);
+      claimedUpgradeTexts.push(bestUpgrade);
+    }
+
+    const blockedKeys = new Set(claimedUpgradeKeys);
+    const blockedUpgradeTexts = [...claimedUpgradeTexts];
+    const alternativeUpgrades = repairPart2AlternativeUpgrades(
+      signal.signal,
+      signal.alternativeUpgrades || [],
+      transcript,
+      blockedKeys,
+      blockedUpgradeTexts,
+      masteredUpgradeKeys,
+      normalizedFields,
+    );
+    alternativeUpgrades.forEach(item => {
+      const key = part2SignalUpgradeKey(item.upgrade);
+      if (key) blockedKeys.add(key);
+      blockedUpgradeTexts.push(item.upgrade);
+    });
+
+    const alternatives = repairPart2SignalTextList(
+      signal.signal,
+      signal.alternatives,
+      blockedKeys,
+      blockedUpgradeTexts,
+      masteredUpgradeKeys,
+      normalizedFields,
+    );
+    alternatives.forEach(item => {
+      const key = part2SignalUpgradeKey(item);
+      if (key) blockedKeys.add(key);
+      blockedUpgradeTexts.push(item);
+    });
+
+    let usedInNextVersionQuote = signal.usedInNextVersionQuote && nextSpeakableVersion
+      ? textKeyContains(nextSpeakableVersion, signal.usedInNextVersionQuote)
+        ? signal.usedInNextVersionQuote
+        : undefined
+      : signal.usedInNextVersionQuote;
+    if (signal.usedInNextVersionQuote && !usedInNextVersionQuote) {
+      notePart2SignalRepair(normalizedFields, 'part2SignalNextVersionQuoteRemoved');
+    }
+    if (usedInNextVersionQuote) {
+      usedInNextVersionQuote = narrowPart2PhrasalVerbCore(
+        signal.signal,
+        usedInNextVersionQuote,
+        normalizedFields,
+        'part2SignalNextVersionQuoteNarrowed:phrasalVerbCore',
+      );
+    }
+    if (usedInNextVersionQuote && masteredUpgradeKeys.has(part2SignalUpgradeKey(usedInNextVersionQuote))) {
+      notePart2SignalRepair(normalizedFields, 'part2SignalNextVersionQuoteRemoved:masteredExpression');
+      usedInNextVersionQuote = undefined;
+    }
+
+    [...alternativeUpgrades.map(item => item.upgrade), ...alternatives].forEach(item => {
+      const key = part2SignalUpgradeKey(item);
+      if (key) claimedUpgradeKeys.add(key);
+      claimedUpgradeTexts.push(item);
+    });
+
+    return {
+      ...signal,
+      bestUpgrade,
+      alternatives,
+      alternativeUpgrades,
+      sampleUpgradeHighlight: repairPart2SignalSampleHighlight(
+        { ...signal, bestUpgrade },
+        normalizedFields,
+      ),
+      usedInNextVersionQuote,
+    };
+  });
 };
 
 const normalizePart2AlternativeUpgrades = (
@@ -2104,13 +2487,17 @@ const normalizePart2StoryModules = (
 const normalizePart2LanguageSignals = (
   value: unknown,
   validationErrors: string[],
+  normalizedFields: string[],
+  transcript: string,
+  nextSpeakableVersion: string,
+  masteredUpgradeKeys: Set<string>,
 ): NormalizedPart2Feedback['languageSignals'] => {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
     validationErrors.push('part2Feedback.languageSignals missing or invalid array');
     return [];
   }
-  return value
+  const signals = value
     .map((item, index): NormalizedPart2Feedback['languageSignals'][number] | null => {
       const record = isRecord(item) ? item : {};
       if (!isRecord(item)) validationErrors.push(`part2Feedback.languageSignals[${index}] missing or invalid object`);
@@ -2150,12 +2537,22 @@ const normalizePart2LanguageSignals = (
       item.evidenceQuotes?.length,
     ))
     .slice(0, 6);
+
+  return repairPart2LanguageSignalOutput(
+    signals,
+    transcript,
+    nextSpeakableVersion,
+    masteredUpgradeKeys,
+    normalizedFields,
+  );
 };
 
 const normalizePart2NextSpeakableHighlights = (
   value: unknown,
   nextSpeakableVersion: string,
   validationErrors: string[],
+  normalizedFields: string[],
+  masteredUpgradeKeys: Set<string>,
 ): NormalizedPart2Feedback['nextSpeakableVersionHighlights'] => {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
@@ -2166,9 +2563,18 @@ const normalizePart2NextSpeakableHighlights = (
     .map((item, index): NormalizedPart2Feedback['nextSpeakableVersionHighlights'][number] | null => {
       const record = isRecord(item) ? item : {};
       if (!isRecord(item)) validationErrors.push(`part2Feedback.nextSpeakableVersionHighlights[${index}] missing or invalid object`);
-      const quote = safeLearningText(asString(record.quote, '', `part2Feedback.nextSpeakableVersionHighlights[${index}].quote`, validationErrors));
-      if (!quote || !textKeyContains(nextSpeakableVersion, quote)) return null;
       const signal = normalizePart2LanguageSignal(record.signal);
+      const quote = narrowPart2PhrasalVerbCore(
+        signal || 'idiomatic_expression',
+        asString(record.quote, '', `part2Feedback.nextSpeakableVersionHighlights[${index}].quote`, validationErrors),
+        normalizedFields,
+        'part2NextSpeakableHighlightNarrowed:phrasalVerbCore',
+      );
+      if (!quote || !textKeyContains(nextSpeakableVersion, quote)) return null;
+      if (masteredUpgradeKeys.has(part2SignalUpgradeKey(quote))) {
+        notePart2SignalRepair(normalizedFields, 'part2NextSpeakableHighlightRemoved:masteredExpression');
+        return null;
+      }
       const storyRole = normalizePart2StoryModuleRole(record.storyRole);
       const labelZh = safeLearningText(asString(record.labelZh, '', `part2Feedback.nextSpeakableVersionHighlights[${index}].labelZh`, validationErrors));
       const whyItWorksZh = safeLearningText(asString(record.whyItWorksZh, '', `part2Feedback.nextSpeakableVersionHighlights[${index}].whyItWorksZh`, validationErrors));
@@ -2198,12 +2604,22 @@ const normalizePart2Feedback = (
   }
   const annotations = normalizePart2Annotations(value.annotations, request.transcript || '', validationErrors);
   const storyModules = normalizePart2StoryModules(value.storyModules, validationErrors);
-  const languageSignals = normalizePart2LanguageSignals(value.languageSignals, validationErrors);
   const nextSpeakableVersion = safeLearningText(asString(value.nextSpeakableVersion, '', 'part2Feedback.nextSpeakableVersion', validationErrors));
+  const masteredUpgradeKeys = part2MasteredUpgradeKeys(request.masteredExpressions);
+  const languageSignals = normalizePart2LanguageSignals(
+    value.languageSignals,
+    validationErrors,
+    normalizedFields,
+    request.transcript || '',
+    nextSpeakableVersion,
+    masteredUpgradeKeys,
+  );
   const nextSpeakableVersionHighlights = normalizePart2NextSpeakableHighlights(
     value.nextSpeakableVersionHighlights,
     nextSpeakableVersion,
     validationErrors,
+    normalizedFields,
+    masteredUpgradeKeys,
   );
   normalizedFields.push(`part2Annotations:${annotations.length}`);
   normalizedFields.push(`part2StoryModules:${storyModules.length}`);

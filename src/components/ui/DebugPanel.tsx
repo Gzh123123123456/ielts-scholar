@@ -137,21 +137,23 @@ export const DebugPanel: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  if (!isOpen) {
-    return (
-      <button 
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 left-4 p-2 bg-paper-ink/5 hover:bg-paper-ink/10 rounded-full transition-colors z-50 text-paper-ink/20 notranslate"
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(value => !value)}
+        className={`fixed bottom-4 left-4 p-2 rounded-full transition-colors z-[60] notranslate ${
+          isOpen
+            ? 'bg-accent-terracotta/10 text-accent-terracotta'
+            : 'bg-paper-ink/5 hover:bg-paper-ink/10 text-paper-ink/20'
+        }`}
         translate="no"
-        title="Open Debug Panel"
+        title={isOpen ? 'Close Debug Panel' : 'Open Debug Panel'}
       >
         <Bug className="w-3 h-3" />
       </button>
-    );
-  }
 
-  return (
-    <div className="fixed inset-y-0 left-0 w-80 bg-paper-50 border-r border-paper-ink/20 shadow-2xl z-50 flex flex-col font-sans text-[10px] notranslate" translate="no">
+      {isOpen && (
+        <div className="fixed inset-y-0 left-0 w-80 bg-paper-50 border-r border-paper-ink/20 shadow-2xl z-40 flex flex-col font-sans text-[10px] notranslate" translate="no">
       <div className="p-3 border-b border-paper-ink/10 flex justify-between items-center bg-paper-200">
         <h3 className="font-bold uppercase tracking-widest text-accent-terracotta">Internal Debug</h3>
         <button onClick={() => setIsOpen(false)} className="hover:text-accent-terracotta">
@@ -159,7 +161,7 @@ export const DebugPanel: React.FC = () => {
         </button>
       </div>
       
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-4 pb-16 space-y-4">
         <section>
           <h4 className="font-bold mb-2 text-paper-ink/60 border-b border-paper-ink/5 uppercase tracking-tighter">Capabilities</h4>
           <div className="bg-paper-100 p-2 rounded border border-paper-ink/5 space-y-1 font-mono">
@@ -288,6 +290,8 @@ export const DebugPanel: React.FC = () => {
           </SerifButton>
         </section>
       </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 };

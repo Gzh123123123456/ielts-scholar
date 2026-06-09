@@ -98,10 +98,12 @@ Speaking Part 2 is a long-turn story and material trainer, not a short phrase-ca
 - Six language signals should teach high-value spoken habits: idiomatic expression, tense timeline, connector range, phrasal verbs, collocation, and clause control.
 - Signal upgrades should be chosen by teacher planning: inventory evidence, rank by IELTS value, assign one primary teaching role, then produce a direct learnable expression.
 - `bestUpgrade` should be the exact English expression/frame the learner should notice, not a meta instruction such as "add a future clause".
-- Alternatives may be replace/add learning assets. They should not become low-value near-synonym polishing or duplicate the best upgrade.
+- Alternatives may be replace/add learning assets. They should not become low-value near-synonym polishing, same-frame example variants, or duplicate the best upgrade.
 - Connector upgrades should avoid default shortcuts such as `so`, `and`, and `but` in this surface. Those words can be correct, but they have low training value when the product goal is richer spoken discourse.
 - Collocation should prioritize adverb + adjective, then adverb + verb. Adjective+noun vocabulary chunks belong in story or vocabulary material.
 - Tense feedback should first diagnose past event/background, present reflection/current relevance, and future/current-future influence; do not mechanically mark present-tense lines wrong inside a mostly past story.
+- Clause feedback should teach high-quality clause frames or sentence-level structures. Basic subordinators such as `because`, `when`, and `although` may appear inside a valuable frame, but should not be the teaching asset.
+- Chinese diagnosis fields should describe what the learner did, what is narrow/confusing/missing, or which signal needs attention. Concrete English recommendations belong in Best upgrade, Alternatives, sample sentences, or next speakable version.
 
 ## Regression Evidence Must Generalize
 

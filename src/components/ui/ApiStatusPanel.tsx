@@ -39,20 +39,22 @@ export const ApiStatusPanel: React.FC = () => {
     .reverse()
     .find(call => call.provider === 'deepseek' && call.status !== 'ok');
 
-  if (!isOpen) {
-    return (
+  return (
+    <>
       <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 left-12 p-2 bg-paper-ink/5 hover:bg-paper-ink/10 rounded-full transition-colors z-50 text-paper-ink/30"
-        title="Open API Status"
+        onClick={() => setIsOpen(value => !value)}
+        className={`fixed bottom-4 left-12 p-2 rounded-full transition-colors z-[60] ${
+          isOpen
+            ? 'bg-accent-terracotta/10 text-accent-terracotta'
+            : 'bg-paper-ink/5 hover:bg-paper-ink/10 text-paper-ink/30'
+        }`}
+        title={isOpen ? 'Close API Status' : 'Open API Status'}
       >
         <Activity className="w-3 h-3" />
       </button>
-    );
-  }
 
-  return (
-    <div className="fixed inset-y-0 left-0 w-80 bg-paper-50 border-r border-paper-ink/20 shadow-2xl z-50 flex flex-col font-sans text-xs">
+      {isOpen && (
+        <div className="fixed inset-y-0 left-0 w-80 bg-paper-50 border-r border-paper-ink/20 shadow-2xl z-40 flex flex-col font-sans text-xs">
       <div className="p-3 border-b border-paper-ink/10 flex justify-between items-center bg-paper-200">
         <h3 className="font-bold uppercase tracking-widest text-accent-terracotta">API Status</h3>
         <button onClick={() => setIsOpen(false)} className="hover:text-accent-terracotta">
@@ -60,7 +62,7 @@ export const ApiStatusPanel: React.FC = () => {
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-4 pb-16 space-y-4">
         <section className="space-y-1">
           <h4 className="font-bold uppercase tracking-widest text-paper-ink/50">Router</h4>
           <p>Mode: {mode}</p>
@@ -97,6 +99,8 @@ export const ApiStatusPanel: React.FC = () => {
           <p>Last provider problem: {lastDeepSeekProblem ? lastDeepSeekProblem.status : 'none recorded'}</p>
         </section>
       </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 };

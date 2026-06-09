@@ -3,6 +3,7 @@ import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
+import { useApp } from '@/src/context/AppContext';
 import {
   speakingTopicCategories,
   writingTask1Academic,
@@ -170,6 +171,18 @@ const speakingRecordPreview = (record: SpeakingPracticeRecord) =>
     ? preview(record.topic || record.feedback?.topic || record.question)
     : preview(record.question);
 
+const masteredSignalLabel = (value?: string) => {
+  const labels: Record<string, string> = {
+    idiomatic_expression: 'Idiomatic expression',
+    tense: 'Tense',
+    connector: 'Connector',
+    phrasal_verb: 'Phrasal verb',
+    collocation: 'Collocation',
+    clause: 'Clause',
+  };
+  return value ? labels[value] || value : 'Expression';
+};
+
 const getWritingTask2Topic = (record: WritingTask2PracticeRecord): WritingTask2TopicCategory | null => {
   const metadataTopic = fromRecordMetadata(record, writingTask2TopicCategories);
   if (metadataTopic) return metadataTopic;
@@ -276,9 +289,11 @@ const buildTrainingSuggestions = (
 };
 
 export default function Progress() {
+  const { profile, forgetMasteredExpression } = useApp();
   const [, setResetVersion] = useState(0);
   const [records, setRecords] = useState<PracticeRecord[]>([]);
   const [recordsLoaded, setRecordsLoaded] = useState(false);
+  const masteredExpressions = profile.masteredExpressions || [];
 
   useEffect(() => {
     listPracticeRecords().then(recs => { setRecords(recs); setRecordsLoaded(true); }).catch(() => setRecordsLoaded(true));
@@ -434,6 +449,34 @@ export default function Progress() {
                 <div key={`${suggestion.title}-${index}`} className="border-l-2 border-l-accent-terracotta/40 pl-4 py-1">
                   <p className="text-base font-bold text-paper-ink leading-7">{suggestion.title}</p>
                   <p className="text-sm leading-7 text-paper-ink/65">{suggestion.reason}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </PaperCard>
+
+        <PaperCard>
+          <h3 className="text-sm font-bold uppercase tracking-widest mb-4">已掌握表达</h3>
+          {masteredExpressions.length === 0 ? (
+            <p className="text-sm text-paper-ink/55">还没有保存的已掌握表达。你可以在 Part 2 六信号卡片里确认掌握。</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {masteredExpressions.slice(0, 12).map(item => (
+                <div key={item.id} className="border border-paper-ink/10 bg-paper-100/40 px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm font-bold leading-6 text-paper-ink">{item.expression}</p>
+                    <button
+                      type="button"
+                      onClick={() => forgetMasteredExpression({ expression: item.expression, signal: item.signal })}
+                      className="shrink-0 text-[10px] font-sans uppercase tracking-widest text-paper-ink/35 transition-colors hover:text-accent-terracotta"
+                    >
+                      删除
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs font-sans uppercase tracking-widest text-paper-ink/40">
+                    {masteredSignalLabel(item.signal)}
+                    {item.count > 1 ? ` · ${item.count} times` : ''}
+                  </p>
                 </div>
               ))}
             </div>

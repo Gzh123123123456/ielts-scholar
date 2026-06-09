@@ -1,4 +1,4 @@
-import { AIProvider } from './base';
+import { AIProvider, SpeakingAnalysisRequest } from './base';
 import {
   frameworkCoachSchemaInstruction,
   frameworkSchemaInstruction,
@@ -65,29 +65,7 @@ export class DeepSeekProvider implements AIProvider {
     return data?.choices?.[0]?.message?.content ?? '';
   }
 
-  async analyzeSpeaking(params: {
-    part: number;
-    question: string;
-    transcript: string;
-    sessionKind?: 'single_question' | 'part1_topic_thread';
-    topic?: string;
-    threadId?: string;
-    threadAnswers?: { questionId: string; question: string; answer: string }[];
-    retryReference?: import('./base').SpeakingAnalysisRequest['retryReference'];
-    authoritativeScore?: {
-      bandEstimateExcludingPronunciation: number;
-      scores: {
-        fluencyCoherence: number;
-        lexicalResource: number;
-        grammaticalRangeAccuracy: number;
-        pronunciation: null;
-      };
-      rationaleZh: string;
-    };
-    targetRepairFocus?: string;
-    targetAttempt?: number;
-    priorTargetAnswer?: string;
-  }): Promise<string> {
+  async analyzeSpeaking(params: SpeakingAnalysisRequest): Promise<string> {
     if (params.sessionKind === 'part1_topic_thread') {
       return this.generateJson(`${strictJsonInstruction}
 

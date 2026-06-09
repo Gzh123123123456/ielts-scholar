@@ -1,12 +1,12 @@
 # Current State
 
-_Last updated: 2026-06-09_
+_Last updated: 2026-06-10_
 
 This is the active baseline, not a history log. Verify branch and sync state with git commands before work.
 
 ## Current Validated Baseline
 
-- Current closeout baseline: Speaking Part 2 provider-native story trainer and history restore/retest improvements are implemented and documented for the 2026-06-09 closeout.
+- Current closeout baseline: Speaking Part 2 provider-output QA/repair, six-signal calibration, mastered-expression memory, and History/Storage panel cleanup are implemented for the 2026-06-10 closeout.
 - Previous pushed workflow checkpoint: `ecb7de4 Simplify workflow docs and add Codex skills`.
 - Workflow/docs/skills simplification remains the current workflow baseline.
 - Codex is the primary implementation agent for scoped product work.
@@ -15,7 +15,7 @@ This is the active baseline, not a history log. Verify branch and sync state wit
 - Mock Provider remains the default. Optional Gemini and auto/DeepSeek local provider modes exist for personal development only.
 - Browser/client API keys are not production-safe; no SaaS provider/key architecture exists yet.
 - Question-bank browsing, History, Progress, active attempts, and IndexedDB-backed practice records are implemented for the current local-first prototype.
-- A lightweight global History drawer is mounted app-wide for quick filtering, restore, backup export, and linking to the full History page.
+- A lightweight global storage/backup drawer is mounted app-wide for repository status, backup export/import, and storage maintenance; full practice history lives on `/practice-history`.
 - Task 2 annotated essay overlay baseline is implemented; future work should be polish/consolidation unless explicitly scoped.
 - Writing Task 2 basic practice, framework coach/extraction, local-first records, feedback rendering, and export are implemented, but target/score/feedback consistency still needs a separate future audit.
 - Writing Task 1 Academic basic practice is implemented with text-based visual briefs; full calibration remains future work and requires real samples.
@@ -51,12 +51,15 @@ This is the active baseline, not a history log. Verify branch and sync state wit
 - Part 2 annotations are for necessary local anchored repairs only. Low-yield opener polish and language-signal enrichment belong in story modules or six language signals.
 - Part 2 annotation volume adapts to learner level: mid/high answers stay low-noise, while low-band structurally unstable answers can surface more repeated anchored repairs.
 - Part 2 six language signals are fixed: idiomatic expression, tense, connector, phrasal verb, collocation, and clause.
-- Provider prompts define teacher planning, candidate ranking, one-signal ownership, and replace/add alternatives. The frontend only renders the provider payload.
+- Provider prompts define teacher planning, candidate ranking, one-signal ownership, field responsibility, and replace/add alternatives. The frontend renders provider-native fields while safety normalization repairs low-value connector upgrades, meta `bestUpgrade` labels, same-frame alternatives, invalid samples, and mastered-expression repeats.
 - Connector upgrades should avoid low-training-value defaults such as `so`, `and`, and `but`; the product goal is to train richer spoken discourse links, not merely prove a connector is grammatically possible.
 - Tense feedback should diagnose three layers first: past event/background, present reflection/current relevance, and future/current-future influence. It should not mechanically mark present-tense lines wrong inside a mostly past story.
 - Collocation focuses on precise adverb + adjective first, then adverb + verb. Adjective+noun vocabulary chunks belong in story/vocabulary material rather than the collocation best-upgrade slot.
 - Idiom and phrasal verb can overlap in real English, but the product assigns one primary teaching role and should not double-count the same expression.
+- Clause feedback should teach high-quality clause frames or sentence-level structures, not bare `because`/`when`/`although` filler.
+- Chinese diagnostic fields in six-signal cards should analyze user behavior, narrowness, confusion, or missing signal usage; concrete English recommendations belong in Best upgrade, Alternatives, samples, or the next speakable version.
 - `alternativeUpgrades` supports `replace` and `add` so high-value learning assets are not forced into local source replacement.
+- Part 2 Best upgrades can be marked mastered. This is a teaching-asset memory, not a language blacklist: future analysis should avoid re-teaching the exact mastered asset while still allowing natural use and correction.
 - Speaking result-page retest keeps the previous result visible when re-analysis fails.
 - Saved Part 2 history records are sanitized/restored with `part2Feedback` so older history entries do not open to blank result pages.
 
@@ -81,20 +84,18 @@ This is the active baseline, not a history log. Verify branch and sync state wit
 - PDF folder import, mainland active-bank publishing, and SaaS-ready bank administration remain future work.
 - Writing Task 2 target/score/feedback consistency needs a separate audit.
 - Writing Task 1 calibration remains future scoped work and needs real samples.
-- Speaking Part 2 real-provider output still needs QA/repair-pass hardening. Prompt-only contracts can still drift on low-value synonym polishing, duplicate alternatives, meta `bestUpgrade` labels, or replace/add misclassification.
-- Speaking Part 2 does not yet have persistent learner habit/profile aggregation or a shared cross-Part material library. Current `profileSignalZh` is per-attempt only unless future storage/profile work is scoped.
+- Speaking Part 2 does not yet have full learner habit/profile aggregation or a shared cross-Part material library. Current persistent profile memory is limited to Part 2 mastered teaching assets; `profileSignalZh` remains per-attempt unless future profile aggregation is scoped.
 
 ## Next Priorities
 
-1. Part 2 provider-output QA/repair pass: validate that each six-signal item has a real learnable `bestUpgrade`, useful replace/add alternatives, no low-training-value connector upgrades, no meta labels in English fields, and no duplicate signal ownership.
-2. Part 2 browser acceptance testing with real Gemini/DeepSeek samples across at least three answer levels: low-band grammar-heavy, mid-band story-building, and higher-band polish.
-3. Part 2 habit/profile design: aggregate repeated weak signals, low-range expressions, and missing signal usage across attempts without turning per-attempt UI into cross-session claims.
-4. Shared material library design: confirmed learner material, suggested material, topic-bank links, user keep/delete workflow, and cross-Part reuse boundaries.
-5. Speaking Part 3 discussion-flow refinement.
-6. Audio transcription reliability.
-7. PDF folder import + mainland active-bank publishing + SaaS-ready bank layer.
-8. Writing Task 2 target/score/feedback consistency audit.
-9. Writing Task 1 calibration with real samples.
+1. Speaking/Writing profile design: aggregate repeated weak signals, low-range expressions, missing signal usage, common errors, and accumulated expression assets without turning per-attempt UI into unsupported cross-session claims.
+2. Speaking profile information architecture: keep Part 1 / Part 2 / Part 3 under one Speaking Profile with part tags and filters; keep mastered Part 2 expressions as a secondary collapsible module.
+3. Shared material library design: confirmed learner material, suggested material, topic-bank links, user keep/delete workflow, and cross-Part reuse boundaries.
+4. Speaking Part 3 discussion-flow refinement.
+5. Audio transcription reliability.
+6. PDF folder import + mainland active-bank publishing + SaaS-ready bank layer.
+7. Writing Task 2 target/score/feedback consistency audit.
+8. Writing Task 1 calibration with real samples.
 
 ## Navigation Pointers
 

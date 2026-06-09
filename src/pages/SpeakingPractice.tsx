@@ -73,7 +73,7 @@ import {
   upsertPracticeRecord,
   clearActiveSpeakingSession,
 } from '@/src/lib/practiceRepository';
-import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Info, BookOpen } from 'lucide-react';
+import { Mic, Square, RefreshCcw, Send, ArrowRight, FileDown, Edit3, Info, BookOpen, X } from 'lucide-react';
 
 type TranscriptionSource = 'browser' | 'audio' | 'manual';
 type LockedThreadAnswer = NonNullable<SpeakingPracticeRecord['threadAnswers']>[number];
@@ -89,6 +89,17 @@ type Part1TopicBucket = {
   topicId: string;
   topic: string;
   threads: Part1TopicThreadSet[];
+};
+type Part2AlternativeUpgrade = NonNullable<Part2LanguageSignalCheck['alternativeUpgrades']>[number];
+type Part2SignalDisplayUpgrade = {
+  source: 'best' | 'alternative';
+  upgrade: string;
+  sourceQuote?: string;
+  guidanceZh?: string;
+  insertLocationZh?: string;
+  sampleUpgrade?: string;
+  sampleUpgradeHighlight?: string;
+  kind?: 'replace' | 'add';
 };
 
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
@@ -393,6 +404,74 @@ const renderPart2SignalSampleSentence = (sentence: string, upgrade: string) => {
       {cleanSentence.slice(start + cleanUpgrade.length)}
     </>
   );
+};
+
+const part2SignalUpgradeKey = (signal: Part2LanguageSignalCheck['signal'], upgrade: string) =>
+  `${signal}:${upgrade.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
+
+const part2DisplayBestUpgrade = (signal: Part2LanguageSignalCheck): Part2SignalDisplayUpgrade | null => {
+  const upgrade = signal.bestUpgrade.trim();
+  if (!upgrade) return null;
+  return {
+    source: 'best',
+    upgrade,
+    sampleUpgrade: signal.sampleUpgrade,
+    sampleUpgradeHighlight: signal.sampleUpgradeHighlight,
+  };
+};
+
+const part2DisplayAlternativeUpgrades = (signal: Part2LanguageSignalCheck): Part2SignalDisplayUpgrade[] => {
+  const seen = new Set<string>();
+  const append = (item: Part2SignalDisplayUpgrade | null) => {
+    if (!item?.upgrade.trim()) return null;
+    const key = part2SignalUpgradeKey(signal.signal, item.upgrade);
+    if (seen.has(key)) return null;
+    seen.add(key);
+    return item;
+  };
+
+  const richAlternatives = (signal.alternativeUpgrades || [])
+    .map((item: Part2AlternativeUpgrade): Part2SignalDisplayUpgrade | null => append({
+      source: 'alternative',
+      upgrade: item.upgrade,
+      sourceQuote: item.sourceQuote,
+      guidanceZh: item.guidanceZh,
+      insertLocationZh: item.insertLocationZh,
+      sampleUpgrade: item.sampleUpgrade,
+      sampleUpgradeHighlight: item.sampleUpgradeHighlight,
+      kind: item.kind,
+    }))
+    .filter((item): item is Part2SignalDisplayUpgrade => Boolean(item));
+
+  const legacyAlternatives = signal.alternatives
+    .map((upgrade): Part2SignalDisplayUpgrade | null => append({
+      source: 'alternative',
+      upgrade,
+    }))
+    .filter((item): item is Part2SignalDisplayUpgrade => Boolean(item));
+
+  const bestKey = part2SignalUpgradeKey(signal.signal, signal.bestUpgrade);
+  return [...richAlternatives, ...legacyAlternatives]
+    .filter(item => part2SignalUpgradeKey(signal.signal, item.upgrade) !== bestKey);
+};
+
+const part2SignalDisplaySampleSentence = (
+  signal: Part2LanguageSignalCheck,
+  upgrade: Part2SignalDisplayUpgrade,
+) => {
+  if (upgrade.source === 'alternative') return upgrade.sampleUpgrade?.trim() || '';
+  return part2LanguageSignalSampleSentence(signal);
+};
+
+const part2SignalDisplaySampleHighlight = (
+  signal: Part2LanguageSignalCheck,
+  upgrade: Part2SignalDisplayUpgrade,
+  sentence: string,
+) => {
+  const providerHighlight = upgrade.sampleUpgradeHighlight?.trim();
+  if (providerHighlight && sentence.toLowerCase().includes(providerHighlight.toLowerCase())) return providerHighlight;
+  if (upgrade.upgrade && sentence.toLowerCase().includes(upgrade.upgrade.toLowerCase())) return upgrade.upgrade;
+  return upgrade.source === 'best' ? part2LanguageSignalSampleHighlight(signal, sentence) : '';
 };
 
 const part1AnnotationSeverityLabel = (severity: Part1AnswerAnnotationLayer['severity']) => {
@@ -1075,7 +1154,15 @@ const Part1AnnotationOverlay = ({
 };
 
 export default function SpeakingPractice() {
-  const { addDebugLog, saveSession, capabilities, setProviderDiagnostic } = useApp();
+  const {
+    addDebugLog,
+    saveSession,
+    capabilities,
+    setProviderDiagnostic,
+    markMasteredExpression,
+    forgetMasteredExpression,
+    profile,
+  } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [part, setPart] = useState<1 | 2 | 3>(1);
@@ -1112,6 +1199,7 @@ export default function SpeakingPractice() {
   const [hiddenPart1MaterialKeys, setHiddenPart1MaterialKeys] = useState<string[]>([]);
   const [hiddenPart1DevelopmentKeys, setHiddenPart1DevelopmentKeys] = useState<string[]>([]);
   const [hiddenPart1ExpressionKeys, setHiddenPart1ExpressionKeys] = useState<string[]>([]);
+  const [hiddenPart2SignalUpgradeKeys, setHiddenPart2SignalUpgradeKeys] = useState<string[]>([]);
 
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -1139,6 +1227,10 @@ export default function SpeakingPractice() {
   const threadAnnotationRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const speakingAnnotationRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const lastPart1AnnotationCoverageLogRef = useRef('');
+
+  useEffect(() => {
+    setHiddenPart2SignalUpgradeKeys([]);
+  }, [feedback?.part, feedback?.question, feedback?.transcript]);
 
   useEffect(() => {
     if (!capabilities.speechRecognition && !capabilities.webkitSpeechRecognition) {
@@ -3006,6 +3098,9 @@ export default function SpeakingPractice() {
         part,
         question: question?.question || '',
         transcript: cleanedTranscript,
+        masteredExpressions: part === 2 && part2MasteredExpressionHints.length
+          ? part2MasteredExpressionHints
+          : undefined,
       }, isInsufficientSpeakingSample(cleanedTranscript, part));
       setProviderDiagnostic(diagnostic);
 
@@ -3441,6 +3536,57 @@ export default function SpeakingPractice() {
   const part2LanguageSignals = [...(part2Feedback?.languageSignals || [])].sort((left, right) => (
     (part2LanguageSignalRank.get(left.signal) ?? 99) - (part2LanguageSignalRank.get(right.signal) ?? 99)
   ));
+  const part2MasteredExpressionHints = useMemo(() => (
+    (profile.masteredExpressions || [])
+      .filter(item => (
+        item.source === 'part2_signal' &&
+        (!item.module || item.module === 'speaking') &&
+        (!item.part || item.part === 2) &&
+        item.expression.trim()
+      ))
+      .map(item => ({
+        expression: item.expression,
+        signal: item.signal,
+        count: item.count,
+      }))
+      .slice(0, 30)
+  ), [profile.masteredExpressions]);
+  const masteredPart2SignalUpgradeKeys = useMemo(() => new Set(
+    part2MasteredExpressionHints
+      .map(item => part2SignalUpgradeKey(
+        item.signal as Part2LanguageSignalCheck['signal'],
+        item.expression,
+      )),
+  ), [part2MasteredExpressionHints]);
+  const markPart2BestUpgradeMastered = (signal: Part2LanguageSignalCheck) => {
+    const bestUpgrade = part2DisplayBestUpgrade(signal);
+    if (!bestUpgrade) return;
+    const confirmed = window.confirm(
+      `确认你已经掌握 "${bestUpgrade.upgrade}" 吗？\n\n确认后会保存到 Progress 记忆，并隐藏本次这个表达。`,
+    );
+    if (!confirmed) return;
+    markMasteredExpression({
+      expression: bestUpgrade.upgrade,
+      source: 'part2_signal',
+      signal: signal.signal,
+      module: 'speaking',
+      part: 2,
+    });
+    const key = part2SignalUpgradeKey(signal.signal, bestUpgrade.upgrade);
+    setHiddenPart2SignalUpgradeKeys(prev => prev.includes(key) ? prev : [...prev, key]);
+    addDebugLog(`Part 2 signal best upgrade marked mastered for this result: ${signal.signal} / ${bestUpgrade.upgrade}`);
+  };
+  const restorePart2BestUpgrade = (signal: Part2LanguageSignalCheck) => {
+    const bestUpgrade = part2DisplayBestUpgrade(signal);
+    if (!bestUpgrade) return;
+    const key = part2SignalUpgradeKey(signal.signal, bestUpgrade.upgrade);
+    setHiddenPart2SignalUpgradeKeys(prev => prev.filter(item => item !== key));
+    forgetMasteredExpression({
+      expression: bestUpgrade.upgrade,
+      signal: signal.signal,
+    });
+    addDebugLog(`Part 2 signal mastered expression restored: ${signal.signal} / ${bestUpgrade.upgrade}`);
+  };
   const shouldShowPart2StoryTrainer = Boolean(part2Feedback && (
     part2StoryModules.length > 0 ||
     part2LanguageSignals.length > 0 ||
@@ -4223,10 +4369,28 @@ export default function SpeakingPractice() {
                           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                             {part2LanguageSignals.map(signal => {
                               const evidence = part2LanguageSignalEvidence(signal);
-                              const sampleSentence = part2LanguageSignalSampleSentence(signal);
-                              const sampleHighlight = part2LanguageSignalSampleHighlight(signal, sampleSentence);
-                              const alternativeUpgrades = (signal.alternativeUpgrades || []).slice(0, 3);
-                              const shouldShowSampleSentence = signal.signal !== 'collocation' && Boolean(sampleSentence);
+                              const bestUpgrade = part2DisplayBestUpgrade(signal);
+                              const bestUpgradeHidden = Boolean(
+                                bestUpgrade &&
+                                (
+                                  hiddenPart2SignalUpgradeKeys.includes(part2SignalUpgradeKey(signal.signal, bestUpgrade.upgrade)) ||
+                                  masteredPart2SignalUpgradeKeys.has(part2SignalUpgradeKey(signal.signal, bestUpgrade.upgrade))
+                                ),
+                              );
+                              const displayAlternatives = part2DisplayAlternativeUpgrades(signal);
+                              const promotedUpgrade = bestUpgradeHidden ? displayAlternatives[0] : null;
+                              const visibleBestUpgrade = promotedUpgrade || (bestUpgradeHidden ? null : bestUpgrade);
+                              const visibleAlternatives = (bestUpgradeHidden ? displayAlternatives.slice(1, 2) : displayAlternatives.slice(0, 1));
+                              const sampleSentence = visibleBestUpgrade
+                                ? part2SignalDisplaySampleSentence(signal, visibleBestUpgrade)
+                                : '';
+                              const sampleHighlight = visibleBestUpgrade
+                                ? part2SignalDisplaySampleHighlight(signal, visibleBestUpgrade, sampleSentence)
+                                : '';
+                              const shouldShowSampleSentence = Boolean(sampleSentence) && (
+                                visibleBestUpgrade?.source === 'alternative' ||
+                                signal.signal !== 'collocation'
+                              );
                               return (
                                 <div key={signal.signal} className="min-h-full border border-paper-ink/10 bg-paper-100/35 p-4">
                                   <div className="mb-3 flex items-center gap-2">
@@ -4253,10 +4417,42 @@ export default function SpeakingPractice() {
                                     </div>
                                   )}
 
-                                  {signal.bestUpgrade && (
-                                    <div className="border-l-2 border-l-accent-terracotta/35 pl-3">
-                                      <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/40">Best upgrade</p>
-                                      <p className="mt-1 text-sm font-bold leading-7 text-paper-ink">{signal.bestUpgrade}</p>
+                                  {visibleBestUpgrade && (
+                                    <div
+                                      key={`${signal.signal}-${visibleBestUpgrade.source}-${visibleBestUpgrade.upgrade}`}
+                                      className={`border-l-2 border-l-accent-terracotta/35 pl-3 transition-all duration-300 ${
+                                        visibleBestUpgrade.source === 'alternative' ? 'animate-in fade-in slide-in-from-bottom-1' : ''
+                                      }`}
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/40">
+                                          {visibleBestUpgrade.source === 'alternative' ? 'Promoted upgrade' : 'Best upgrade'}
+                                        </p>
+                                        {visibleBestUpgrade.source === 'best' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => markPart2BestUpgradeMastered(signal)}
+                                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center border border-paper-ink/10 text-paper-ink/45 transition-colors hover:border-accent-terracotta/35 hover:text-accent-terracotta"
+                                            aria-label={`Mark ${visibleBestUpgrade.upgrade} as mastered`}
+                                            title="Mark as mastered for this result"
+                                          >
+                                            <X className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                        {visibleBestUpgrade.source === 'alternative' && bestUpgradeHidden && (
+                                          <button
+                                            type="button"
+                                            onClick={() => restorePart2BestUpgrade(signal)}
+                                            className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35 transition-colors hover:text-accent-terracotta"
+                                          >
+                                            Restore
+                                          </button>
+                                        )}
+                                      </div>
+                                      <p className="mt-1 text-sm font-bold leading-7 text-paper-ink">{visibleBestUpgrade.upgrade}</p>
+                                      {visibleBestUpgrade.source === 'alternative' && bestUpgradeHidden && (
+                                        <p className="mt-1 text-xs leading-5 text-paper-ink/45">已隐藏原 best，本条由 alternative 顺延。</p>
+                                      )}
                                       {shouldShowSampleSentence && (
                                         <p className="mt-2 text-sm leading-7 text-paper-ink">
                                           {renderPart2SignalSampleSentence(sampleSentence, sampleHighlight)}
@@ -4265,40 +4461,43 @@ export default function SpeakingPractice() {
                                     </div>
                                   )}
 
-                                  {(alternativeUpgrades.length > 0 || signal.alternatives.length > 0) && (
+                                  {!visibleBestUpgrade && bestUpgradeHidden && bestUpgrade && (
+                                    <div className="border-l-2 border-l-paper-ink/15 pl-3 text-sm leading-6 text-paper-ink/55">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p>已隐藏：{bestUpgrade.upgrade}</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => restorePart2BestUpgrade(signal)}
+                                          className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35 transition-colors hover:text-accent-terracotta"
+                                        >
+                                          Restore
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {visibleAlternatives.length > 0 && (
                                     <div className="mt-3">
                                       <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/40">Alternatives</p>
-                                      {alternativeUpgrades.length > 0 ? (
-                                        <div className="mt-2 space-y-2">
-                                          {alternativeUpgrades.map((item, index) => (
-                                            <div key={`${item.sourceQuote || item.upgrade}-${index}`} className="border border-paper-ink/10 bg-paper-50 px-2.5 py-2">
-                                              {item.sourceQuote && (
-                                                <p className="text-xs leading-5 text-paper-ink/45">替换："{item.sourceQuote}"</p>
-                                              )}
-                                              {!item.sourceQuote && (
-                                                <p className="text-xs leading-5 text-paper-ink/45">
-                                                  {item.kind === 'add' ? '加入' : '可用表达'}
-                                                  {item.insertLocationZh ? `：${item.insertLocationZh}` : ''}
-                                                </p>
-                                              )}
-                                              {item.upgrade && (
-                                                <p className="text-sm font-bold leading-6 text-paper-ink">{item.upgrade}</p>
-                                              )}
-                                              {item.guidanceZh && (
-                                                <p className="text-xs leading-5 text-paper-ink/55">{item.guidanceZh}</p>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                          {signal.alternatives.slice(0, 3).map(item => (
-                                            <span key={item} className="inline-flex max-w-full items-center border border-paper-ink/10 bg-paper-50 px-2 py-1 text-xs leading-5 text-paper-ink">
-                                              {item}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
+                                      <div className="mt-2 space-y-2">
+                                        {visibleAlternatives.map((item, index) => (
+                                          <div key={`${item.sourceQuote || item.upgrade}-${index}`} className="border border-paper-ink/10 bg-paper-50 px-2.5 py-2 transition-all duration-300">
+                                            {item.sourceQuote && (
+                                              <p className="text-xs leading-5 text-paper-ink/45">替换："{item.sourceQuote}"</p>
+                                            )}
+                                            {!item.sourceQuote && (item.guidanceZh || item.insertLocationZh) && (
+                                              <p className="text-xs leading-5 text-paper-ink/45">
+                                                {item.kind === 'add' ? '加入' : '可用表达'}
+                                                {item.insertLocationZh ? `：${item.insertLocationZh}` : ''}
+                                              </p>
+                                            )}
+                                            <p className="text-sm font-bold leading-6 text-paper-ink">{item.upgrade}</p>
+                                            {item.guidanceZh && (
+                                              <p className="text-xs leading-5 text-paper-ink/55">{item.guidanceZh}</p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
