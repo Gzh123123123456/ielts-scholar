@@ -8,6 +8,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { DebugPanel } from './components/ui/DebugPanel';
 import { ApiStatusPanel } from './components/ui/ApiStatusPanel';
+import { HistoryPanel } from './components/ui/HistoryPanel';
 import Home from './pages/Home';
 import Speaking from './pages/Speaking';
 import SpeakingPractice from './pages/SpeakingPractice';
@@ -40,6 +41,7 @@ export default function App() {
           </Routes>
           <DebugPanel />
           <ApiStatusPanel />
+          <HistoryPanel />
         </div>
       </Router>
     </AppProvider>

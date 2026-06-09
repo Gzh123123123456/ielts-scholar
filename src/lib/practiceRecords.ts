@@ -470,6 +470,49 @@ const asPart1AnnotationSeverity = (value: unknown): Part1AnswerAnnotationLayer['
     ? value
     : 'optional_polish';
 
+type StoredPart2Feedback = NonNullable<SpeakingFeedback['part2Feedback']>;
+
+const asPart2MaterialType = (value: unknown): StoredPart2Feedback['materialType'] =>
+  value === 'person' ||
+  value === 'place' ||
+  value === 'object' ||
+  value === 'experience_event' ||
+  value === 'abstract_or_opinion_experience' ||
+  value === 'unclear'
+    ? value
+    : 'unclear';
+
+const asPart2StoryModuleRole = (value: unknown): StoredPart2Feedback['storyModules'][number]['role'] | null =>
+  value === 'what_who_where' ||
+  value === 'background' ||
+  value === 'concrete_details' ||
+  value === 'what_happened' ||
+  value === 'feeling' ||
+  value === 'why_it_mattered' ||
+  value === 'current_or_future_influence'
+    ? value
+    : null;
+
+const asPart2StoryModuleStatus = (value: unknown): StoredPart2Feedback['storyModules'][number]['status'] =>
+  value === 'present' || value === 'thin' || value === 'missing' || value === 'suggested_confirm'
+    ? value
+    : 'thin';
+
+const asPart2LanguageSignal = (value: unknown): StoredPart2Feedback['languageSignals'][number]['signal'] | null =>
+  value === 'idiomatic_expression' ||
+  value === 'tense' ||
+  value === 'connector' ||
+  value === 'phrasal_verb' ||
+  value === 'collocation' ||
+  value === 'clause'
+    ? value
+    : null;
+
+const asPart2LanguageSignalStatus = (value: unknown): StoredPart2Feedback['languageSignals'][number]['status'] =>
+  value === 'strong' || value === 'usable' || value === 'thin' || value === 'missing' || value === 'not_needed'
+    ? value
+    : 'thin';
+
 const sanitizeQuestionRefs = (value: unknown, maxCount = 0) => {
   const allowed = new Set(Array.from({ length: maxCount }, (_, index) => `Q${index + 1}`));
   return Array.isArray(value)
@@ -633,6 +676,160 @@ const sanitizePart1RetryCleanAnswers = (value: unknown): Part1RetryReferenceClea
       .filter((item, index, items) => items.findIndex(candidate => candidate.questionRef === item.questionRef) === index)
     : [];
 
+const sanitizePart2Annotations = (value: unknown): StoredPart2Feedback['annotations'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map((item, index) => {
+      const sourceQuote = asString(item.sourceQuote ?? item.original);
+      const rawLayers = Array.isArray(item.layers) ? item.layers : [item];
+      const layers = rawLayers.filter(isObject).map(layer => ({
+        severity: asPart1AnnotationSeverity(layer.severity),
+        issueType: asString(layer.issueType ?? layer.tag),
+        original: asString(layer.original ?? sourceQuote),
+        better: asString(layer.better ?? layer.correction ?? item.combinedRepair),
+        explanationZh: asString(layer.explanationZh),
+        reuseGuidanceZh: asOptionalString(layer.reuseGuidanceZh),
+        origin: asPart1AnnotationOrigin(layer.origin),
+      })).filter(layer => layer.original && layer.better && layer.explanationZh);
+      return {
+        id: asString(item.id, `p2_saved_ann_${index + 1}`),
+        questionRef: asString(item.questionRef, 'PART 2'),
+        sourceQuote,
+        combinedRepair: asOptionalString(item.combinedRepair),
+        layers,
+      };
+    }).filter(item => item.sourceQuote && item.layers.length).slice(0, 8)
+    : [];
+
+const sanitizePart2StoryModules = (value: unknown): StoredPart2Feedback['storyModules'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map((item): StoredPart2Feedback['storyModules'][number] | null => {
+      const role = asPart2StoryModuleRole(item.role ?? item.module);
+      if (!role) return null;
+      const sourceWording = asOptionalString(item.sourceWording ?? item.source ?? item.learnerWording);
+      const improvedVersion = asOptionalString(item.improvedVersion ?? item.speakableVersion ?? item.nextVersion);
+      const coachingZh = asString(item.coachingZh ?? item.coaching ?? item.nextMoveZh);
+      if (!sourceWording && !improvedVersion && !coachingZh) return null;
+      return {
+        role,
+        status: asPart2StoryModuleStatus(item.status),
+        sourceWording,
+        improvedVersion,
+        coachingZh,
+        confirmationNeeded: Boolean(item.confirmationNeeded),
+      };
+    }).filter((item): item is StoredPart2Feedback['storyModules'][number] => Boolean(item)).slice(0, 7)
+    : [];
+
+const sanitizePart2AlternativeUpgrades = (
+  value: unknown,
+): NonNullable<StoredPart2Feedback['languageSignals'][number]['alternativeUpgrades']> =>
+  Array.isArray(value)
+    ? value.filter(isObject).map((item): NonNullable<StoredPart2Feedback['languageSignals'][number]['alternativeUpgrades']>[number] | null => {
+      const upgrade = asString(item.upgrade ?? item.bestUpgrade ?? item.better);
+      const guidanceZh = asString(item.guidanceZh ?? item.explanationZh ?? item.replaceZh);
+      if (!upgrade && !guidanceZh) return null;
+      const sourceQuote = asOptionalString(item.sourceQuote ?? item.original ?? item.replace);
+      return {
+        kind: item.kind === 'replace' || item.kind === 'add'
+          ? item.kind
+          : sourceQuote ? 'replace' : 'add',
+        sourceQuote,
+        upgrade,
+        guidanceZh,
+        insertLocationZh: asOptionalString(item.insertLocationZh ?? item.whereZh ?? item.locationZh),
+        sampleUpgrade: asOptionalString(item.sampleUpgrade ?? item.example),
+        sampleUpgradeHighlight: asOptionalString(item.sampleUpgradeHighlight ?? item.sampleHighlight ?? item.highlightQuote),
+      };
+    }).filter((item): item is NonNullable<StoredPart2Feedback['languageSignals'][number]['alternativeUpgrades']>[number] => Boolean(item)).slice(0, 3)
+    : [];
+
+const sanitizePart2LanguageSignals = (value: unknown): StoredPart2Feedback['languageSignals'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map((item): StoredPart2Feedback['languageSignals'][number] | null => {
+      const signal = asPart2LanguageSignal(item.signal ?? item.name);
+      if (!signal) return null;
+      const result = {
+        signal,
+        status: asPart2LanguageSignalStatus(item.status),
+        requirementZh: asString(item.requirementZh),
+        foundInTranscript: Boolean(item.foundInTranscript),
+        evidence: asOptionalString(item.evidence),
+        evidenceQuotes: asStringArray(item.evidenceQuotes),
+        qualityZh: asString(item.qualityZh),
+        nextMoveZh: asString(item.nextMoveZh ?? item.coachingZh ?? item.actionZh),
+        bestUpgrade: asString(item.bestUpgrade),
+        alternatives: asRequiredStringArray(item.alternatives),
+        alternativeUpgrades: sanitizePart2AlternativeUpgrades(item.alternativeUpgrades),
+        insertLocationZh: asString(item.insertLocationZh),
+        sampleUpgrade: asOptionalString(item.sampleUpgrade ?? item.example),
+        sampleUpgradeHighlight: asOptionalString(item.sampleUpgradeHighlight ?? item.sampleHighlight ?? item.highlightQuote),
+        sampleUpgrades: asStringArray(item.sampleUpgrades),
+        usedInNextVersionQuote: asOptionalString(item.usedInNextVersionQuote),
+        profileSignalZh: asOptionalString(item.profileSignalZh),
+      };
+      return result.requirementZh ||
+        result.evidence ||
+        result.evidenceQuotes?.length ||
+        result.qualityZh ||
+        result.nextMoveZh ||
+        result.bestUpgrade ||
+        result.alternatives.length ||
+        result.alternativeUpgrades.length ||
+        result.insertLocationZh ||
+        result.sampleUpgrade ||
+        result.sampleUpgrades?.length ||
+        result.usedInNextVersionQuote ||
+        result.profileSignalZh
+        ? result
+        : null;
+    }).filter((item): item is StoredPart2Feedback['languageSignals'][number] => Boolean(item)).slice(0, 6)
+    : [];
+
+const sanitizePart2NextSpeakableHighlights = (
+  value: unknown,
+  nextSpeakableVersion: string,
+): StoredPart2Feedback['nextSpeakableVersionHighlights'] =>
+  Array.isArray(value)
+    ? value.filter(isObject).map((item): StoredPart2Feedback['nextSpeakableVersionHighlights'][number] | null => {
+      const quote = asString(item.quote);
+      if (!quote) return null;
+      if (nextSpeakableVersion && !nextSpeakableVersion.toLowerCase().includes(quote.toLowerCase())) return null;
+      const signal = asPart2LanguageSignal(item.signal);
+      const storyRole = asPart2StoryModuleRole(item.storyRole);
+      const labelZh = asString(item.labelZh);
+      const whyItWorksZh = asString(item.whyItWorksZh);
+      if (!labelZh && !whyItWorksZh) return null;
+      return {
+        quote,
+        signal: signal || undefined,
+        storyRole: storyRole || undefined,
+        labelZh,
+        whyItWorksZh,
+      };
+    }).filter((item): item is StoredPart2Feedback['nextSpeakableVersionHighlights'][number] => Boolean(item)).slice(0, 10)
+    : [];
+
+const sanitizePart2Feedback = (
+  value: unknown,
+  speakingPart: 1 | 2 | 3,
+): SpeakingFeedback['part2Feedback'] => {
+  if (speakingPart !== 2 || !isObject(value)) return undefined;
+  const nextSpeakableVersion = asString(value.nextSpeakableVersion);
+  return {
+    materialType: asPart2MaterialType(value.materialType),
+    materialTypeRationaleZh: asOptionalString(value.materialTypeRationaleZh),
+    annotations: sanitizePart2Annotations(value.annotations),
+    storyModules: sanitizePart2StoryModules(value.storyModules),
+    languageSignals: sanitizePart2LanguageSignals(value.languageSignals),
+    priorityFocusZh: asString(value.priorityFocusZh),
+    nextSpeakableVersion,
+    nextSpeakableVersionHighlights: sanitizePart2NextSpeakableHighlights(
+      value.nextSpeakableVersionHighlights,
+      nextSpeakableVersion,
+    ),
+  };
+};
+
 const sanitizePart1RetryReference = (value: unknown): SpeakingFeedback['part1RetryReference'] => {
   if (!isObject(value)) return undefined;
   const retryChainId = asString(value.retryChainId);
@@ -717,6 +914,7 @@ const sanitizePart1ThreadFeedback = (
 const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined => {
   if (!isObject(value)) return undefined;
   const scores = isObject(value.scores) ? value.scores : {};
+  const part = asSpeakingPart(value.part);
   const sessionKind = asSpeakingSessionKind(value.sessionKind);
   const threadAnswers = sessionKind === 'part1_topic_thread'
     ? Array.isArray(value.threadAnswers)
@@ -741,7 +939,7 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     ...(value as Partial<SpeakingFeedback>),
     mode: 'practice',
     module: 'speaking',
-    part: asSpeakingPart(value.part),
+    part,
     sessionKind,
     topic: asOptionalString(value.topic),
     threadId: asOptionalString(value.threadId),
@@ -807,6 +1005,7 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
     band9Refinements: Array.isArray(value.band9Refinements) ? value.band9Refinements as SpeakingFeedback['band9Refinements'] : [],
     preservedStyle: sanitizeSpeakingPreservedStyle(value.preservedStyle),
     upgradedAnswer: asString(value.upgradedAnswer),
+    part2Feedback: sanitizePart2Feedback(value.part2Feedback, part),
     reusableExample,
     obsidianMarkdown: asString(value.obsidianMarkdown),
   };
@@ -979,6 +1178,23 @@ export const sanitizePracticeRecord = (value: unknown): PracticeRecord | null =>
       ? sanitizeWritingTask1Record(value)
       : sanitizeWritingTask2Record(value);
 
+export const sanitizeActiveSpeakingSession = (value: unknown): ActiveSpeakingPracticeSession | null => {
+  if (!isObject(value) || !isObject(value.attemptsByPart)) return null;
+
+  const attemptsByPart: ActiveSpeakingPracticeSession['attemptsByPart'] = {};
+  ([1, 2, 3] as const).forEach(part => {
+    const record = sanitizeSpeakingRecord(value.attemptsByPart?.[part]);
+    if (record) attemptsByPart[part] = record;
+  });
+
+  return {
+    id: asString(value.id, createRecordId('speaking_session')),
+    currentPart: asSpeakingPart(value.currentPart),
+    attemptsByPart,
+    updatedAt: asString(value.updatedAt, nowIso()),
+  };
+};
+
 const sortTimestamp = (record: PracticeRecord) =>
   record.analyzedAt || record.createdAt || record.updatedAt || '';
 
@@ -1091,23 +1307,7 @@ export const deletePracticeRecord = (
 };
 
 export const getActiveSpeakingSession = (): ActiveSpeakingPracticeSession | null =>
-  (() => {
-    const active = readJson<unknown>(ACTIVE_SPEAKING_KEY, null);
-    if (!isObject(active) || !isObject(active.attemptsByPart)) return null;
-
-    const attemptsByPart: ActiveSpeakingPracticeSession['attemptsByPart'] = {};
-    ([1, 2, 3] as const).forEach(part => {
-      const record = sanitizeSpeakingRecord(active.attemptsByPart?.[part]);
-      if (record) attemptsByPart[part] = record;
-    });
-
-    return {
-      id: asString(active.id, createRecordId('speaking_session')),
-      currentPart: asSpeakingPart(active.currentPart),
-      attemptsByPart,
-      updatedAt: asString(active.updatedAt, nowIso()),
-    };
-  })();
+  sanitizeActiveSpeakingSession(readJson<unknown>(ACTIVE_SPEAKING_KEY, null));
 
 export const saveActiveSpeakingSession = (session: ActiveSpeakingPracticeSession): StorageWriteResult => {
   return writeJson(ACTIVE_SPEAKING_KEY, { ...session, updatedAt: nowIso() });

@@ -34,6 +34,68 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "fatalErrors": [{ "original": "string", "correction": "string", "tag": "string", "explanationZh": "string" }],
   "naturalnessHints": [{ "original": "string", "better": "string", "tag": "string", "explanationZh": "string" }],
   "band9Refinements": [{ "observation": "string", "refinement": "string", "explanationZh": "string" }],
+  "part2Feedback": {
+    "materialType": "person | place | object | experience_event | abstract_or_opinion_experience | unclear",
+    "materialTypeRationaleZh": "string",
+    "annotations": [{
+      "id": "string",
+      "questionRef": "PART 2",
+      "sourceQuote": "exact learner words copied from the transcript",
+      "combinedRepair": "complete better spoken version of this source span when useful",
+      "layers": [{
+        "severity": "must_fix | better_spoken_choice | optional_polish",
+        "issueType": "grammar | tense | collocation | story clarity | lexical precision | connector | clause | task development",
+        "original": "exact learner words",
+        "better": "corrected or more natural wording",
+        "explanationZh": "string",
+        "reuseGuidanceZh": "string"
+      }]
+    }],
+    "storyModules": [{
+      "role": "what_who_where | background | concrete_details | what_happened | feeling | why_it_mattered | current_or_future_influence",
+      "status": "present | thin | missing | suggested_confirm",
+      "sourceWording": "exact or summarized learner material",
+      "improvedVersion": "short speakable module, not a full answer",
+      "coachingZh": "string",
+      "confirmationNeeded": false
+    }],
+    "languageSignals": [{
+      "signal": "idiomatic_expression | tense | connector | phrasal_verb | collocation | clause",
+      "status": "strong | usable | thin | missing | not_needed",
+      "requirementZh": "fixed Part 2 requirement for this signal",
+      "foundInTranscript": false,
+      "evidence": "exact learner wording or empty string",
+      "evidenceQuotes": ["exact learner wording already using or attempting this signal"],
+      "qualityZh": "judgment of correctness, variety, repetition, or missing opportunity",
+      "nextMoveZh": "string",
+      "bestUpgrade": "single compact English upgrade expression/frame for this answer, not Chinese coaching and not a full example sentence unless the signal itself is clause",
+      "alternatives": ["2-3 topic-specific alternatives"],
+      "alternativeUpgrades": [{
+        "kind": "replace | add",
+        "sourceQuote": "exact learner wording only when kind is replace",
+        "upgrade": "specific high-value expression/frame for this signal",
+        "guidanceZh": "Chinese note explaining why this is worth learning",
+        "insertLocationZh": "where to add it or what original slot it replaces",
+        "sampleUpgrade": "optional complete English sentence for this signal asset",
+        "sampleUpgradeHighlight": "exact substring inside sampleUpgrade to highlight"
+      }],
+      "insertLocationZh": "where/how to add it in this answer",
+      "sampleUpgrade": "one complete English sentence that integrates bestUpgrade into this learner's current story",
+      "sampleUpgradeHighlight": "exact substring inside sampleUpgrade that should be highlighted as the new expression",
+      "sampleUpgrades": ["2-4 complete or near-complete English sentences/frames for this exact story"],
+      "usedInNextVersionQuote": "exact phrase copied from nextSpeakableVersion showing the same upgrade chosen for this signal",
+      "profileSignalZh": "what this attempt suggests for future learner habit/profile tracking"
+    }],
+    "priorityFocusZh": "string",
+    "nextSpeakableVersion": "string",
+    "nextSpeakableVersionHighlights": [{
+      "quote": "exact phrase copied from nextSpeakableVersion; for language highlights, this must match the integrated signal upgrade",
+      "signal": "idiomatic_expression | tense | connector | phrasal_verb | collocation | clause",
+      "storyRole": "what_who_where | background | concrete_details | what_happened | feeling | why_it_mattered | current_or_future_influence",
+      "labelZh": "short Chinese label",
+      "whyItWorksZh": "string"
+    }]
+  },
   "preservedStyle": [{
     "text": "string",
     "reasonZh": "string",
@@ -394,6 +456,45 @@ Target answer linkage: upgradedAnswer must visibly apply the most important fixe
 band9Refinements must quote or reference exact learner wording in observation or explanationZh, otherwise the UI grounding filter may remove the item. Use this field for grounded idea/expression upgrades, not generic advice.
 preservedStyle must explain what material is worth keeping and how it was rebuilt. For Part 2, keep concrete personal material such as childhood power cut, home alone, fear, TV/Ultraman, monsters/darkness, and calling parents when present, then explain how to rebuild scattered details into a story spine. Do not make upgradedAnswer a totally unrelated model answer.`;
 
+export const speakingPart2NativeFeedbackInstruction = `Part 2 native feedback contract:
+- For Part 2, part2Feedback is the learner-facing source for anchored transcript annotations, material type judgment, story modules, the six language signals, and the next speakable version. Do not make the UI infer those from fatalErrors, naturalnessHints, band9Refinements, or preservedStyle.
+- For Part 1 and Part 3, set part2Feedback to null.
+- First classify materialType as person, place, object, experience_event, abstract_or_opinion_experience, or unclear.
+- annotations must be provider-native anchored annotations for necessary local repairs only: copy exact learner wording into sourceQuote, choose severity, and explain why that span deserves repair. If a note cannot be anchored to the learner's words, do not put it in annotations.
+- Use must_fix only for issues that materially affect score, story clarity, meaning, or timeline control. Use better_spoken_choice for useful but non-fatal improvements. Use optional_polish sparingly.
+- Do not use annotations for answer-building strategy, generic opener directness, richer story frames, low-yield polish, or language-signal enrichment. Route those to storyModules or languageSignals only. A clearer opener is usually not an annotation unless the original wording creates real confusion.
+- Annotation volume must adapt to the learner level and error density. For mid/high-band answers, prefer 0-3 high-signal annotations over many phrase cards. For low-band or structurally unstable answers, return enough anchored local repairs to teach the recurring grammar pattern, normally 4-8 when the transcript contains that many real teachable errors. If one sentence repeatedly misses past tense, agreement, articles, word forms, or basic sentence structure, show the repeated local repairs or a grouped annotation with multiple layers; do not hide them just to keep the UI short.
+- storyModules should be modular material, not a memorized answer: what/who/where, background, concrete details, what happened, feeling, why it mattered, and current/future influence. Mark AI-suggested additions as suggested_confirm and confirmationNeeded true when they are not confirmed personal memory.
+- languageSignals are the main Part 2 language-growth surface, not a short afterthought. Return exactly six items every time in this order, one for each signal: idiomatic_expression, tense, connector, phrasal_verb, collocation, and clause. The UI only displays your fields; it will not infer, patch, classify, blacklist, or whitelist these signals locally.
+- Before writing languageSignals, run a provider-side teacher planning pass:
+  1. Inventory candidate evidence across the whole transcript for each signal before choosing any bestUpgrade. Evidence is used to explain a teaching decision; it is not a word-list trigger and must not automatically make a phrase wrong.
+  2. Rank candidates by IELTS Part 2 teaching value: meaning/timeline errors first; then low-range, repetitive, or vague language habits; then accurate but narrow language; then optional enrichment. Choose the highest-value candidate for the card. Do not spend bestUpgrade on an acceptable vocabulary chunk when a stronger low-range signal exists in the same answer.
+  3. Assign each useful expression or issue to one primary teaching role only. Do not double-count the same expression across idiom and phrasal_verb, connector and clause, or collocation and story vocabulary. If an item fits two roles, choose the role that teaches the clearest signal and use a different expression for the other role.
+  4. Keep lexical material in the correct bucket: story/vocabulary material belongs in storyModules or nextSpeakableVersion, while languageSignals must teach the specific signal named by signal.
+  5. Compose a planned nextSpeakableVersion from the learner's meaning and the chosen signal upgrades, then make every languageSignals bestUpgrade agree with that planned answer.
+- Alternatives are not siblings of bestUpgrade. For each signal, bestUpgrade is the most urgent chosen learning asset; alternativeUpgrades are 2-3 additional high-value assets for the same signal. They may be kind "replace" when they improve a weak original slot, or kind "add" when the answer simply lacks a strong learnable expression in a natural story position. Keep legacy alternatives as short upgrade expressions only, but make alternativeUpgrades the richer teaching payload.
+- Each alternativeUpgrade must preserve the original idea and teach the same signal. Do not replace a personality adjective with an unrelated idiom, do not replace an already effective connector with a same-level equivalent, and do not repeat the same sourceQuote or same upgrade as bestUpgrade. If there are not enough weak original slots, use kind "add" with insertLocationZh to place high-value expressions in the planned answer; do not fabricate private facts.
+- Do not spend bestUpgrade or alternativeUpgrades on near-synonym polishing when the learner's original expression is already accurate, natural, and doing the intended job. If the difference is only taste or register, mark it usable/strong, keep it, and spend the signal on a missing layer, repeated weak pattern, or another place where the answer gains real IELTS value.
+- Before finalizing each languageSignals item, run a provider-side self-check:
+  1. If the learner already used a valid expression, set foundInTranscript true and put exact wording in evidenceQuotes.
+  2. Do not present an expression already used in the transcript as bestUpgrade or as a range-building alternative, unless you are explicitly telling the learner to keep it; even then, alternatives must expand range with different expressions.
+  3. bestUpgrade must be the exact English expression/frame the learner should notice. Never put meta descriptions, grammar labels, or instructions in bestUpgrade, such as "future influence clause with will", "use past tense", "add a connector", or "adverb + adjective collocation". Put those explanations in nextMoveZh or guidanceZh.
+  4. sampleUpgrade must contain sampleUpgradeHighlight exactly. sampleUpgradeHighlight should usually equal bestUpgrade; if grammar requires a slight inflection, set sampleUpgradeHighlight to the exact substring to highlight and make bestUpgrade a compact reusable frame, not the full sample sentence.
+  5. If a languageSignals item has a bestUpgrade, that upgrade must be naturally integrated into nextSpeakableVersion and cited through usedInNextVersionQuote. Also include a matching nextSpeakableVersionHighlights item for the same exact quote and signal. If the expression cannot fit the next version without distorting meaning or flow, do not make it bestUpgrade; move it to alternatives or story/vocabulary material instead.
+  6. Before returning JSON, compare bestUpgrade, sampleUpgradeHighlight, usedInNextVersionQuote, alternatives, and alternativeUpgrades. They must not duplicate each other. If an alternative repeats the same sourceQuote or same upgrade as bestUpgrade, replace it with another signal-consistent slot or omit it.
+- Treat the following as fixed Part 2 training standards, not optional style tips:
+  1. Idiomatic expression: a Part 2 answer should contain one natural idiomatic expression. For this UI, treat an idiom as a mostly fixed expression whose meaning or force is not just the sum of the words, and whose main value is emotional stance, vividness, evaluation, or spoken naturalness. Distinguish it from a connector, discourse stance frame, collocation, and phrasal verb. A discourse stance frame such as "it is no exaggeration to say" or "it is safe to say" is formulaic and may be usable, but it is usually not the highest-value idiom signal if it only introduces an opinion. Do not polish one usable stance frame into another near-equivalent frame. If the learner already has a usable formulaic frame, either keep it and set foundInTranscript true, or add a more vivid idiom in a better story slot such as effort, pressure, admiration, turning point, or lasting influence. Some expressions can overlap with phrasal verbs in real English; do not double-count the same expression in both categories. If an expression could fit both, assign it to the stronger pedagogical role and use a different expression for the other signal.
+  2. Tense: even when the topic is mainly about a past event, the rebuilt Part 2 answer should demonstrate flexible control across three time layers: past event/background, present reflection or current relevance, and future/current-future influence. The purpose of this signal is to diagnose the three-layer timeline first: which layers are present, which are accurate, and which are missing. Do not start by hunting isolated present-tense lines inside a past story. Do not call a present-tense line wrong just because the story is mostly past. If a line such as a birthday/age/status statement is a valid direct-scene frame, current fact, or present reflection, keep it and explain how it functions. Only flag tense when the time reference genuinely conflicts with the intended story timeline. In most past-event/person stories, if past narrative and present relevance are already usable, bestUpgrade should usually add the missing future/current-future influence at the end, such as "In the future, I hope..." or "I think his influence will..."; alternativeUpgrades can then improve a present reflection or a past-perfect background if those are weak.
+  3. Connector: Part 2 should not rely on repeated basic coordination for story flow. In this UI, a connector means a reusable discourse marker or linker whose main job is to show relation between ideas: addition, contrast, sequence, result, concession, or reflection. Evaluate whether the answer over-relies on simple coordination instead of clear discourse relations; cite representative evidence, but do not automatically penalize any single connector. Do not use content-bearing story frames, topic-specific "special moment" frames, or full clause patterns as connector bestUpgrade. If the learner needs a story frame, put it in storyModules or clause instead. Alternatives should be short reusable linkers or linker frames, not whole content sentences. If a connector such as Moreover, However, Therefore, or Looking back already works, do not suggest replacing it with a near-synonym; spend the alternativeUpgrade on another weak relation or missing transition. Do not recommend basic default connectors such as so, and, or but as connector upgrades in Six Language Signals. They may be correct in English, but they have low training value for this product surface; prefer richer spoken linkers such as as a result, on top of that, nevertheless, looking back, at that point, not only that, or more importantly, depending on the relation.
+  4. Phrasal verb: a Part 2 answer should contain one natural phrasal or phrasal-prepositional verb. For this UI, treat a phrasal verb as a verb plus particle/preposition functioning as an action or state-change unit in the story. First identify any valid phrasal verb already in the transcript. If present and natural, set foundInTranscript true, cite it, and recommend different alternatives for range; do not repeat the learner's existing expression as bestUpgrade. If absent or awkward, provide the best new one for this story plus 2-3 alternatives. Do not reuse the idiomatic_expression bestUpgrade here. In alternativeUpgrades, each item must say in Chinese which original verb/action it can replace, and the alternatives should usually target different original actions rather than being variants of the same bestUpgrade.
+  5. Collocation: this signal is specifically about precise adverb + adjective first, then adverb + verb. When the learner uses an adjective or intensifier, judge the adjective and the modifier together. If there is a low-range intensifier + adjective or vague adjective in the transcript, prioritize that over an acceptable adjective + noun vocabulary chunk. Upgrade both parts when needed, turning basic intensity into a precise adverb + precise adjective. Do not use adjective + noun vocabulary chunks as the collocation bestUpgrade; those belong in storyModules or vocabulary/material development, not this signal. Collocation bestUpgrade and alternativeUpgrades should be adverb+adjective first. For alternatives, repeat the same judgment on other adjectives in the transcript; if there are no more useful adjectives, then use adverb+verb. If the whole answer lacks adverb+adjective, create one natural bestUpgrade at the most useful feeling/detail slot and explain that this is the missing signal.
+  6. Clause: treat this as the final sentence-combining pass after the other five signals have selected their upgrades. First inventory existing clauses and judge whether they are accurate, varied, and useful. Then look for two adjacent or logically connected short sentences/information blocks in the learner's answer or in the planned upgraded answer that can be combined with a higher-quality dependent clause without changing the learner's meaning. If such a merge exists, make that merged clause/sentence the bestUpgrade. Only if no safe merge exists should you fall back to adding a simpler useful clause. Alternatives should be complete clause frames or sentence-level examples with meaningful content, not bare conjunctions or low-information fragments.
+- For every languageSignals item, fill requirementZh, foundInTranscript, evidence/evidenceQuotes, qualityZh, nextMoveZh, bestUpgrade, alternatives, alternativeUpgrades, insertLocationZh, sampleUpgrade, sampleUpgradeHighlight, sampleUpgrades, usedInNextVersionQuote, and profileSignalZh. bestUpgrade should be a compact English expression, phrase, connector, collocation, idiom, phrasal verb, clause frame, or short tense frame; put Chinese coaching in nextMoveZh/insertLocationZh instead. sampleUpgrade should be one complete sentence that integrates bestUpgrade into the learner's current Part 2 story. sampleUpgradeHighlight must be an exact substring inside sampleUpgrade and should mark the expression the learner should notice. profileSignalZh should name any future habit/profile implication, such as repeated low-range intensifiers, overused clause frame, missing phrasal verbs, or narrow connector range, without claiming cross-session history unless provided in input.
+- Examples mentioned in these instructions are not blacklists or whitelists. Generalize by function: signal quality, repetition, variety, topic fit, story role, and score usefulness.
+- nextSpeakableVersion is the answer that replaces the old Band 7 Target Answer in the UI. It must integrate the storyModules and the useful languageSignals naturally, not sit beside a separate target answer. If the learner has enough material, make it a sustained Part 2 answer, normally around 120-180 words. If material is thin, use safe, clearly general expansions and do not invent private memory.
+- For Part 2 only, upgradedAnswer is a compatibility field; it may match nextSpeakableVersion, but the real learner-facing rebuilt answer is part2Feedback.nextSpeakableVersion.
+- nextSpeakableVersionHighlights must quote exact text from nextSpeakableVersion and label the story role and/or language signal it demonstrates. For language signal highlights, quote the same integrated upgrade named in usedInNextVersionQuote. Prefer signal-linked highlights over generic story highlights. Only include storyRole-only highlights when they mark an essential story module, not ordinary factual content.`;
+
 export const writingSchemaInstruction = `The JSON object must match this exact key structure:
 {
   "mode": "practice",
@@ -687,6 +788,7 @@ Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 ${speakingPromptCalibration}
 ${speakingFeedbackDepthInstruction}
+${speakingPart2NativeFeedbackInstruction}
 If the answer is already strong, return an empty fatalErrors array and use naturalnessHints or band9Refinements for concise grounded idea and expression upgrades.
 Feedback must be target-uplift training feedback. Keep the current estimate defensible and conservative, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim at least Band 7.0+.
 If the learner is weak or medium, produce a clean, natural Band 7 target answer for that part with enough improvement margin, not merely a minimal correction. If the learner is already around Band 7.0 or above but not high-band-stable, upgradedAnswer must become a meaningfully stronger Band 7+ training answer rather than another ordinary Band 7 answer. Do not call it Band 8+, Advanced, Verified, Not Verified, or certified.

@@ -1899,6 +1899,328 @@ const normalizePart1AnswerAnnotations = (
   };
 }).filter(item => item.sourceQuote && item.layers.length);
 
+type NormalizedPart2Feedback = NonNullable<SpeakingFeedback['part2Feedback']>;
+
+const normalizePart2MaterialType = (value: unknown): NormalizedPart2Feedback['materialType'] => {
+  const normalized = typeof value === 'string'
+    ? value.toLowerCase().replace(/[\s/-]+/g, '_')
+    : '';
+  if (normalized === 'person') return 'person';
+  if (normalized === 'place') return 'place';
+  if (normalized === 'object') return 'object';
+  if (normalized === 'event' || normalized === 'experience' || normalized === 'experience_event') return 'experience_event';
+  if (
+    normalized === 'abstract' ||
+    normalized === 'opinion' ||
+    normalized === 'abstract_experience' ||
+    normalized === 'opinion_shaped_experience' ||
+    normalized === 'abstract_or_opinion_experience'
+  ) return 'abstract_or_opinion_experience';
+  return 'unclear';
+};
+
+const normalizePart2StoryModuleRole = (value: unknown): NormalizedPart2Feedback['storyModules'][number]['role'] | null => {
+  const normalized = typeof value === 'string'
+    ? value.toLowerCase().replace(/[\s/-]+/g, '_')
+    : '';
+  if (normalized === 'what' || normalized === 'who' || normalized === 'where' || normalized === 'what_who_where') return 'what_who_where';
+  if (normalized === 'background') return 'background';
+  if (normalized === 'details' || normalized === 'concrete_detail' || normalized === 'concrete_details') return 'concrete_details';
+  if (normalized === 'event' || normalized === 'action' || normalized === 'what_happened') return 'what_happened';
+  if (normalized === 'feeling' || normalized === 'feelings' || normalized === 'how_i_felt') return 'feeling';
+  if (normalized === 'meaning' || normalized === 'why_it_matters' || normalized === 'why_it_mattered') return 'why_it_mattered';
+  if (normalized === 'influence' || normalized === 'current_influence' || normalized === 'future_influence' || normalized === 'current_or_future_influence') return 'current_or_future_influence';
+  return null;
+};
+
+const normalizePart2StoryModuleStatus = (value: unknown): NormalizedPart2Feedback['storyModules'][number]['status'] => {
+  const normalized = typeof value === 'string'
+    ? value.toLowerCase().replace(/[\s/-]+/g, '_')
+    : '';
+  if (normalized === 'present' || normalized === 'strong') return 'present';
+  if (normalized === 'thin' || normalized === 'weak') return 'thin';
+  if (normalized === 'missing' || normalized === 'absent') return 'missing';
+  if (normalized === 'suggested' || normalized === 'suggested_confirm' || normalized === 'needs_confirmation') return 'suggested_confirm';
+  return 'thin';
+};
+
+const normalizePart2LanguageSignal = (value: unknown): NormalizedPart2Feedback['languageSignals'][number]['signal'] | null => {
+  const normalized = typeof value === 'string'
+    ? value.toLowerCase().replace(/[\s/-]+/g, '_')
+    : '';
+  if (normalized === 'idiom' || normalized === 'idiomatic' || normalized === 'idiomatic_expression') return 'idiomatic_expression';
+  if (normalized === 'tense' || normalized === 'timeline') return 'tense';
+  if (normalized === 'connector' || normalized === 'transition' || normalized === 'cohesion') return 'connector';
+  if (normalized === 'phrasal_verb' || normalized === 'phrasal_verbs') return 'phrasal_verb';
+  if (normalized === 'collocation' || normalized === 'collocations') return 'collocation';
+  if (normalized === 'clause' || normalized === 'complex_clause' || normalized === 'subordinate_clause') return 'clause';
+  return null;
+};
+
+const normalizePart2LanguageSignalStatus = (value: unknown): NormalizedPart2Feedback['languageSignals'][number]['status'] => {
+  const normalized = typeof value === 'string'
+    ? value.toLowerCase().replace(/[\s/-]+/g, '_')
+    : '';
+  if (normalized === 'strong') return 'strong';
+  if (normalized === 'usable' || normalized === 'present') return 'usable';
+  if (normalized === 'thin' || normalized === 'weak') return 'thin';
+  if (normalized === 'missing' || normalized === 'absent') return 'missing';
+  if (normalized === 'not_needed' || normalized === 'not_necessary') return 'not_needed';
+  return 'thin';
+};
+
+const normalizePart2AlternativeUpgrades = (
+  value: unknown,
+  validationErrors: string[],
+  path: string,
+): NonNullable<NormalizedPart2Feedback['languageSignals'][number]['alternativeUpgrades']> => {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    validationErrors.push(`${path} missing or invalid array`);
+    return [];
+  }
+  return value
+    .map((item, index): NonNullable<NormalizedPart2Feedback['languageSignals'][number]['alternativeUpgrades']>[number] | null => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) validationErrors.push(`${path}[${index}] missing or invalid object`);
+      const upgrade = safeLearningText(asString(record.upgrade ?? record.bestUpgrade ?? record.better, '', `${path}[${index}].upgrade`, validationErrors));
+      const guidanceZh = safeLearningText(asString(record.guidanceZh ?? record.explanationZh ?? record.replaceZh, '', `${path}[${index}].guidanceZh`, validationErrors));
+      if (!upgrade && !guidanceZh) return null;
+      const kind = record.kind === 'replace' || record.kind === 'add'
+        ? record.kind
+        : optionalSafeString(record.sourceQuote ?? record.original ?? record.replace)
+          ? 'replace'
+          : 'add';
+      return {
+        kind,
+        sourceQuote: optionalSafeString(record.sourceQuote ?? record.original ?? record.replace),
+        upgrade,
+        guidanceZh,
+        insertLocationZh: optionalSafeString(record.insertLocationZh ?? record.whereZh ?? record.locationZh),
+        sampleUpgrade: optionalSafeString(record.sampleUpgrade ?? record.example),
+        sampleUpgradeHighlight: optionalSafeString(record.sampleUpgradeHighlight ?? record.sampleHighlight ?? record.highlightQuote),
+      };
+    })
+    .filter((item): item is NonNullable<NormalizedPart2Feedback['languageSignals'][number]['alternativeUpgrades']>[number] => Boolean(item))
+    .slice(0, 3);
+};
+
+const normalizePart2Annotations = (
+  value: unknown,
+  transcript: string,
+  validationErrors: string[],
+): Part1AnswerAnnotation[] => {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    validationErrors.push('part2Feedback.annotations missing or invalid array');
+    return [];
+  }
+
+  return value
+    .map((item, index): Part1AnswerAnnotation | null => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) validationErrors.push(`part2Feedback.annotations[${index}] missing or invalid object`);
+      const sourceQuote = exactQuoteInAnswer(asString(record.sourceQuote ?? record.original, '', `part2Feedback.annotations[${index}].sourceQuote`, validationErrors));
+      if (!sourceQuote || !textKeyContains(transcript, sourceQuote)) return null;
+      const rawLayers = Array.isArray(record.layers) && record.layers.length ? record.layers : [record];
+      const layers = rawLayers
+        .map((layer, layerIndex): Part1AnswerAnnotationLayer | null => {
+          const layerRecord = isRecord(layer) ? layer : {};
+          if (!isRecord(layer)) validationErrors.push(`part2Feedback.annotations[${index}].layers[${layerIndex}] missing or invalid object`);
+          const original = safeLearningText(asString(layerRecord.original ?? sourceQuote, sourceQuote, `part2Feedback.annotations[${index}].layers[${layerIndex}].original`, validationErrors));
+          const better = safeLearningText(asString(layerRecord.better ?? layerRecord.correction ?? record.combinedRepair ?? sourceQuote, sourceQuote, `part2Feedback.annotations[${index}].layers[${layerIndex}].better`, validationErrors));
+          const explanationZh = safeLearningText(asString(layerRecord.explanationZh, '', `part2Feedback.annotations[${index}].layers[${layerIndex}].explanationZh`, validationErrors));
+          const issueType = safeLearningText(asString(layerRecord.issueType ?? layerRecord.tag ?? 'part2_feedback', 'part2_feedback', `part2Feedback.annotations[${index}].layers[${layerIndex}].issueType`, validationErrors));
+          if (!original || !better || !explanationZh) return null;
+          if (!textKeyContains(transcript, original) && !textKeyContains(sourceQuote, original)) return null;
+          const severity = calibratePart1AnnotationSeverity(
+            normalizePart1AnnotationSeverity(layerRecord.severity),
+            issueType,
+            explanationZh,
+            original,
+            better,
+          );
+          const builtLayer: Part1AnswerAnnotationLayer = {
+            severity,
+            issueType,
+            original,
+            better,
+            explanationZh,
+            reuseGuidanceZh: optionalSafeString(layerRecord.reuseGuidanceZh),
+          };
+          return builtLayer;
+        })
+        .filter((layer): layer is Part1AnswerAnnotationLayer => Boolean(layer));
+      if (!layers.length) return null;
+      return {
+        id: optionalSafeString(record.id) || `p2_ann_${index + 1}`,
+        questionRef: 'PART 2',
+        sourceQuote,
+        layers,
+        combinedRepair: optionalSafeString(record.combinedRepair),
+      };
+    })
+    .filter((item): item is Part1AnswerAnnotation => Boolean(item))
+    .filter((item, index, items) =>
+      items.findIndex(candidate =>
+        textKeyContains(candidate.sourceQuote, item.sourceQuote) &&
+        candidate.layers.some(layer => item.layers.some(other => textKeyContains(layer.better, other.better)))
+      ) === index)
+    .slice(0, 8);
+};
+
+const normalizePart2StoryModules = (
+  value: unknown,
+  validationErrors: string[],
+): NormalizedPart2Feedback['storyModules'] => {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    validationErrors.push('part2Feedback.storyModules missing or invalid array');
+    return [];
+  }
+  return value
+    .map((item, index): NormalizedPart2Feedback['storyModules'][number] | null => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) validationErrors.push(`part2Feedback.storyModules[${index}] missing or invalid object`);
+      const role = normalizePart2StoryModuleRole(record.role ?? record.module);
+      if (!role) return null;
+      const sourceWording = optionalSafeString(record.sourceWording ?? record.source ?? record.learnerWording);
+      const improvedVersion = optionalSafeString(record.improvedVersion ?? record.speakableVersion ?? record.nextVersion);
+      const coachingZh = safeLearningText(asString(record.coachingZh ?? record.coaching ?? record.nextMoveZh, '', `part2Feedback.storyModules[${index}].coachingZh`, validationErrors));
+      if (!coachingZh && !sourceWording && !improvedVersion) return null;
+      return {
+        role,
+        status: normalizePart2StoryModuleStatus(record.status),
+        sourceWording,
+        improvedVersion,
+        coachingZh,
+        confirmationNeeded: Boolean(record.confirmationNeeded),
+      };
+    })
+    .filter((item): item is NormalizedPart2Feedback['storyModules'][number] => Boolean(item))
+    .slice(0, 7);
+};
+
+const normalizePart2LanguageSignals = (
+  value: unknown,
+  validationErrors: string[],
+): NormalizedPart2Feedback['languageSignals'] => {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    validationErrors.push('part2Feedback.languageSignals missing or invalid array');
+    return [];
+  }
+  return value
+    .map((item, index): NormalizedPart2Feedback['languageSignals'][number] | null => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) validationErrors.push(`part2Feedback.languageSignals[${index}] missing or invalid object`);
+      const signal = normalizePart2LanguageSignal(record.signal ?? record.name);
+      if (!signal) return null;
+      const nextMoveZh = safeLearningText(asString(record.nextMoveZh ?? record.coachingZh ?? record.actionZh, '', `part2Feedback.languageSignals[${index}].nextMoveZh`, validationErrors));
+      return {
+        signal,
+        status: normalizePart2LanguageSignalStatus(record.status),
+        requirementZh: safeLearningText(asString(record.requirementZh, '', `part2Feedback.languageSignals[${index}].requirementZh`, validationErrors)),
+        foundInTranscript: Boolean(record.foundInTranscript),
+        evidence: optionalSafeString(record.evidence),
+        evidenceQuotes: optionalSafeStringArray(record.evidenceQuotes),
+        qualityZh: safeLearningText(asString(record.qualityZh, '', `part2Feedback.languageSignals[${index}].qualityZh`, validationErrors)),
+        nextMoveZh,
+        bestUpgrade: safeLearningText(asString(record.bestUpgrade, '', `part2Feedback.languageSignals[${index}].bestUpgrade`, validationErrors)),
+        alternatives: optionalSafeStringArray(record.alternatives) || [],
+        alternativeUpgrades: normalizePart2AlternativeUpgrades(record.alternativeUpgrades, validationErrors, `part2Feedback.languageSignals[${index}].alternativeUpgrades`),
+        insertLocationZh: safeLearningText(asString(record.insertLocationZh, '', `part2Feedback.languageSignals[${index}].insertLocationZh`, validationErrors)),
+        sampleUpgrade: optionalSafeString(record.sampleUpgrade ?? record.example),
+        sampleUpgradeHighlight: optionalSafeString(record.sampleUpgradeHighlight ?? record.sampleHighlight ?? record.highlightQuote),
+        sampleUpgrades: optionalSafeStringArray(record.sampleUpgrades),
+        usedInNextVersionQuote: optionalSafeString(record.usedInNextVersionQuote),
+        profileSignalZh: optionalSafeString(record.profileSignalZh),
+      };
+    })
+    .filter((item): item is NormalizedPart2Feedback['languageSignals'][number] => Boolean(
+      item.requirementZh ||
+      item.qualityZh ||
+      item.nextMoveZh ||
+      item.bestUpgrade ||
+      item.alternatives.length ||
+      item.alternativeUpgrades?.length ||
+      item.insertLocationZh ||
+      item.usedInNextVersionQuote ||
+      item.evidence ||
+      item.evidenceQuotes?.length,
+    ))
+    .slice(0, 6);
+};
+
+const normalizePart2NextSpeakableHighlights = (
+  value: unknown,
+  nextSpeakableVersion: string,
+  validationErrors: string[],
+): NormalizedPart2Feedback['nextSpeakableVersionHighlights'] => {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    validationErrors.push('part2Feedback.nextSpeakableVersionHighlights missing or invalid array');
+    return [];
+  }
+  return value
+    .map((item, index): NormalizedPart2Feedback['nextSpeakableVersionHighlights'][number] | null => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) validationErrors.push(`part2Feedback.nextSpeakableVersionHighlights[${index}] missing or invalid object`);
+      const quote = safeLearningText(asString(record.quote, '', `part2Feedback.nextSpeakableVersionHighlights[${index}].quote`, validationErrors));
+      if (!quote || !textKeyContains(nextSpeakableVersion, quote)) return null;
+      const signal = normalizePart2LanguageSignal(record.signal);
+      const storyRole = normalizePart2StoryModuleRole(record.storyRole);
+      const labelZh = safeLearningText(asString(record.labelZh, '', `part2Feedback.nextSpeakableVersionHighlights[${index}].labelZh`, validationErrors));
+      const whyItWorksZh = safeLearningText(asString(record.whyItWorksZh, '', `part2Feedback.nextSpeakableVersionHighlights[${index}].whyItWorksZh`, validationErrors));
+      if (!labelZh && !whyItWorksZh) return null;
+      return {
+        quote,
+        signal: signal || undefined,
+        storyRole: storyRole || undefined,
+        labelZh,
+        whyItWorksZh,
+      };
+    })
+    .filter((item): item is NormalizedPart2Feedback['nextSpeakableVersionHighlights'][number] => Boolean(item))
+    .slice(0, 10);
+};
+
+const normalizePart2Feedback = (
+  value: unknown,
+  request: SpeakingRequest,
+  validationErrors: string[],
+  normalizedFields: string[],
+): NormalizedPart2Feedback | undefined => {
+  if (request.part !== 2) return undefined;
+  if (!isRecord(value)) {
+    normalizedFields.push('part2FeedbackMissing');
+    return undefined;
+  }
+  const annotations = normalizePart2Annotations(value.annotations, request.transcript || '', validationErrors);
+  const storyModules = normalizePart2StoryModules(value.storyModules, validationErrors);
+  const languageSignals = normalizePart2LanguageSignals(value.languageSignals, validationErrors);
+  const nextSpeakableVersion = safeLearningText(asString(value.nextSpeakableVersion, '', 'part2Feedback.nextSpeakableVersion', validationErrors));
+  const nextSpeakableVersionHighlights = normalizePart2NextSpeakableHighlights(
+    value.nextSpeakableVersionHighlights,
+    nextSpeakableVersion,
+    validationErrors,
+  );
+  normalizedFields.push(`part2Annotations:${annotations.length}`);
+  normalizedFields.push(`part2StoryModules:${storyModules.length}`);
+  normalizedFields.push(`part2LanguageSignals:${languageSignals.length}`);
+  normalizedFields.push(`part2NextSpeakableHighlights:${nextSpeakableVersionHighlights.length}`);
+  return {
+    materialType: normalizePart2MaterialType(value.materialType),
+    materialTypeRationaleZh: optionalSafeString(value.materialTypeRationaleZh),
+    annotations,
+    storyModules,
+    languageSignals,
+    priorityFocusZh: safeLearningText(asString(value.priorityFocusZh, '', 'part2Feedback.priorityFocusZh', validationErrors)),
+    nextSpeakableVersion,
+    nextSpeakableVersionHighlights,
+  };
+};
+
 const stripGenericPart1CleanRetryOpener = (answer: string) => {
   const stripped = answer
     .replace(/^\s*(?:well,\s*)?(?:that's|that is)\s+(?:an interesting|a good)\s+question(?:[.!?,;:]|\s|-)*\s*/i, '')
@@ -2851,6 +3173,7 @@ const normalizeSpeakingFeedback = (
     mode: source.mode === 'mock' ? 'mock' : 'practice',
     module: 'speaking',
     part,
+    part2Feedback: normalizePart2Feedback(source.part2Feedback, request, validationErrors, normalizedFields),
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     transcript: asString(source.transcript, request.transcript || FALLBACK_TEXT, 'transcript', validationErrors),
     bandEstimateExcludingPronunciation: normalizedHeadline,

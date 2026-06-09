@@ -383,11 +383,19 @@ export class MockProvider implements AIProvider {
               ? 7.0
               : params.part === 3
                 ? 5.5
-                : transcriptWords < 20
+              : transcriptWords < 20
                   ? 5.0
                   : 6.0);
     const scoreSet = params.authoritativeScore?.scores;
     const hasGrammarDemoError = /\bI likes\b/i.test(params.transcript);
+    const part2AnnotationQuote = (() => {
+      const directMatch = params.transcript.match(/\bI likes to play football\b/i)?.[0]
+        || params.transcript.match(/\bI was afraid of darkness\b/i)?.[0]
+        || params.transcript.match(/\bIt is very good\b/i)?.[0];
+      if (directMatch) return directMatch;
+      const words = params.transcript.trim().split(/\s+/).filter(Boolean);
+      return words.slice(0, Math.min(words.length, 8)).join(' ');
+    })();
     return {
       mode: 'practice',
       module: 'speaking',
@@ -473,6 +481,344 @@ export class MockProvider implements AIProvider {
           reasonZh: '保留了个人成长故事，这在 Part 1 中很真实。',
         },
       ],
+      part2Feedback: params.part === 2 ? {
+        materialType: isPowerCutDemo ? 'experience_event' : 'experience_event',
+        materialTypeRationaleZh: isPowerCutDemo
+          ? 'Mock Part 2: this is a past-event story with fear, action, and later reflection.'
+          : 'Mock Part 2: this answer is best trained as an experience/event story package.',
+        annotations: part2AnnotationQuote ? [
+          {
+            id: 'mock_p2_ann_1',
+            questionRef: 'PART 2',
+            sourceQuote: part2AnnotationQuote,
+            combinedRepair: hasGrammarDemoError
+              ? 'I like to play football'
+              : isPowerCutDemo
+                ? 'I was afraid of the darkness'
+                : part2AnnotationQuote,
+            layers: [
+              {
+                severity: hasGrammarDemoError ? 'must_fix' : 'better_spoken_choice',
+                issueType: hasGrammarDemoError ? 'grammar' : 'story clarity',
+                original: part2AnnotationQuote,
+                better: hasGrammarDemoError
+                  ? 'I like to play football'
+                  : isPowerCutDemo
+                    ? 'I was afraid of the darkness'
+                    : part2AnnotationQuote,
+                explanationZh: hasGrammarDemoError
+                  ? 'Mock Part 2: 这是会影响准确性的基础动词形式问题，需要优先修复。'
+                  : 'Mock Part 2: 这处表达可以更清楚地承担故事里的场景或感受功能，但不是旧 phrase card 倒推出来的批注。',
+              },
+            ],
+          },
+        ] : [],
+        storyModules: [
+          {
+            role: 'what_who_where',
+            status: 'present',
+            sourceWording: isPowerCutDemo ? 'a power cut at home' : 'a slow but active morning',
+            improvedVersion: isPowerCutDemo ? 'a power cut I experienced at home as a child' : 'a slow but active morning routine when my schedule allows it',
+            coachingZh: '先把故事对象说清楚，不要一开始就堆 cue card 答案。',
+            confirmationNeeded: false,
+          },
+          {
+            role: 'concrete_details',
+            status: isPowerCutDemo ? 'present' : 'thin',
+            sourceWording: isPowerCutDemo ? 'darkness, candles, calling parents' : 'breakfast, jogging, work or study',
+            improvedVersion: isPowerCutDemo ? 'the room went dark, I looked for a lighter, and I called my parents' : 'choose two concrete actions and one small scene',
+            coachingZh: 'Part 2 的素材要能被听见：地点、动作、物品或反应至少要有两个。',
+            confirmationNeeded: false,
+          },
+          {
+            role: 'why_it_mattered',
+            status: 'thin',
+            sourceWording: '',
+            improvedVersion: 'it made me feel more independent and resourceful',
+            coachingZh: '结尾需要说明这件事为什么留下影响，而不是只说 I like it / it was good。',
+            confirmationNeeded: !isPowerCutDemo,
+          },
+        ],
+        languageSignals: [
+          {
+            signal: 'tense',
+            status: isPowerCutDemo ? 'usable' : 'thin',
+            requirementZh: 'Part 2 需要清楚展示过去事件、现在反思和未来/持续影响三层时间线。',
+            foundInTranscript: isPowerCutDemo,
+            evidence: isPowerCutDemo ? 'past-event story' : '',
+            evidenceQuotes: isPowerCutDemo ? ['when I was a child'] : [],
+            qualityZh: isPowerCutDemo ? '过去叙事基本成立，但现在反思和未来影响还可以更明确。' : '时间线偏单薄，需要补过去场景和现在/未来意义。',
+            nextMoveZh: '把过去事件、现在评价和未来影响分开说清楚。',
+            bestUpgrade: 'Since then,',
+            alternatives: ['Looking back,', 'Even now,', 'In the future,'],
+            alternativeUpgrades: [
+              {
+                kind: 'replace',
+                sourceQuote: 'it was not a serious emergency',
+                upgrade: 'Looking back,',
+                guidanceZh: '替换结尾反思的开头，把过去事件自然转成现在视角。',
+              },
+              {
+                kind: 'add',
+                upgrade: 'In the future,',
+                insertLocationZh: '结尾展望这件事对以后处理突发情况的影响',
+                guidanceZh: '用于收尾，补出未来/持续影响这一层时间线。',
+              },
+            ],
+            insertLocationZh: '过去时放在故事主体；现在反思和将来/持续影响最适合放在结尾。',
+            sampleUpgrade: 'Since then, I have felt more confident when something unexpected happens.',
+            sampleUpgradeHighlight: 'Since then,',
+            sampleUpgrades: [
+              'At that time, I felt nervous, but now I see it as a useful experience.',
+              'Looking back, I realise that the experience made me calmer.',
+              'Since then, I have felt more confident when something unexpected happens.',
+            ],
+            usedInNextVersionQuote: 'Since then,',
+            profileSignalZh: '后续画像可记录：是否经常只有过去叙事，缺少现在反思或未来影响。',
+          },
+          {
+            signal: 'connector',
+            status: 'thin',
+            requirementZh: 'Part 2 需要用叙事连接词推进故事，而不是只靠简单并列连接。',
+            foundInTranscript: false,
+            evidence: '',
+            evidenceQuotes: [],
+            qualityZh: '当前故事推进连接不足，适合用记忆点、转折点和反思连接来组织长答。',
+            nextMoveZh: '用真正表示关系的连接词，不要把内容句式当成 connector。',
+            bestUpgrade: 'On top of that,',
+            alternatives: ['Moreover,', 'Nevertheless,', 'As a result,'],
+            alternativeUpgrades: [
+              {
+                kind: 'replace',
+                sourceQuote: 'and tried to stay calm',
+                upgrade: 'Moreover,',
+                guidanceZh: '替换简单并列动作前的 and，用补充连接说明第二个动作。',
+              },
+              {
+                kind: 'add',
+                upgrade: 'As a result,',
+                insertLocationZh: '放在解决问题后的结果句前',
+                guidanceZh: '放在结果句前，明确前面动作带来的结果。',
+              },
+            ],
+            insertLocationZh: '放在补充第二个动作或后续影响前，连接两个信息块。',
+            sampleUpgrade: 'On top of that, I called my parents and tried to stay calm.',
+            sampleUpgradeHighlight: 'On top of that,',
+            sampleUpgrades: [
+              'On top of that, I called my parents and tried to stay calm.',
+              'As a result, I felt a little more in control.',
+              'On top of that, it made me realise I was calmer than I expected.',
+            ],
+            usedInNextVersionQuote: 'On top of that,',
+            profileSignalZh: '后续画像可记录：是否经常用单一连接方式组织 Part 2 故事。',
+          },
+          {
+            signal: 'phrasal_verb',
+            status: 'usable',
+            requirementZh: 'Part 2 需要至少一个自然短语动词，用来表达动作或事件变化。',
+            foundInTranscript: isPowerCutDemo,
+            evidence: isPowerCutDemo ? 'went out' : '',
+            evidenceQuotes: isPowerCutDemo ? ['went out'] : [],
+            qualityZh: isPowerCutDemo ? '短语动词自然，适合保留，并可补充更多动作类表达。' : '还缺少自然动作类短语动词。',
+            nextMoveZh: '只保留自然动作动词，不强塞短语动词。',
+            bestUpgrade: 'figured out what to do',
+            alternatives: ['calmed down', 'came back on', 'carried on'],
+            alternativeUpgrades: [
+              {
+                kind: 'replace',
+                sourceQuote: 'tried to stay calm',
+                upgrade: 'calmed down',
+                guidanceZh: '替换 stay calm 这个动作结果，更像自然短语动词。',
+              },
+              {
+                kind: 'replace',
+                sourceQuote: 'continued looking for a lighter',
+                upgrade: 'carried on looking for a lighter',
+                guidanceZh: '替换 continue 这个动作，表达“继续做某事”。',
+              },
+              {
+                kind: 'replace',
+                sourceQuote: 'the electricity returned',
+                upgrade: 'came back on',
+                guidanceZh: '替换 returned，用来描述电力恢复。',
+              },
+            ],
+            insertLocationZh: '放在事件发生和解决问题的动作节点最自然。',
+            sampleUpgrade: 'After a few minutes, I figured out what to do and looked for a lighter.',
+            sampleUpgradeHighlight: 'figured out what to do',
+            sampleUpgrades: [
+              'At that moment, the power suddenly went out.',
+              'I calmed down and tried to find a candle.',
+              'After a few minutes, I figured out what to do.',
+            ],
+            usedInNextVersionQuote: 'figured out what to do',
+            profileSignalZh: '后续画像可记录：是否缺少自然动作类短语动词或一直重复同一短语动词。',
+          },
+          {
+            signal: 'collocation',
+            status: 'thin',
+            requirementZh: 'Part 2 需要更精准的搭配，优先检查副词+形容词，其次副词+动词。',
+            foundInTranscript: false,
+            evidence: '',
+            evidenceQuotes: [],
+            qualityZh: '当前情绪和记忆描述还偏基础，适合补更精准的 adjective/adverb collocation。',
+            nextMoveZh: '优先补精准搭配，而不是高级词。',
+            bestUpgrade: 'strangely unfamiliar',
+            alternatives: ['genuinely meaningful', 'completely dark', 'deeply memorable'],
+            alternativeUpgrades: [
+              {
+                kind: 'replace',
+                sourceQuote: 'became dark',
+                upgrade: 'completely dark',
+                guidanceZh: '替换 dark 前面缺少程度副词的问题，形成 adv+adj。',
+              },
+              {
+                kind: 'replace',
+                sourceQuote: 'felt nervous',
+                upgrade: 'visibly nervous',
+                guidanceZh: '替换普通情绪形容词，补一个更准确的副词。',
+              },
+              {
+                kind: 'add',
+                upgrade: 'deeply memorable',
+                insertLocationZh: '结尾描述这段经历的长期影响',
+                guidanceZh: '如果要描述这段经历的影响，可以换成 adv+adj。',
+              },
+            ],
+            insertLocationZh: '在描述记忆、黑暗场景、情绪变化和意义反思的位置加入。',
+            sampleUpgrade: 'The room became completely dark, which made it feel strangely unfamiliar.',
+            sampleUpgradeHighlight: 'strangely unfamiliar',
+            sampleUpgrades: [
+              'The room became completely dark.',
+              'The silence felt strangely unfamiliar.',
+              'In the end, the experience became genuinely meaningful to me.',
+            ],
+            usedInNextVersionQuote: 'strangely unfamiliar',
+            profileSignalZh: '后续画像可记录：是否经常使用低范围强化词或缺少精准副词+形容词搭配。',
+          },
+          {
+            signal: 'clause',
+            status: 'thin',
+            requirementZh: 'Part 2 至少需要一个有用从句，用来补细节、原因、转折或反思。',
+            foundInTranscript: false,
+            evidence: '',
+            evidenceQuotes: [],
+            qualityZh: '当前故事可以通过从句把短句连接起来，增加细节密度。',
+            nextMoveZh: '优先把相邻短句合并成有信息量的让步、时间或原因从句。',
+            bestUpgrade: 'even though my voice was still shaking a little',
+            alternatives: ['when I finally found a candle on the table', 'because I had to deal with it on my own', 'which helped me calm down step by step'],
+            alternativeUpgrades: [
+              {
+                kind: 'replace',
+                sourceQuote: 'I found a lighter in a drawer and lit a small candle',
+                upgrade: 'when I finally found a candle on the table',
+                guidanceZh: '把解决问题的动作做成时间从句，增加句内层次。',
+              },
+              {
+                kind: 'replace',
+                sourceQuote: 'I was alone at home',
+                upgrade: 'because I had to deal with it on my own',
+                guidanceZh: '把害怕原因合并进主句，避免短句堆叠。',
+              },
+            ],
+            insertLocationZh: '放在解决问题的动作后，补出“害怕但继续处理”的让步关系。',
+            sampleUpgrade: 'I found a lighter and lit a small candle, even though my voice was still shaking a little.',
+            sampleUpgradeHighlight: 'even though my voice was still shaking a little',
+            sampleUpgrades: [
+              'I found a lighter and lit a small candle, even though my voice was still shaking a little.',
+              'I relaxed a little when I finally found a candle on the table.',
+              'It became a vivid memory because I had to deal with it on my own.',
+              'Although it was not a serious emergency, it felt frightening at that age.',
+            ],
+            usedInNextVersionQuote: 'even though my voice was still shaking a little',
+            profileSignalZh: '后续画像可记录：是否缺少从句，或总是重复同一种从句框架。',
+          },
+          {
+            signal: 'idiomatic_expression',
+            status: 'missing',
+            requirementZh: 'Part 2 需要一个自然 idiomatic expression，但必须服务故事，不硬塞。',
+            foundInTranscript: false,
+            evidence: '',
+            evidenceQuotes: [],
+            qualityZh: '原回答没有稳定 idiom，适合在解决问题的节点加入一个自然表达。',
+            nextMoveZh: '用一个贴合情境的 idiom 表达临场反应。',
+            bestUpgrade: 'think on my feet',
+            alternatives: ['It was a blessing in disguise.', 'I was out of my comfort zone.', 'It taught me to keep a cool head.'],
+            alternativeUpgrades: [
+              {
+                kind: 'replace',
+                sourceQuote: 'handle the situation by myself',
+                upgrade: 'keep a cool head',
+                guidanceZh: '替换“独自处理”的结果描述，强调临场冷静。',
+              },
+              {
+                kind: 'add',
+                upgrade: 'out of my comfort zone',
+                insertLocationZh: '描述当时独自在家的紧张处境',
+                guidanceZh: '加入一个贴合处境的 idiom，说明当时不在熟悉舒适的状态里。',
+              },
+            ],
+            insertLocationZh: '最适合放在结尾解释这件事为什么有意义。',
+            sampleUpgrade: 'At that moment, I had to think on my feet.',
+            sampleUpgradeHighlight: 'think on my feet',
+            sampleUpgrades: [
+              'At that moment, I had to think on my feet.',
+              'In a way, it was a blessing in disguise.',
+              'It taught me to keep a cool head.',
+            ],
+            usedInNextVersionQuote: 'think on my feet',
+            profileSignalZh: '后续画像可记录：是否长期缺少自然 idiom，或 idiom 与故事语境不匹配。',
+          },
+        ],
+        priorityFocusZh: '下次先稳住故事骨架：场景、动作、感受变化、为什么重要；语言上优先修 tense timeline 和 collocation。',
+        nextSpeakableVersion: isPowerCutDemo
+          ? 'The moment I remember most was a power cut I experienced at home when I was a child. I was watching TV in the living room when the power suddenly went out, and the whole room became completely dark, which made it feel strangely unfamiliar. At first, I felt a wave of panic because I was alone at home and I used to imagine scary things in the darkness. On top of that, I called my parents and tried to stay calm. After a few minutes, I figured out what to do: I found a lighter in a drawer and lit a small candle on the table, even though my voice was still shaking a little. Looking back, it was not a serious emergency, but it became a vivid childhood memory because I had to think on my feet and handle the situation by myself. Since then, I have felt a bit more confident whenever something unexpected happens at home.'
+          : 'The moment I would describe is a slow but active morning when my schedule is flexible. Instead of checking my phone immediately, I make a simple breakfast, go out for a short jog, and then sit down to work while my mind still feels clear. What makes this routine special is the sense of control it gives me, because the day starts with small actions that are healthy and manageable. The turning point is usually the first hour after exercise, when I can focus on a task without feeling rushed. It is not a dramatic story, but it matters to me because it helps me keep a better balance between productivity and personal life.',
+        nextSpeakableVersionHighlights: [
+          {
+            quote: 'On top of that,',
+            signal: 'connector',
+            storyRole: 'what_happened',
+            labelZh: '补充连接',
+            whyItWorksZh: '用短连接词补充第二个动作，避免只靠 and 串句。',
+          },
+          {
+            quote: 'figured out what to do',
+            signal: 'phrasal_verb',
+            storyRole: 'what_happened',
+            labelZh: '自然动作动词',
+            whyItWorksZh: '在保留 went out 的基础上补充另一个动作短语，扩大表达范围。',
+          },
+          {
+            quote: 'even though my voice was still shaking a little',
+            signal: 'clause',
+            storyRole: 'concrete_details',
+            labelZh: '让步从句',
+            whyItWorksZh: '把害怕和继续处理事情放在同一句里，故事层次更清楚。',
+          },
+          {
+            quote: 'strangely unfamiliar',
+            signal: 'collocation',
+            storyRole: 'feeling',
+            labelZh: '情绪搭配',
+            whyItWorksZh: '用精准副词加形容词描述场景感受，而不是只说 very scary。',
+          },
+          {
+            quote: 'Since then,',
+            signal: 'tense',
+            storyRole: 'why_it_mattered',
+            labelZh: '时间线反思',
+            whyItWorksZh: '从过去事件自然转到持续到现在的影响。',
+          },
+          {
+            quote: 'think on my feet',
+            signal: 'idiomatic_expression',
+            storyRole: 'why_it_mattered',
+            labelZh: '自然习语',
+            whyItWorksZh: '用贴合情境的习语说明临场反应，不是硬塞高分词。',
+          },
+        ],
+      } : undefined,
       upgradedAnswer: conservativeEstimate >= 8
         ? params.transcript
         : params.targetRepairFocus && conservativeEstimate >= 7

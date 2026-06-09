@@ -88,6 +88,21 @@ Speaking scores are conservative single-question training estimates or valid adj
 
 Do not assume this simplified Speaking policy has fixed Writing. Writing Task 2 target/score/feedback consistency remains a future separate audit. Writing Task 1 calibration remains future scoped work and requires real samples.
 
+### Speaking Part 2 Feedback Principles
+
+Speaking Part 2 is a long-turn story and material trainer, not a short phrase-card correction page.
+
+- Provider `part2Feedback` is the learner-facing source for Part 2 anchored annotations, material type, story modules, six language signals, and next speakable version.
+- The UI should classify, order, and display provider fields; it should not infer final Part 2 feedback from old `fatalErrors`, `naturalnessHints`, `preservedStyle`, local phrase lists, or front-end keyword rules.
+- Part 2 annotations are for necessary local anchored repairs. Low-yield opener polish and language-signal enrichment belong in story modules or six language signals.
+- Six language signals should teach high-value spoken habits: idiomatic expression, tense timeline, connector range, phrasal verbs, collocation, and clause control.
+- Signal upgrades should be chosen by teacher planning: inventory evidence, rank by IELTS value, assign one primary teaching role, then produce a direct learnable expression.
+- `bestUpgrade` should be the exact English expression/frame the learner should notice, not a meta instruction such as "add a future clause".
+- Alternatives may be replace/add learning assets. They should not become low-value near-synonym polishing or duplicate the best upgrade.
+- Connector upgrades should avoid default shortcuts such as `so`, `and`, and `but` in this surface. Those words can be correct, but they have low training value when the product goal is richer spoken discourse.
+- Collocation should prioritize adverb + adjective, then adverb + verb. Adjective+noun vocabulary chunks belong in story or vocabulary material.
+- Tense feedback should first diagnose past event/background, present reflection/current relevance, and future/current-future influence; do not mechanically mark present-tense lines wrong inside a mostly past story.
+
 ## Regression Evidence Must Generalize
 
 User-provided questions, answers, screenshots, transcripts, and Debug Panel output are regression evidence, not product fixtures.

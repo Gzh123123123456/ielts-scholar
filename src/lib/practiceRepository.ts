@@ -6,6 +6,7 @@ import {
   ActiveSpeakingPracticeSession,
   getAllPracticeRecords,
   sanitizePracticeRecord,
+  sanitizeActiveSpeakingSession,
   getActiveSpeakingSession as getLegacyActiveSpeaking,
   getActiveWritingTask1 as getLegacyActiveWritingTask1,
   getActiveWritingTask2 as getLegacyActiveWritingTask2,
@@ -383,21 +384,26 @@ export async function listPracticeRecords(
   }
   const all = await storeGetAll(STORE_NAMES.practiceRecords, 'byTimestamp');
   let records = all
+    .map((r: unknown) => sanitizePracticeRecord(r))
+    .filter((r): r is PracticeRecord => Boolean(r))
     .filter((r: any) => r.status !== 'draft')
-    .sort((a: any, b: any) => (b.sortTimestamp || '').localeCompare(a.sortTimestamp || ''));
+    .sort((a: PracticeRecord, b: PracticeRecord) =>
+      (b.analyzedAt || b.updatedAt || b.createdAt || '').localeCompare(a.analyzedAt || a.updatedAt || a.createdAt || ''),
+    );
   if (filter?.module) {
-    records = records.filter((r: any) => r.module === filter.module);
+    records = records.filter((r: PracticeRecord) => r.module === filter.module);
   }
   if (filter?.status) {
-    records = records.filter((r: any) => r.status === filter.status);
+    records = records.filter((r: PracticeRecord) => r.status === filter.status);
   }
-  return records as PracticeRecord[];
+  return records;
 }
 
 export async function getPracticeRecord(id: string): Promise<PracticeRecord | null> {
   await initializePracticeRepository();
   const result = await storeGet(STORE_NAMES.practiceRecords, id);
-  return result && result.status !== 'draft' ? (result as PracticeRecord) : null;
+  const sanitized = sanitizePracticeRecord(result);
+  return sanitized && sanitized.status !== 'draft' ? sanitized : null;
 }
 
 export interface UpsertResult {
@@ -448,7 +454,10 @@ export async function getAnalyzedPracticeRecords(): Promise<PracticeRecord[]> {
     return [];
   }
   const all = await storeGetAll(STORE_NAMES.practiceRecords, 'byStatus', IDBKeyRange.only('analyzed'));
-  return (all as PracticeRecord[]).filter(r => r.status === 'analyzed');
+  return all
+    .map((r: unknown) => sanitizePracticeRecord(r))
+    .filter((r): r is PracticeRecord => Boolean(r))
+    .filter(r => r.status === 'analyzed');
 }
 
 // ──────────────────────────────────────
@@ -458,7 +467,7 @@ export async function getAnalyzedPracticeRecords(): Promise<PracticeRecord[]> {
 export async function getActiveSpeakingSession(): Promise<ActiveSpeakingPracticeSession | null> {
   await initializePracticeRepository();
   const entry = await storeGet(STORE_NAMES.activeStates, 'speaking');
-  return entry?.data || null;
+  return sanitizeActiveSpeakingSession(entry?.data);
 }
 
 export async function saveActiveSpeakingSession(

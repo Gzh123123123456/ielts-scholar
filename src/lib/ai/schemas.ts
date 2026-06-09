@@ -143,6 +143,100 @@ export interface SpeakingPreservedStyleItem {
   riskNoteZh?: string;
 }
 
+export type Part2MaterialType =
+  | 'person'
+  | 'place'
+  | 'object'
+  | 'experience_event'
+  | 'abstract_or_opinion_experience'
+  | 'unclear';
+
+export type Part2StoryModuleRole =
+  | 'what_who_where'
+  | 'background'
+  | 'concrete_details'
+  | 'what_happened'
+  | 'feeling'
+  | 'why_it_mattered'
+  | 'current_or_future_influence';
+
+export type Part2StoryModuleStatus =
+  | 'present'
+  | 'thin'
+  | 'missing'
+  | 'suggested_confirm';
+
+export interface Part2StoryModule {
+  role: Part2StoryModuleRole;
+  status: Part2StoryModuleStatus;
+  sourceWording?: string;
+  improvedVersion?: string;
+  coachingZh: string;
+  confirmationNeeded?: boolean;
+}
+
+export type Part2LanguageSignal =
+  | 'idiomatic_expression'
+  | 'tense'
+  | 'connector'
+  | 'phrasal_verb'
+  | 'collocation'
+  | 'clause';
+
+export type Part2LanguageSignalStatus =
+  | 'strong'
+  | 'usable'
+  | 'thin'
+  | 'missing'
+  | 'not_needed';
+
+export interface Part2LanguageSignalCheck {
+  signal: Part2LanguageSignal;
+  status: Part2LanguageSignalStatus;
+  requirementZh: string;
+  foundInTranscript: boolean;
+  evidence?: string;
+  evidenceQuotes?: string[];
+  qualityZh: string;
+  nextMoveZh: string;
+  bestUpgrade: string;
+  alternatives: string[];
+  alternativeUpgrades?: {
+    kind?: 'replace' | 'add';
+    sourceQuote?: string;
+    upgrade: string;
+    guidanceZh: string;
+    insertLocationZh?: string;
+    sampleUpgrade?: string;
+    sampleUpgradeHighlight?: string;
+  }[];
+  insertLocationZh: string;
+  sampleUpgrade?: string;
+  sampleUpgradeHighlight?: string;
+  sampleUpgrades?: string[];
+  usedInNextVersionQuote?: string;
+  profileSignalZh?: string;
+}
+
+export interface Part2NextSpeakableVersionHighlight {
+  quote: string;
+  signal?: Part2LanguageSignal;
+  storyRole?: Part2StoryModuleRole;
+  labelZh: string;
+  whyItWorksZh: string;
+}
+
+export interface Part2StoryFeedback {
+  materialType: Part2MaterialType;
+  materialTypeRationaleZh?: string;
+  annotations: Part1AnswerAnnotation[];
+  storyModules: Part2StoryModule[];
+  languageSignals: Part2LanguageSignalCheck[];
+  priorityFocusZh: string;
+  nextSpeakableVersion: string;
+  nextSpeakableVersionHighlights: Part2NextSpeakableVersionHighlight[];
+}
+
 export interface SpeakingThreadAnswer {
   questionId: string;
   question: string;
@@ -349,6 +443,7 @@ export interface SpeakingFeedback {
   threadAnswers?: SpeakingThreadAnswer[];
   part1RetryReference?: Part1RetryReferenceContext;
   threadFeedback?: SpeakingThreadFeedback;
+  part2Feedback?: Part2StoryFeedback;
   question: string;
   transcript: string;
   bandEstimateExcludingPronunciation: number;

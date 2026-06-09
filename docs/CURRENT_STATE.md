@@ -1,22 +1,24 @@
 # Current State
 
-_Last updated: 2026-05-29_
+_Last updated: 2026-06-09_
 
 This is the active baseline, not a history log. Verify branch and sync state with git commands before work.
 
 ## Current Validated Baseline
 
-- Stable pushed checkpoint before this closeout: `ecb7de4 Simplify workflow docs and add Codex skills`.
-- Workflow/docs/skills simplification is completed as the current workflow baseline.
+- Current closeout baseline: Speaking Part 2 provider-native story trainer and history restore/retest improvements are implemented and documented for the 2026-06-09 closeout.
+- Previous pushed workflow checkpoint: `ecb7de4 Simplify workflow docs and add Codex skills`.
+- Workflow/docs/skills simplification remains the current workflow baseline.
 - Codex is the primary implementation agent for scoped product work.
 - Claude Code is an optional docs/status/lint/build helper unless explicitly approved for more.
 - The app is a local-first React + TypeScript + Vite prototype.
 - Mock Provider remains the default. Optional Gemini and auto/DeepSeek local provider modes exist for personal development only.
 - Browser/client API keys are not production-safe; no SaaS provider/key architecture exists yet.
+- Question-bank browsing, History, Progress, active attempts, and IndexedDB-backed practice records are implemented for the current local-first prototype.
+- A lightweight global History drawer is mounted app-wide for quick filtering, restore, backup export, and linking to the full History page.
 - Task 2 annotated essay overlay baseline is implemented; future work should be polish/consolidation unless explicitly scoped.
 - Writing Task 2 basic practice, framework coach/extraction, local-first records, feedback rendering, and export are implemented, but target/score/feedback consistency still needs a separate future audit.
 - Writing Task 1 Academic basic practice is implemented with text-based visual briefs; full calibration remains future work and requires real samples.
-- Question-bank browsing, History, Progress, active attempts, and localStorage records are implemented for the current local-first prototype.
 
 ## Current Speaking Rules
 
@@ -31,46 +33,68 @@ This is the active baseline, not a history log. Verify branch and sync state wit
   - lower bound below 7.0 -> `BAND 7 TARGET ANSWER`;
   - lower bound at or above 7.0, unless high-band-stable -> `BAND 7+ TARGET ANSWER`;
   - high-band-stable -> `STANDARD ANSWER`.
+- Speaking Part 2 is the exception to the old target-answer label: provider `part2Feedback.nextSpeakableVersion` is shown as `NEXT SPEAKABLE VERSION` and replaces the old Band 7 target answer surface.
 - Normal Speaking learner flow does not use learner-facing higher-band target promises, advanced-target labels, validation badges, validation-failure states, or raw provider method errors.
 - Normal successful Speaking targets use neutral `generated_target` diagnostics.
-- Low/mid-band substantial Speaking answers should preserve meaningful MUST FIX, HIGH-IMPACT PHRASE FIXES, and PERSONAL MATERIAL & IDEA EXPANSION where supported by the transcript.
+- Low/mid-band substantial Speaking answers should preserve meaningful corrections where supported by the transcript.
+
+### Speaking Part 1
+
 - Speaking Part 1 topic-thread practice is implemented as a development checkpoint: one-topic natural 3-4 question sets, multiple coherent thread sets for larger topics, and traceable product-supplement questions where the source topic is incomplete.
 - Part 1 results are organized around annotated original answers, one cleaner retry answer per question, thread-level patterns, Material Bank, and a Next Retry Plan.
 - Part 1 clean-retry integrity checks, saved-result safeguards, annotation de-duplication, transcript-spelling/pronunciation boundary tightening, audio-transcript candidate gating, exact-thread retry, coverage-aware/fair topic selection, and topic-thread markdown/export refinements are implemented.
-- The newest Part 1 runtime/export behavior is a pushed development checkpoint, not yet final browser-accepted behavior.
-- Part 3 discussion-flow refinement remains upcoming product work.
+
+### Speaking Part 2
+
+- Speaking Part 2 now has a provider-native `part2Feedback` contract for anchored annotations, material type, story modules, six language signals, priority focus, next speakable version, and next-version highlights.
+- The Part 2 UI displays `part2Feedback` fields; it should not infer final Part 2 feedback from old `fatalErrors`, `naturalnessHints`, or `preservedStyle`.
+- Part 2 annotations are for necessary local anchored repairs only. Low-yield opener polish and language-signal enrichment belong in story modules or six language signals.
+- Part 2 annotation volume adapts to learner level: mid/high answers stay low-noise, while low-band structurally unstable answers can surface more repeated anchored repairs.
+- Part 2 six language signals are fixed: idiomatic expression, tense, connector, phrasal verb, collocation, and clause.
+- Provider prompts define teacher planning, candidate ranking, one-signal ownership, and replace/add alternatives. The frontend only renders the provider payload.
+- Connector upgrades should avoid low-training-value defaults such as `so`, `and`, and `but`; the product goal is to train richer spoken discourse links, not merely prove a connector is grammatically possible.
+- Tense feedback should diagnose three layers first: past event/background, present reflection/current relevance, and future/current-future influence. It should not mechanically mark present-tense lines wrong inside a mostly past story.
+- Collocation focuses on precise adverb + adjective first, then adverb + verb. Adjective+noun vocabulary chunks belong in story/vocabulary material rather than the collocation best-upgrade slot.
+- Idiom and phrasal verb can overlap in real English, but the product assigns one primary teaching role and should not double-count the same expression.
+- `alternativeUpgrades` supports `replace` and `add` so high-value learning assets are not forced into local source replacement.
+- Speaking result-page retest keeps the previous result visible when re-analysis fails.
+- Saved Part 2 history records are sanitized/restored with `part2Feedback` so older history entries do not open to blank result pages.
+
+### Speaking Part 3
+
+- Speaking Part 3 still uses individual follow-up questions derived from Part 2 prompts.
+- Discussion-flow refinement remains upcoming product work.
+
+## Storage Baseline
+
+- IELTS Scholar moved from localStorage-only practice persistence toward IndexedDB-backed `PracticeRepository` after the 2026-05-28/29 P0 storage incident.
+- See `docs/P0_STORAGE_INDEXEDDB_INCIDENT_20260528_20260529.md` for the incident record.
+- Current practice history restore/open paths should use the repository/sanitization layers rather than assuming legacy localStorage shape.
+- No destructive IndexedDB, backup, migration, or deletion work should run without a separate scoped decision and verified backup state.
 
 ## Known Active Limitations
 
-- Audio transcription can fail or fall back; browser Web Speech remains limited. New low-signal audio transcript candidate gating is implemented but still needs post-reinstall browser validation.
+- Audio transcription can fail or fall back; browser Web Speech remains limited.
 - Pronunciation is not formally scored.
 - Provider keys in Vite/browser env are local-personal prototype only and not SaaS-safe.
-- Persistence was localStorage-only; IndexedDB / PracticeRepository transition has been implemented as emergency P0 rescue (see below).
 - No production server/auth/database/RAG/provider-key architecture exists.
 - PDF folder import, mainland active-bank publishing, and SaaS-ready bank administration remain future work.
 - Writing Task 2 target/score/feedback consistency needs a separate audit.
 - Writing Task 1 calibration remains future scoped work and needs real samples.
-
-## P0 Storage / IndexedDB Incident — 2026-05-28 to 2026-05-29
-
-localStorage 配额耗尽（约 6.056 MB）导致白屏崩溃。P0 紧急修复和 IndexedDB 迁移已在脏工作树中实施。详细信息见 `docs/P0_STORAGE_INDEXEDDB_INCIDENT_20260528_20260529.md`。
-
-**当前恢复状态**：
-- History 可见地显示已恢复的规范记录（134 条）和旧版归档会话（172 条）
-- localStorage 当前显示为有效空（仅 `ielts_profile` 等轻量键），即使用户未手动调用释放操作
-- ~~陈旧迁移摘要问题仍未解决（显示不反映恢复导入后的实际 IndexedDB 状态）~~ **已于 2026-05-29 修复**：迁移摘要重新标注为「初始自动迁移」，新增实时「当前 IndexedDB 库存」面板
-- ~~在恢复常规回归测试之前，必须确认最终完整 IndexedDB-inclusive 备份已导出~~ **已于 2026-05-29 确认**：用户确认最终完整 IndexedDB-inclusive 备份已导出并保存在项目目录之外
+- Speaking Part 2 real-provider output still needs QA/repair-pass hardening. Prompt-only contracts can still drift on low-value synonym polishing, duplicate alternatives, meta `bestUpgrade` labels, or replace/add misclassification.
+- Speaking Part 2 does not yet have persistent learner habit/profile aggregation or a shared cross-Part material library. Current `profileSignalZh` is per-attempt only unless future storage/profile work is scoped.
 
 ## Next Priorities
 
-1. **存储 closeout**：确认最终完整 IndexedDB-inclusive 备份已导出；修复 History 迁移摘要陈旧显示；审计 localStorage 在未手动释放情况下变空的原因。
-2. Post-reinstall manual browser validation of the Part 1 checkpoint: blank/low-signal recording candidate adoption, exact-thread retry, fair random/change-topic selection, real-provider stance/tense/annotation/export behavior.
-3. If validation passes, mark the Part 1 checkpoint browser-accepted; if not, open a small follow-up fix.
-4. Speaking Part 3 discussion-flow refinement follows next.
-5. Audio transcription reliability.
-6. PDF folder import + mainland active-bank publishing + SaaS-ready bank layer.
-7. Writing Task 2 target/score/feedback consistency audit.
-8. Writing Task 1 calibration with real samples.
+1. Part 2 provider-output QA/repair pass: validate that each six-signal item has a real learnable `bestUpgrade`, useful replace/add alternatives, no low-training-value connector upgrades, no meta labels in English fields, and no duplicate signal ownership.
+2. Part 2 browser acceptance testing with real Gemini/DeepSeek samples across at least three answer levels: low-band grammar-heavy, mid-band story-building, and higher-band polish.
+3. Part 2 habit/profile design: aggregate repeated weak signals, low-range expressions, and missing signal usage across attempts without turning per-attempt UI into cross-session claims.
+4. Shared material library design: confirmed learner material, suggested material, topic-bank links, user keep/delete workflow, and cross-Part reuse boundaries.
+5. Speaking Part 3 discussion-flow refinement.
+6. Audio transcription reliability.
+7. PDF folder import + mainland active-bank publishing + SaaS-ready bank layer.
+8. Writing Task 2 target/score/feedback consistency audit.
+9. Writing Task 1 calibration with real samples.
 
 ## Navigation Pointers
 

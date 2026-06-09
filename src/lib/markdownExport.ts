@@ -518,6 +518,38 @@ const reviewCardRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
       : '下次优先把这个点说得更清楚。';
   };
 
+  if (feedback.part === 2) {
+    const anchoredRows = (feedback.part2Feedback?.annotations || [])
+      .flatMap(annotation => annotation.layers.map(layer => ({
+        priority: layer.severity === 'must_fix' ? 1 : layer.severity === 'better_spoken_choice' ? 2 : 3,
+        original: annotation.sourceQuote || layer.original,
+        correction: annotation.combinedRepair || layer.better,
+        type: layer.issueType || layer.severity,
+        explanationZh: layer.explanationZh,
+      })))
+      .map(item => ({
+        ...item,
+        original: escapeTableCell(item.original),
+        correction: escapeTableCell(item.correction),
+        type: escapeTableCell(labelIssueType(item.type, `${item.original} ${item.correction} ${item.explanationZh || ''}`)),
+      }))
+      .map(item => ({
+        ...item,
+        note: escapeTableCell(conciseIssueNote(item.type, item)),
+      }))
+      .filter(item => item.original && item.correction && item.type && item.note)
+      .sort((a, b) => a.priority - b.priority);
+
+    if (anchoredRows.length) return anchoredRows;
+
+    return [{
+      original: '本次没有稳定锚定批注',
+      correction: feedback.part2Feedback?.priorityFocusZh || '先补完整故事骨架',
+      type: 'Part 2 路线',
+      note: 'Part 2 批注只导出 provider 原生可锚定 span；不从旧 phrase cards 倒推。',
+    }];
+  }
+
   const part3NeedsMacroReasoningRow = () => {
     if (feedback.part !== 3) return false;
     const text = `${feedback.question} ${feedback.transcript} ${feedback.upgradedAnswer}`.toLowerCase();
@@ -588,7 +620,7 @@ const reviewCardRows = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) =>
 
   return rows.length ? rows : [{
     original: '回答可以更具体',
-    correction: feedback.part === 1 ? '补一个真实个人细节' : feedback.part === 2 ? '补具体场景和感受变化' : '补 cause / example / so what',
+    correction: feedback.part === 1 ? '补一个真实个人细节' : '补 cause / example / so what',
     type: '展开',
     note: feedback.part === 3 ? 'Part 3 需要把观点后的原因、例子或影响说出来。' : '具体细节能让答案更真实、更容易展开。',
   }];
@@ -626,6 +658,7 @@ const reviewCardTransferQuestions = (feedback: Omit<SpeakingFeedback, 'obsidianM
 };
 
 const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (feedback.part === 2) return '## 4. NEXT SPEAKABLE VERSION';
   const state = feedback.targetState || resolveSpeakingTargetState(feedback);
   const lowerBound = feedback.bandEstimateRange?.lower ?? feedback.bandEstimateExcludingPronunciation;
   if (isSpeakingInsufficient(feedback) && isMeaningfulShortAnswer(feedback)) return '## 4. BAND 7 TARGET ANSWER';
@@ -636,6 +669,24 @@ const reviewCardTargetHeading = (feedback: Omit<SpeakingFeedback, 'obsidianMarkd
 };
 
 const reviewCardTargetBody = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (feedback.part === 2 && feedback.part2Feedback?.nextSpeakableVersion) {
+    const highlights = feedback.part2Feedback.nextSpeakableVersionHighlights.length
+      ? feedback.part2Feedback.nextSpeakableVersionHighlights
+        .map(item => cleanLines([
+          `- ${cleanLearningText(item.quote)}`,
+          item.signal ? `  - Signal: ${part2SignalLabel(item.signal)}` : undefined,
+          item.storyRole ? `  - Story role: ${part2StoryRoleLabel(item.storyRole)}` : undefined,
+          item.labelZh ? `  - Label: ${cleanLearningText(item.labelZh)}` : undefined,
+          item.whyItWorksZh ? `  - Why: ${cleanLearningText(item.whyItWorksZh)}` : undefined,
+        ]).join('\n'))
+        .join('\n')
+      : '';
+    return cleanLines([
+      cleanLearningText(feedback.part2Feedback.nextSpeakableVersion),
+      highlights ? `\n### Highlighted upgrades\n${highlights}` : undefined,
+    ]).join('\n\n');
+  }
+
   const state = feedback.targetState || resolveSpeakingTargetState(feedback);
   if (state === 'high_band_stable') {
     return cleanLines([
@@ -711,6 +762,20 @@ const topicExpressionCandidates = (feedback: Omit<SpeakingFeedback, 'obsidianMar
 };
 
 const reviewCardExpressions = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (feedback.part === 2 && feedback.part2Feedback) {
+    const expressions = unique(cleanLearningLines([
+      ...feedback.part2Feedback.languageSignals.map(item => cleanReusablePhrase(item.bestUpgrade)),
+      ...feedback.part2Feedback.languageSignals.flatMap(item => item.alternatives),
+      ...feedback.part2Feedback.languageSignals.flatMap(item =>
+        (item.alternativeUpgrades || []).map(alternative => cleanReusablePhrase(alternative.upgrade))),
+      ...feedback.part2Feedback.storyModules.map(item => cleanReusablePhrase(item.improvedVersion)),
+      feedback.reusableExample && cleanReusablePhrase(feedback.reusableExample.example),
+    ])).slice(0, 5);
+    return expressions.length
+      ? expressions.map(item => `- ${item}`).join('\n')
+      : '- 暂无稳定可复用表达。';
+  }
+
   const expressions = unique(cleanLearningLines([
     ...feedback.naturalnessHints.map(item => cleanReusablePhrase(item.better)),
     ...feedback.band9Refinements.map(item => cleanReusablePhrase(item.refinement)),
@@ -731,7 +796,103 @@ const speakingExpansionFallback = (part: SpeakingFeedback['part']) => {
   return 'Turn the personal material into a claim, contrast or condition, example, and consequence.';
 };
 
+const part2StoryRoleLabel = (value: string) => {
+  const labels: Record<string, string> = {
+    what_who_where: 'What / who / where',
+    background: 'Background',
+    concrete_details: 'Concrete details',
+    what_happened: 'What happened',
+    feeling: 'How I felt',
+    why_it_mattered: 'Why it mattered',
+    current_or_future_influence: 'Current / future influence',
+  };
+  return labels[value] || value.replace(/_/g, ' ');
+};
+
+const part2SignalLabel = (value: string) => {
+  const labels: Record<string, string> = {
+    idiomatic_expression: 'Idiomatic expression',
+    tense: 'Tense',
+    connector: 'Connector',
+    phrasal_verb: 'Phrasal verb',
+    collocation: 'Collocation',
+    clause: 'Clause',
+  };
+  return labels[value] || value.replace(/_/g, ' ');
+};
+
+const part2MaterialTypeLabel = (value?: string) => {
+  if (value === 'person') return 'person';
+  if (value === 'place') return 'place';
+  if (value === 'object') return 'object';
+  if (value === 'experience_event') return 'experience/event';
+  if (value === 'abstract_or_opinion_experience') return 'abstract/opinion-shaped experience';
+  return 'unclear';
+};
+
+const reviewCardPart2StoryPackage = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (feedback.part !== 2 || !feedback.part2Feedback) return '';
+  const part2 = feedback.part2Feedback;
+  const moduleLines = part2.storyModules.length
+    ? part2.storyModules.map(item => cleanLines([
+        `- ${part2StoryRoleLabel(item.role)} (${item.status})`,
+        item.sourceWording && `  - Source: ${cleanLearningText(item.sourceWording)}`,
+        item.improvedVersion && `  - Speakable module: ${cleanLearningText(item.improvedVersion)}`,
+        item.coachingZh && `  - Coaching: ${cleanLearningText(item.coachingZh)}`,
+        item.confirmationNeeded ? '  - Confirm this before treating it as personal memory.' : undefined,
+      ]).join('\n')).join('\n')
+    : '- No stable story modules returned.';
+  const signalLines = part2.languageSignals.length
+    ? part2.languageSignals.map(item => cleanLines([
+        `- ${part2SignalLabel(item.signal)} (${item.foundInTranscript ? 'found' : 'missing'} / ${item.status})`,
+        item.requirementZh && `  - Requirement: ${cleanLearningText(item.requirementZh)}`,
+        item.evidenceQuotes?.length ? `  - Transcript evidence: ${cleanLearningLines(item.evidenceQuotes).slice(0, 3).join(' / ')}` : undefined,
+        item.evidence && `  - Evidence: ${cleanLearningText(item.evidence)}`,
+        item.qualityZh && `  - Quality: ${cleanLearningText(item.qualityZh)}`,
+        item.nextMoveZh && `  - Next move: ${cleanLearningText(item.nextMoveZh)}`,
+        item.insertLocationZh && `  - Where: ${cleanLearningText(item.insertLocationZh)}`,
+        item.bestUpgrade && `  - Best upgrade: ${cleanLearningText(item.bestUpgrade)}`,
+        item.alternatives.length ? `  - Alternatives: ${cleanLearningLines(item.alternatives).slice(0, 3).join(' / ')}` : undefined,
+        item.alternativeUpgrades?.length ? `  - Alternative upgrades: ${item.alternativeUpgrades.slice(0, 3).map(alternative => cleanLearningText([
+          alternative.sourceQuote ? `replace "${alternative.sourceQuote}"` : 'add',
+          alternative.upgrade ? `with ${alternative.upgrade}` : '',
+          alternative.insertLocationZh ? `at ${alternative.insertLocationZh}` : '',
+          alternative.guidanceZh ? `(${alternative.guidanceZh})` : '',
+        ].filter(Boolean).join(' '))).join(' / ')}` : undefined,
+        item.usedInNextVersionQuote && `  - Used in next version: ${cleanLearningText(item.usedInNextVersionQuote)}`,
+        item.profileSignalZh && `  - Profile signal: ${cleanLearningText(item.profileSignalZh)}`,
+      ]).join('\n')).join('\n')
+    : '- No stable language-signal checklist returned.';
+  return cleanLines([
+    `## 3A. Part 2 Story Package`,
+    `- Material type: ${part2MaterialTypeLabel(part2.materialType)}`,
+    part2.materialTypeRationaleZh && `- Why: ${cleanLearningText(part2.materialTypeRationaleZh)}`,
+    part2.priorityFocusZh && `- Priority focus: ${cleanLearningText(part2.priorityFocusZh)}`,
+    '',
+    `### Story modules`,
+    moduleLines,
+    '',
+    `### Six language signals`,
+    signalLines,
+  ]).join('\n');
+};
+
 const reviewCardIdeaExpansion = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>) => {
+  if (feedback.part === 2 && feedback.part2Feedback?.storyModules.length) {
+    return feedback.part2Feedback.storyModules
+      .map((item, index) => {
+        const lines = [
+          `### ${index + 1}. ${part2StoryRoleLabel(item.role)}`,
+          item.sourceWording && `- Your material: ${cleanLearningText(item.sourceWording)}`,
+          item.improvedVersion && `- Speakable module: ${cleanLearningText(item.improvedVersion)}`,
+          item.coachingZh && `- How to expand: ${cleanLearningText(item.coachingZh)}`,
+          item.confirmationNeeded && '- Confirm before using this as personal memory.',
+        ].filter(Boolean);
+        return lines.join('\n');
+      })
+      .join('\n\n');
+  }
+
   const expressionItems = topicExpressionCandidates(feedback).slice(0, 3);
   const material = feedback.preservedStyle.length
     ? feedback.preservedStyle.slice(0, 3)
@@ -1066,6 +1227,8 @@ ${reviewCardRequirements(feedback).map(item => `- ${item}`).join('\n')}${fillerN
 
 ## 2. 回答路线
 ${path.map((item, index) => `${index + 1}. ${item}`).join('\n')}
+
+${reviewCardPart2StoryPackage(feedback)}
 
 ## 3. 问题清单
 | 原表达 | 修改 | 说明 |

@@ -63,6 +63,10 @@ Before changing Speaking feedback, inspect:
 - Speaking target labels are pedagogical: current lower bound below 7.0 shows `BAND 7 TARGET ANSWER`, current lower bound at or above 7.0 shows `BAND 7+ TARGET ANSWER`, and existing high-band-stable output may show `STANDARD ANSWER`.
 - Provider diagnostics may stay in Debug Panel / API Status, but validation provider failures must not appear in the normal learner target-answer area.
 - If one answer exposes a bug, inspect the shared provider, safety, rendering, or workflow path rather than editing data or behavior for that exact sample.
+- Speaking Part 2 has a dedicated `part2Feedback` contract in `src/lib/ai/schemas.ts`, normalized in `src/lib/ai/safety.ts`, persisted/restored through `src/lib/practiceRecords.ts` / `src/lib/practiceRepository.ts`, rendered in `src/pages/SpeakingPractice.tsx`, and exported in `src/lib/markdownExport.ts`.
+- Part 2 provider prompt policy lives in `speakingPart2NativeFeedbackInstruction` in `src/lib/ai/providers/geminiProvider.ts`; DeepSeek imports the same instruction. Mock fixtures in `src/lib/ai/providers/mockProvider.ts` should demonstrate the same contract.
+- Part 2 learner-facing target output is `NEXT SPEAKABLE VERSION`, driven by `part2Feedback.nextSpeakableVersion`, not the old Band 7 target-answer label.
+- Part 2 UI should display provider-native anchored annotations, story modules, six language signals, replace/add alternatives, and next-version highlights. It should not locally guess signal quality or patch provider output with phrase blacklists/whitelists.
 
 ## Writing Task 2 map
 
@@ -118,6 +122,7 @@ Score, diagnosis, target layer, target output, UI, export, and history must stay
 - The stable record key is `ielts_practice_records_v1`.
 - Active attempts are also stored there through module-specific helpers for Speaking, Writing Task 2, and Writing Task 1.
 - History display and restore/delete behavior live in `src/pages/PracticeHistory.tsx`.
+- A lightweight global history drawer lives in `src/components/ui/HistoryPanel.tsx` and is mounted from `src/App.tsx`; it provides quick filtering, restore entry points, backup export, and a link to the full History page.
 - Progress summaries and coverage are data-derived in `src/pages/Progress.tsx`.
 - Question-bank practice counts are computed in `src/components/practice/QuestionBankModal.tsx` from analyzed records with feedback. Do not hardcode counts.
 

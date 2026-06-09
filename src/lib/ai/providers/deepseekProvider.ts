@@ -7,6 +7,7 @@ import {
   speakingPart1LearningAssetsInstruction,
   speakingPart1LearningAssetsSchemaInstruction,
   speakingFeedbackDepthInstruction,
+  speakingPart2NativeFeedbackInstruction,
   speakingPart1TopicThreadInstruction,
   speakingPart1TopicThreadSchemaInstruction,
   speakingPromptCalibration,
@@ -114,6 +115,7 @@ Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 ${speakingPromptCalibration}
 ${speakingFeedbackDepthInstruction}
+${speakingPart2NativeFeedbackInstruction}
 If the transcript is extremely short, nonsensical, or too thin for the part, return conservative insufficient-sample feedback.
 Feedback must be target-uplift training feedback. The current score is a conservative single-question training estimate, excluding pronunciation, not an official complete IELTS Speaking band. If evidence genuinely sits between two adjacent half-bands, return bandEstimateRange as an object with lower, upper, and rationaleZh in this same analysis pass; otherwise return a single estimate only and omit bandEstimateRange or set it to null. Do not return bandEstimateRange as a string. Do not return placeholder range objects, identical lower/upper values, or ranges wider than one adjacent half-band step.
 For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice direction aim at a natural Band 7 training target with a small safety margin, not merely a minimal correction. If the learner's lower bound is 7.0 or above, upgradedAnswer must become a meaningfully stronger Band 7+ answer rather than another ordinary Band 7 answer. Do not describe the target as Band 8+, Advanced, Verified, Not Verified, or certified. If the learner is already high-band-stable, switch to high-band stability instead of generating a fake higher answer; upgradedAnswer may be an empty string in that state, and highBandStabilityZh/nextStepZh should carry the guidance. Do not label output as Band 9.
