@@ -29,7 +29,16 @@ import {
   Part1LearningAssetsResult,
   Part1RetryReferenceContext,
   Part1SessionPriorityState,
+  Part3CriticalThinkingChain,
+  Part3FeedbackMode,
+  Part3MicroUpgrade,
+  Part3QuestionFrame,
+  Part3TargetAnswerHighlightRole,
+  Part3ThinkingDiagnosis,
+  Part3TopicLanguageSection,
   SpeakingAudioTranscriptionResult,
+  SpeakingCeilingDiagnosis,
+  SpeakingCeilingTag,
   SpeakingFeedback,
   SpeakingMaterialBankItem,
   SpeakingNextRetryPlan,
@@ -488,6 +497,52 @@ const optionalSafeStringArray = (value: unknown): string[] | undefined => {
   return items.length ? items : undefined;
 };
 
+const SPEAKING_CEILING_TAGS: SpeakingCeilingTag[] = [
+  'too_written',
+  'not_precise_enough',
+  'limited_paraphrase_flexibility',
+  'over_explained',
+  'not_spontaneous_enough',
+  'weak_nuance',
+  'generic_reasoning',
+  'insufficient_part3_abstraction',
+  'minor_collocation_inaccuracy',
+  'grammar_errors_still_persistent',
+  'under_developed',
+  'part_inappropriate_development',
+  'delivery_unknown',
+];
+
+const normalizeSpeakingCeilingTags = (value: unknown): SpeakingCeilingTag[] | undefined => {
+  const rawTags = Array.isArray(value)
+    ? optionalSafeStringArray(value)
+    : optionalSafeString(value)
+      ? [optionalSafeString(value) as string]
+      : undefined;
+  const tags = rawTags
+    ?.filter((item): item is SpeakingCeilingTag =>
+      SPEAKING_CEILING_TAGS.includes(item as SpeakingCeilingTag))
+    .slice(0, 2);
+  return tags?.length ? tags : undefined;
+};
+
+const normalizeSpeakingCeilingDiagnosis = (
+  value: unknown,
+): SpeakingCeilingDiagnosis | undefined => {
+  if (!isRecord(value)) return undefined;
+  const source = value;
+  const diagnosis: SpeakingCeilingDiagnosis = {
+    whyNotLowerZh: optionalSafeString(source.whyNotLowerZh ?? source.whyNotLower),
+    whyNotHigherZh: optionalSafeString(source.whyNotHigherZh ?? source.whyNotHigher ?? source.ceilingZh),
+    nextBandTriggerZh: optionalSafeString(source.nextBandTriggerZh ?? source.nextTriggerZh ?? source.nextMoveZh),
+    textOnlyNoteZh: optionalSafeString(source.textOnlyNoteZh ?? source.textOnlyNote) ||
+      '默认按当前答案能自然、清楚、流畅地说出时估计。',
+    partSpecificCeilingZh: optionalSafeString(source.partSpecificCeilingZh ?? source.partCeilingZh),
+    ceilingTags: normalizeSpeakingCeilingTags(source.ceilingTags ?? source.highBandCeiling),
+  };
+  return Object.values(diagnosis).some(Boolean) ? diagnosis : undefined;
+};
+
 const asOptionalHalfBand = (value: unknown): number | undefined => {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
   return normalizeHalfBandScore(value);
@@ -801,8 +856,15 @@ const normalizeSpeakingScoreOnly = (
       part,
     )),
   };
+  const visibleScoreValues = Object.values(visibleScores).filter(score => Number.isFinite(score) && score > 0);
+  const headlineSource =
+    source.bandEstimateExcludingPronunciation ??
+    source.bandEstimate ??
+    source.estimatedBand ??
+    source.overallBand;
+  const headlineFallback = visibleScoreValues.length ? Math.min(...visibleScoreValues) : FALLBACK_SCORE;
   const headline = normalizeHalfBandScore(applySpeakingLengthCap(
-    asNumber(source.bandEstimateExcludingPronunciation, 'bandEstimateExcludingPronunciation', validationErrors),
+    asNumber(headlineSource, 'bandEstimateExcludingPronunciation', validationErrors, headlineFallback),
     transcriptWords,
     part,
   ));
@@ -1305,7 +1367,59 @@ const normalizePart1RepairLayer = (
     better: polishedBetter,
     explanationZh: hasOverAbsoluteContextDependentClaim(safeExplanation)
       ? contextSafePart1Explanation(issueType, safeExplanation, polishedBetter) || safeExplanation
-      : safeExplanation,
+    : safeExplanation,
+  };
+};
+
+const normalizeSharedSpeakingRepairLayer = (
+  original: string,
+  better: string,
+  issueType: string,
+  explanationZh: string,
+  transcriptOrAnswer: string,
+) => normalizePart1RepairLayer(original, better, issueType, explanationZh, transcriptOrAnswer);
+
+const isSystemSpeakingFatalIssue = (tag: string) =>
+  /\b(prompt_mismatch|insufficient_sample|sample|length|under.?developed|off.?task)\b/i.test(tag);
+
+const normalizeSharedSpeakingFatalError = (
+  item: FatalError,
+  transcript: string,
+): FatalError | null => {
+  if (isSystemSpeakingFatalIssue(item.tag)) return item;
+  const repair = normalizeSharedSpeakingRepairLayer(
+    item.original,
+    item.correction,
+    item.tag || 'speaking_issue',
+    item.explanationZh,
+    transcript,
+  );
+  if (!repair) return null;
+  return {
+    ...item,
+    original: repair.original,
+    correction: repair.better,
+    explanationZh: repair.explanationZh,
+  };
+};
+
+const normalizeSharedSpeakingNaturalnessHint = (
+  item: NaturalnessHint,
+  transcript: string,
+): NaturalnessHint | null => {
+  const repair = normalizeSharedSpeakingRepairLayer(
+    item.original,
+    item.better,
+    item.tag || 'naturalness',
+    item.explanationZh,
+    transcript,
+  );
+  if (!repair) return null;
+  return {
+    ...item,
+    original: repair.original,
+    better: repair.better,
+    explanationZh: repair.explanationZh,
   };
 };
 
@@ -2388,6 +2502,34 @@ const normalizePart2AlternativeUpgrades = (
     .slice(0, 3);
 };
 
+const part2AnnotationLayerPriority = (layer: Part1AnswerAnnotationLayer) => {
+  const evidence = `${layer.issueType} ${layer.explanationZh} ${layer.original} ${layer.better}`.toLowerCase();
+  if (/\b(timeline|tense|verb form|missing verb|sentence structure|clause|word order|agreement|subject-verb|article|determiner|plural|singular|meaning|clarity|story clarity)\b/.test(evidence)) return 0;
+  if (/\b(lexical precision|word choice|collocation|preposition|word form|countability)\b/.test(evidence)) return 1;
+  if (/\b(connector|cohesion|sequence|linking)\b/.test(evidence)) return 2;
+  if (/\b(optional|polish|natural|spoken choice|style|concise)\b/.test(evidence)) return 4;
+  return 3;
+};
+
+const part2AnnotationPosition = (transcript: string, sourceQuote: string) => {
+  const transcriptKey = part1AnnotationKeyText(transcript);
+  const quoteKey = part1AnnotationKeyText(sourceQuote);
+  const index = quoteKey ? transcriptKey.indexOf(quoteKey) : -1;
+  return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
+};
+
+const part2AnnotationSortKey = (annotation: Part1AnswerAnnotation, transcript: string) => {
+  const strongestSeverity = annotation.layers.reduce(
+    (current, layer) => strongestPart1Severity(current, layer.severity),
+    'optional_polish' as Part1AnnotationSeverity,
+  );
+  const severityRank = strongestSeverity === 'must_fix' ? 0 : strongestSeverity === 'better_spoken_choice' ? 1 : 2;
+  const issueRank = Math.min(...annotation.layers.map(part2AnnotationLayerPriority));
+  const position = part2AnnotationPosition(transcript, annotation.sourceQuote);
+  const widthPenalty = Math.min(annotation.sourceQuote.split(/\s+/).filter(Boolean).length, 20);
+  return { severityRank, issueRank, position, widthPenalty };
+};
+
 const normalizePart2Annotations = (
   value: unknown,
   transcript: string,
@@ -2415,20 +2557,22 @@ const normalizePart2Annotations = (
           const explanationZh = safeLearningText(asString(layerRecord.explanationZh, '', `part2Feedback.annotations[${index}].layers[${layerIndex}].explanationZh`, validationErrors));
           const issueType = safeLearningText(asString(layerRecord.issueType ?? layerRecord.tag ?? 'part2_feedback', 'part2_feedback', `part2Feedback.annotations[${index}].layers[${layerIndex}].issueType`, validationErrors));
           if (!original || !better || !explanationZh) return null;
-          if (!textKeyContains(transcript, original) && !textKeyContains(sourceQuote, original)) return null;
+          const repair = normalizeSharedSpeakingRepairLayer(original, better, issueType, explanationZh, transcript || sourceQuote);
+          if (!repair) return null;
+          if (!textKeyContains(transcript, repair.original) && !textKeyContains(sourceQuote, repair.original)) return null;
           const severity = calibratePart1AnnotationSeverity(
             normalizePart1AnnotationSeverity(layerRecord.severity),
             issueType,
-            explanationZh,
-            original,
-            better,
+            repair.explanationZh,
+            repair.original,
+            repair.better,
           );
           const builtLayer: Part1AnswerAnnotationLayer = {
             severity,
             issueType,
-            original,
-            better,
-            explanationZh,
+            original: repair.original,
+            better: repair.better,
+            explanationZh: repair.explanationZh,
             reuseGuidanceZh: optionalSafeString(layerRecord.reuseGuidanceZh),
           };
           return builtLayer;
@@ -2449,7 +2593,24 @@ const normalizePart2Annotations = (
         textKeyContains(candidate.sourceQuote, item.sourceQuote) &&
         candidate.layers.some(layer => item.layers.some(other => textKeyContains(layer.better, other.better)))
       ) === index)
-    .slice(0, 8);
+    .map(item => ({
+      ...item,
+      layers: [...item.layers].sort((left, right) => {
+        const severityDelta = part1SeverityRank[right.severity] - part1SeverityRank[left.severity];
+        return severityDelta || part2AnnotationLayerPriority(left) - part2AnnotationLayerPriority(right);
+      }),
+    }))
+    .sort((left, right) => {
+      const a = part2AnnotationSortKey(left, transcript);
+      const b = part2AnnotationSortKey(right, transcript);
+      return a.severityRank - b.severityRank ||
+        a.issueRank - b.issueRank ||
+        a.position - b.position ||
+        b.widthPenalty - a.widthPenalty ||
+        left.sourceQuote.localeCompare(right.sourceQuote);
+    })
+    .slice(0, 6)
+    .sort((left, right) => part2AnnotationPosition(transcript, left.sourceQuote) - part2AnnotationPosition(transcript, right.sourceQuote));
 };
 
 const normalizePart2StoryModules = (
@@ -3358,7 +3519,7 @@ const normalizePart1TopicThreadFeedback = (
       const reusableKey = part1AnnotationKeyText(item.reusableVersion);
       return !personalMaterialKeys.has(sourceKey) && !personalMaterialKeys.has(reusableKey);
     });
-  const rationaleFallback = 'Transcript-based estimate: grammar, vocabulary, answer focus and Part 1 control were considered; pronunciation is not formally assessed.';
+  const rationaleFallback = 'Ideal-delivery estimate: grammar, vocabulary, answer focus and Part 1 control were considered.';
   const bandEstimateRange = recoveredScoreFromRange
     ? structurallyValidRange
     : normalizeSpeakingBandEstimateRange(source.bandEstimateRange, headline, false, normalizedFields);
@@ -3428,6 +3589,7 @@ const normalizePart1TopicThreadFeedback = (
     estimateRationaleZh: evidenceLimitedEstimate
       ? PART1_EVIDENCE_LIMITED_ESTIMATE_NOTE_ZH
       : sanitizePart1TeamVariantAdviceText(sanitizePart1FeedbackText(optionalSafeString(source.estimateRationaleZh), rationaleFallback)) || rationaleFallback,
+    speakingCeilingDiagnosis: normalizeSpeakingCeilingDiagnosis(source.speakingCeilingDiagnosis),
     targetAnswerStatus: 'not_applicable',
     scores: {
       ...evidenceAwareScores,
@@ -3463,6 +3625,425 @@ const normalizePart1TopicThreadFeedback = (
   };
 };
 
+const PART3_QUESTION_FRAMES: Part3QuestionFrame[] = [
+  'cause_reason',
+  'change_trend',
+  'evaluation_stance',
+  'comparison_contrast',
+  'advantages_disadvantages',
+  'solution_suggestion',
+  'category_criteria',
+  'consequence_impact',
+];
+
+const part3QuestionFrameFallback = (question: string): Part3QuestionFrame => {
+  const normalized = question.toLowerCase().replace(/[’‘`]/g, "'");
+  if (/advantage|disadvantage|benefit|drawback|pros and cons/.test(normalized)) return 'advantages_disadvantages';
+  if (/difference|different|compare|which .*more important|which .*better|prefer|rather|than|young .* old|older .* young/.test(normalized)) return 'comparison_contrast';
+  if (/change|changed|in recent years|nowadays|in the past|these days/.test(normalized)) return 'change_trend';
+  if (/impact|effect|influence|affect|result|consequence/.test(normalized)) return 'consequence_impact';
+  if (/what kind|what kinds|what type|what types|qualities|features|characteristics|criteria|what makes/.test(normalized)) return 'category_criteria';
+  if (/how can|how could|what can .*do|what should .*do|ways? to|solve|reduce|encourage|protect|improve/.test(normalized)) return 'solution_suggestion';
+  if (/why|causes?|reasons?|motivates?|leads to|makes people/.test(normalized)) return 'cause_reason';
+  return 'evaluation_stance';
+};
+
+const part3QuestionFrameLabelZh = (frame: Part3QuestionFrame): string => {
+  if (frame === 'cause_reason') return '原因分析题';
+  if (frame === 'change_trend') return '变化趋势题';
+  if (frame === 'comparison_contrast') return '比较对照题';
+  if (frame === 'advantages_disadvantages') return '利弊权衡题';
+  if (frame === 'solution_suggestion') return '解决方案题';
+  if (frame === 'category_criteria') return '分类标准题';
+  if (frame === 'consequence_impact') return '影响结果题';
+  return '观点判断题';
+};
+
+const part3QuestionFrameGuidanceZh = (frame: Part3QuestionFrame): string => {
+  if (frame === 'cause_reason') return '这是原因题。先给一个直接原因，再补一层现实、心理或社会原因。';
+  if (frame === 'change_trend') return '这是变化题。先说变化方向，再解释背后的驱动因素和影响。';
+  if (frame === 'comparison_contrast') return '这是比较题。重点不是简单 yes/no，而是比较两类人、两个时代或两种场景。';
+  if (frame === 'advantages_disadvantages') return '这是利弊题。先承认一边，再指出另一边的代价或边界。';
+  if (frame === 'solution_suggestion') return '这是 solution 题。不要只给一个措施，最好按两个方向拆开，再补具体动作。';
+  if (frame === 'category_criteria') return '这是分类题。不要只讲一个例子，最好给 2-3 类，并说明为什么重要。';
+  if (frame === 'consequence_impact') return '这是影响题。先说直接影响，再推进到长期或更广泛的结果。';
+  return '这是评价题。先给有边界的立场，再用原因、例子或条件支撑，避免绝对化。';
+};
+
+const normalizePart3QuestionFrame = (value: unknown, fallback: Part3QuestionFrame): Part3QuestionFrame =>
+  typeof value === 'string' && PART3_QUESTION_FRAMES.includes(value as Part3QuestionFrame)
+    ? value as Part3QuestionFrame
+    : fallback;
+
+const PART3_FEEDBACK_MODES: Part3FeedbackMode[] = [
+  'language_repair',
+  'reasoning_upgrade',
+  'part3_generalisation',
+  'answer_scope',
+  'precision_upgrade',
+  'compression_upgrade',
+  'nuance_upgrade',
+  'micro_upgrade',
+];
+
+const normalizePart3FeedbackMode = (
+  value: unknown,
+  microUpgrade?: Part3MicroUpgrade,
+  ctChain?: Part3CriticalThinkingChain,
+  questionFrame?: Part3QuestionFrame,
+): Part3FeedbackMode => {
+  if (typeof value === 'string' && PART3_FEEDBACK_MODES.includes(value as Part3FeedbackMode)) {
+    return value as Part3FeedbackMode;
+  }
+  if (questionFrame === 'category_criteria') return 'answer_scope';
+  if (microUpgrade?.focusZh && !ctChain?.missingLinkZh && !ctChain?.nextMoveZh) return 'micro_upgrade';
+  if (ctChain?.missingLinkZh || ctChain?.nextMoveZh) return 'reasoning_upgrade';
+  return 'reasoning_upgrade';
+};
+
+const normalizePart3HighlightRole = (value: unknown): Part3TargetAnswerHighlightRole | undefined => {
+  if (
+    value === 'claim' ||
+    value === 'reason' ||
+    value === 'example' ||
+    value === 'contrast' ||
+    value === 'consequence' ||
+    value === 'language'
+  ) {
+    return value;
+  }
+  return undefined;
+};
+
+const normalizePart3CtChain = (
+  value: unknown,
+  frame: Part3QuestionFrame,
+): Part3CriticalThinkingChain => {
+  const source = isRecord(value) ? value : {};
+  const chain = {
+    claim: optionalSafeString(source.claim),
+    reason: optionalSafeString(source.reason),
+    exampleOrEvidence: optionalSafeString(source.exampleOrEvidence ?? source.example ?? source.evidence),
+    contrastOrCondition: optionalSafeString(source.contrastOrCondition ?? source.contrast ?? source.condition),
+    consequence: optionalSafeString(source.consequence ?? source.impact),
+    missingLinkZh: optionalSafeString(source.missingLinkZh),
+    nextMoveZh: optionalSafeString(source.nextMoveZh) || part3QuestionFrameGuidanceZh(frame),
+  };
+  return Object.fromEntries(
+    Object.entries(chain)
+      .map(([key, item]) => [key, typeof item === 'string' ? safeLearningText(item) : item] as const)
+      .filter(([, item]) => Boolean(item)),
+) as Part3CriticalThinkingChain;
+};
+
+const safePart3ReusableFrame = (value: unknown): string | undefined => {
+  const frame = optionalSafeString(value);
+  if (!frame) return undefined;
+  if (/[\[\]{}]/.test(frame) || /\bplaceholder\b/i.test(frame)) return undefined;
+  return safeLearningText(frame);
+};
+
+const normalizePart3ThinkingDiagnosis = (
+  value: unknown,
+  frame: Part3QuestionFrame,
+  ctChain: Part3CriticalThinkingChain,
+): Part3ThinkingDiagnosis | undefined => {
+  const source = isRecord(value) ? value : {};
+  const mainCeiling = optionalSafeString(
+    source.mainCeilingZh ??
+    source.growthEdgeZh ??
+    source.currentCeilingZh ??
+    source.limitZh ??
+    source.whyNotHigherZh ??
+    ctChain.missingLinkZh,
+  );
+  const bestNextMove = optionalSafeString(
+    source.bestNextMoveZh ??
+    source.nextMoveZh ??
+    source.trainingMoveZh ??
+    ctChain.nextMoveZh ??
+    part3QuestionFrameGuidanceZh(frame),
+  );
+  const diagnosis = {
+    questionThinkingZh: optionalSafeString(
+      source.questionThinkingZh ??
+      source.howToThinkZh ??
+      source.questionTaskZh ??
+      source.thinkingTaskZh ??
+      source.frameThinkingZh ??
+      source.questionFrameGuidanceZh,
+    ) || part3QuestionFrameGuidanceZh(frame),
+    retainedIdeaZh: optionalSafeString(
+      source.retainedIdeaZh ??
+      source.keepIdeaZh ??
+      source.keepZh ??
+      source.whatCanKeepZh ??
+      source.whatWorksZh ??
+      source.worksZh ??
+      source.strengthZh,
+    ),
+    upgradeRuleZh: optionalSafeString(
+      source.upgradeRuleZh ??
+      source.upgradeStepZh ??
+      source.ruleZh ??
+      source.mainUpgradeZh ??
+      mainCeiling ??
+      bestNextMove,
+    ),
+    reusableFrameZh: optionalSafeString(
+      source.reusableFrameZh ??
+      source.frameNoteZh ??
+      source.transferFrameZh ??
+      source.sentenceFrameZh,
+    ),
+    reusableFrame: safePart3ReusableFrame(
+      source.reusableFrame ??
+      source.frame ??
+      source.englishFrame ??
+      source.sentenceFrame,
+    ),
+    whatWorksZh: optionalSafeString(source.whatWorksZh ?? source.worksZh ?? source.strengthZh),
+    mainCeilingZh: mainCeiling,
+    bestNextMoveZh: bestNextMove,
+    answerControlZh: optionalSafeString(source.answerControlZh),
+    generalisationZh: optionalSafeString(source.generalisationZh ?? source.generalizationZh),
+    nuanceZh: optionalSafeString(source.nuanceZh),
+    supportZh: optionalSafeString(source.supportZh),
+    speakabilityZh: optionalSafeString(source.speakabilityZh ?? source.spokenNaturalnessZh),
+    examinerReadinessZh: optionalSafeString(source.examinerReadinessZh ?? source.followUpReadinessZh),
+  };
+  const cleaned = Object.fromEntries(
+    Object.entries(diagnosis)
+      .map(([key, item]) => [key, typeof item === 'string' ? safeLearningText(item) : item] as const)
+      .filter(([, item]) => Boolean(item)),
+  );
+  return Object.keys(cleaned).length ? cleaned as Part3ThinkingDiagnosis : undefined;
+};
+
+const normalizePart3MicroUpgrade = (
+  value: unknown,
+): Part3MicroUpgrade | undefined => {
+  if (!isRecord(value)) return undefined;
+  const upgradedLine = safeLearningText(optionalSafeString(
+    value.upgradedLine ?? value.upgrade ?? value.line ?? value.sentence,
+  ) || '');
+  if (!upgradedLine) return undefined;
+  return {
+    focusZh: safeLearningText(optionalSafeString(value.focusZh) || '把同一逻辑说得更自然、更适合口语输出。'),
+    upgradedLine,
+    whyItHelpsZh: safeLearningText(optionalSafeString(value.whyItHelpsZh ?? value.whyZh) || '这是一处微调，不是推倒重写；它让答案更清楚、更好说。'),
+  };
+};
+
+const normalizePart3TargetAnswerHighlights = (
+  value: unknown,
+  targetAnswer: string,
+  path: string,
+  validationErrors: string[],
+  normalizedFields: string[],
+) => {
+  const lowerTarget = targetAnswer.toLowerCase();
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    validationErrors.push(`${path} missing or invalid array`);
+    return [];
+  }
+  const highlights = value
+    .map((item, index) => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) validationErrors.push(`${path}[${index}] missing or invalid object`);
+      const quote = safeLearningText(asString(record.quote, '', `${path}[${index}].quote`, validationErrors));
+      const labelZh = safeLearningText(asString(record.labelZh, '', `${path}[${index}].labelZh`, validationErrors));
+      const whyItWorksZh = safeLearningText(asString(record.whyItWorksZh, '', `${path}[${index}].whyItWorksZh`, validationErrors));
+      if (!quote || !labelZh || !whyItWorksZh) return null;
+      if (!lowerTarget.includes(quote.toLowerCase())) {
+        normalizedFields.push('part3TargetHighlightDropped');
+        return null;
+      }
+      return {
+        quote,
+        role: normalizePart3HighlightRole(record.role),
+        labelZh,
+        whyItWorksZh,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  return highlights.slice(0, 6);
+};
+
+const repairPart3TopicLanguageExpression = (expression: string) => {
+  const normalized = expression.replace(/\s+/g, ' ').trim();
+  const replacements: Record<string, string> = {
+    'traditional fictions': 'traditional Chinese fiction',
+    'chinese traditional fictions': 'classic Chinese novels',
+    'be based on tv series': 'be adapted into TV dramas',
+    'hardware facilities': 'library facilities',
+    'hardware facility': 'library facilities',
+    'software aspects': 'library services',
+    'software aspects / overall environment': 'services and overall environment',
+    'widespread electronic devices': 'digital devices are everywhere',
+    'primary form of indoor relaxation': 'a common way to relax at home',
+    'attention is often diverted by': 'get distracted by',
+    'leisure time is divided among many options': 'have many ways to spend their free time',
+    'update and purchase new books': 'update book collections regularly',
+    'improve library conditions': 'improve library facilities and services',
+    'conducive atmosphere': 'a pleasant reading environment',
+  };
+  return replacements[normalized.toLowerCase()] || normalized;
+};
+
+const normalizePart3TopicLanguageItem = (
+  value: unknown,
+): Part3TopicLanguageSection['items'][number] | null => {
+  const record = isRecord(value) ? value : null;
+  const expression = safeLearningText(
+    repairPart3TopicLanguageExpression(typeof value === 'string'
+      ? value
+      : optionalSafeString(record?.expression ?? record?.phrase ?? record?.item ?? record?.text) || ''
+    ),
+  );
+  if (!expression) return null;
+
+  const meaningZh = record
+    ? safeLearningText(optionalSafeString(
+      record.meaningZh ??
+      record.zh ??
+      record.chinese ??
+      record.translationZh ??
+      record.explanationZh,
+    ) || '')
+    : '';
+  const role = record
+    ? safeLearningText(optionalSafeString(record.role ?? record.type ?? record.use) || '')
+    : '';
+  const sourceQuestionRef = record
+    ? safeLearningText(optionalSafeString(record.sourceQuestionRef ?? record.questionRef) || '')
+    : '';
+
+  return {
+    expression,
+    ...(meaningZh ? { meaningZh } : {}),
+    ...(role ? { role } : {}),
+    ...(sourceQuestionRef ? { sourceQuestionRef } : {}),
+  };
+};
+
+const normalizePart3TopicLanguage = (value: unknown): Part3TopicLanguageSection[] => {
+  const source = Array.isArray(value) ? value : [];
+  const seen = new Set<string>();
+  return source
+    .map((item, index): Part3TopicLanguageSection | null => {
+      const record = isRecord(item) ? item : {};
+      const rawItems = Array.isArray(record.items)
+        ? record.items
+        : Array.isArray(record.expressions)
+          ? record.expressions
+          : Array.isArray(record.phrases)
+            ? record.phrases
+            : [];
+      const items = rawItems
+        .map(normalizePart3TopicLanguageItem)
+        .filter((entry): entry is Part3TopicLanguageSection['items'][number] => Boolean(entry))
+        .filter(item => {
+          const key = item.expression.toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 6);
+      if (!items.length) return null;
+      const title = safeLearningText(
+        optionalSafeString(record.title ?? record.sectionTitle) || `Topic-bound language ${index + 1}`,
+      );
+      const noteZh = optionalSafeString(record.noteZh ?? record.whyZh ?? record.rationaleZh);
+      return {
+        title,
+        noteZh: noteZh ? safeLearningText(noteZh) : undefined,
+        items,
+      };
+    })
+    .filter((item): item is Part3TopicLanguageSection => Boolean(item))
+    .slice(0, 3);
+};
+
+const normalizePart3DiscussionFeedback = (
+  value: unknown,
+  request: SpeakingRequest,
+  validationErrors: string[],
+  normalizedFields: string[],
+): SpeakingFeedback['part3Feedback'] => {
+  if (request.sessionKind !== 'part3_discussion_thread') return undefined;
+
+  const answers = request.threadAnswers || [];
+  const source = isRecord(value) ? value : {};
+  if (!isRecord(value)) normalizedFields.push('part3FeedbackMissing');
+  const rawAnswers = Array.isArray(source.answers) ? source.answers : [];
+  const rawByQuestionRef = new Map(
+    rawAnswers
+      .map((item, index) => {
+        const record = isRecord(item) ? item : {};
+        const questionRef = safeLearningText(typeof record.questionRef === 'string' ? record.questionRef : `Q${index + 1}`).toUpperCase();
+        return [questionRef, record] as const;
+      }),
+  );
+
+  const normalizedAnswers = answers.map((answer, index) => {
+    const questionRef = `Q${index + 1}`;
+    const record = rawByQuestionRef.get(questionRef) || (isRecord(rawAnswers[index]) ? rawAnswers[index] as Record<string, unknown> : {});
+    const fallbackFrame = part3QuestionFrameFallback(answer.question);
+    const questionFrame = normalizePart3QuestionFrame(record.questionFrame, fallbackFrame);
+    const targetAnswer = safeLearningText(
+      typeof record.targetAnswer === 'string'
+        ? record.targetAnswer
+        : typeof record.nextSpeakableVersion === 'string'
+          ? record.nextSpeakableVersion
+          : '',
+    );
+    const ctChain = normalizePart3CtChain(record.ctChain, questionFrame);
+    const microUpgrade = normalizePart3MicroUpgrade(record.microUpgrade ?? record.band8Move ?? record.nextMove);
+    const thinkingDiagnosis = normalizePart3ThinkingDiagnosis(record.thinkingDiagnosis ?? record.diagnosis, questionFrame, ctChain);
+    const feedbackMode = normalizePart3FeedbackMode(record.feedbackMode, microUpgrade, ctChain, questionFrame);
+    const targetAnswerHighlights = targetAnswer
+      ? normalizePart3TargetAnswerHighlights(
+        record.targetAnswerHighlights,
+        targetAnswer,
+        `part3Feedback.answers[${index}].targetAnswerHighlights`,
+        validationErrors,
+        normalizedFields,
+      ).slice(0, feedbackMode === 'micro_upgrade' ? 2 : 3)
+      : [];
+    return {
+      questionRef,
+      question: safeLearningText(optionalSafeString(record.question) || answer.question),
+      answer: safeLearningText(optionalSafeString(record.answer) || answer.answer),
+      questionFrame,
+      questionFrameLabelZh: safeLearningText(optionalSafeString(record.questionFrameLabelZh) || part3QuestionFrameLabelZh(questionFrame)),
+      questionFrameGuidanceZh: safeLearningText(optionalSafeString(record.questionFrameGuidanceZh) || part3QuestionFrameGuidanceZh(questionFrame)),
+      ctChain,
+      feedbackMode,
+      thinkingDiagnosis,
+      microUpgrade,
+      likelyExaminerFollowUp: safeLearningText(optionalSafeString(record.likelyExaminerFollowUp ?? record.followUpQuestion) || ''),
+      targetAnswer,
+      targetAnswerHighlights,
+    };
+  });
+
+  normalizedFields.push(`part3Answers:${normalizedAnswers.length}`);
+  normalizedFields.push(`part3TargetAnswers:${normalizedAnswers.filter(item => item.targetAnswer).length}`);
+  normalizedFields.push(`part3MicroUpgrades:${normalizedAnswers.filter(item => item.microUpgrade).length}`);
+  const topicLanguage = normalizePart3TopicLanguage(source.topicLanguage ?? source.languageBank ?? source.topicVocabulary);
+  if (topicLanguage.length) normalizedFields.push(`part3TopicLanguage:${topicLanguage.flatMap(item => item.items).length}`);
+
+  return {
+    topic: safeLearningText(optionalSafeString(source.topic) || request.topic || 'Part 3 Discussion'),
+    threadId: safeLearningText(optionalSafeString(source.threadId) || request.threadId || 'part3_discussion_thread'),
+    answers: normalizedAnswers,
+    topicLanguage,
+    sessionPriorityZh: optionalSafeString(source.sessionPriorityZh),
+  };
+};
+
 const normalizeSpeakingFeedback = (
   value: unknown,
   request: SpeakingRequest,
@@ -3483,11 +4064,23 @@ const normalizeSpeakingFeedback = (
   const lengthMustFix = buildSpeakingLengthMustFix(transcriptWords, part);
   const limitTransformation = shouldLimitSpeakingTransformation(request.transcript || '', transcriptWords, part);
   const promptMismatchWarning = buildSpeakingPromptMismatchWarning(request.question || '', request.transcript || '', part);
+  const headlineSource =
+    source.bandEstimateExcludingPronunciation ??
+    source.bandEstimate ??
+    source.estimatedBand ??
+    source.overallBand;
+  const rawScoreFallbackValues = [
+    scores.fluencyCoherence,
+    scores.lexicalResource,
+    scores.grammaticalRangeAccuracy,
+  ].filter((score): score is number => typeof score === 'number' && Number.isFinite(score) && score > 0);
+  const headlineFallback = rawScoreFallbackValues.length ? Math.min(...rawScoreFallbackValues) : FALLBACK_SCORE;
   const cappedHeadline = normalizeHalfBandScore(applySpeakingLengthCap(
     asNumber(
-      source.bandEstimateExcludingPronunciation,
+      headlineSource,
       'bandEstimateExcludingPronunciation',
       validationErrors,
+      headlineFallback,
     ),
     transcriptWords,
     part,
@@ -3574,7 +4167,7 @@ const normalizeSpeakingFeedback = (
   }
   const providerScoreConsistencyNote = optionalSafeString(source.scoreConsistencyNoteZh);
   const scoreConsistencyNoteZh = shouldNormalizeSpeakingScore
-    ? `Score normalized: pronunciation is not assessed, and without a quality cap the visible estimate should not fall below the minimum visible language score ${formatConservativeBandEstimate(minimumVisibleScore)}.`
+    ? `Score normalized: without a quality cap, the visible estimate should not fall below the minimum visible language score ${formatConservativeBandEstimate(minimumVisibleScore)}.`
     : providerScoreConsistencyNote;
 
   const defaultTargetValidationZh = currentAnswerIsHighBand
@@ -3589,12 +4182,18 @@ const normalizeSpeakingFeedback = (
     mode: source.mode === 'mock' ? 'mock' : 'practice',
     module: 'speaking',
     part,
+    sessionKind: request.sessionKind,
+    topic: request.topic || optionalSafeString(source.topic),
+    threadId: request.threadId || optionalSafeString(source.threadId),
+    threadAnswers: request.threadAnswers,
     part2Feedback: normalizePart2Feedback(source.part2Feedback, request, validationErrors, normalizedFields),
+    part3Feedback: normalizePart3DiscussionFeedback(source.part3Feedback, request, validationErrors, normalizedFields),
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     transcript: asString(source.transcript, request.transcript || FALLBACK_TEXT, 'transcript', validationErrors),
     bandEstimateExcludingPronunciation: normalizedHeadline,
     bandEstimateRange,
     estimateRationaleZh: optionalSafeString(source.estimateRationaleZh),
+    speakingCeilingDiagnosis: normalizeSpeakingCeilingDiagnosis(source.speakingCeilingDiagnosis),
     targetBandFloor: speakingTargetFloor,
     targetLayer: currentAnswerIsHighBand
       ? 'High-band stability'
@@ -3760,7 +4359,9 @@ const normalizeSpeakingFeedback = (
       tag: safeLearningText(item.tag, 'speaking_issue'),
       explanationZh: safeLearningText(item.explanationZh),
     }))
-    .filter(item => item.original && item.correction && item.explanationZh);
+    .filter(item => item.original && item.correction && item.explanationZh)
+    .map(item => normalizeSharedSpeakingFatalError(item, request.transcript || ''))
+    .filter((item): item is FatalError => Boolean(item));
   const sanitizedNaturalnessHints = feedbackWithTargetState.naturalnessHints
     .map(item => ({
       ...item,
@@ -3769,7 +4370,9 @@ const normalizeSpeakingFeedback = (
       tag: safeLearningText(item.tag, 'naturalness'),
       explanationZh: safeLearningText(item.explanationZh),
     }))
-    .filter(item => item.original && item.better && item.explanationZh);
+    .filter(item => item.original && item.better && item.explanationZh)
+    .map(item => normalizeSharedSpeakingNaturalnessHint(item, request.transcript || ''))
+    .filter((item): item is NaturalnessHint => Boolean(item));
   const routedSpeakingIssues = promoteGrammarTaggedSpeakingHints(
     sanitizedFatalErrors,
     sanitizedNaturalnessHints,

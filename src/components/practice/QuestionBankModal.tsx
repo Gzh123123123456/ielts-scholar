@@ -53,8 +53,14 @@ const matchesBankItem = (record: PracticeRecord, item: QuestionBankItem) => {
   if (item.task && 'task' in record && record.task !== item.task) return false;
 
   if (item.matchKey && record.module === 'speaking') {
-    return record.sessionKind === 'part1_topic_thread' &&
-      (record.topicId === item.matchKey || record.threadId === item.id);
+    if (item.part === 1) {
+      return record.sessionKind === 'part1_topic_thread' &&
+        (record.topicId === item.matchKey || record.threadId === item.id);
+    }
+    if (item.part === 3) {
+      return record.sessionKind === 'part3_discussion_thread' &&
+        (record.threadId === item.id || record.threadId === item.matchKey);
+    }
   }
 
   if (item.id) return record.questionId === item.id;

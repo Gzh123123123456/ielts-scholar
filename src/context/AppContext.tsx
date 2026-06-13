@@ -13,7 +13,7 @@ interface UserProfile {
 export interface MasteredExpressionMemory {
   id: string;
   expression: string;
-  source: 'part2_signal' | 'manual';
+  source: 'part2_signal' | 'part3_language_bank' | 'part3_discussion_frame' | 'manual';
   signal?: string;
   module?: string;
   part?: number;
@@ -105,7 +105,12 @@ const sanitizeProfile = (value: unknown): UserProfile => {
           return {
             id: typeof record.id === 'string' && record.id ? record.id : profileExpressionKey(expression, signal),
             expression,
-            source: record.source === 'manual' || record.source === 'part2_signal' ? record.source : 'part2_signal',
+            source: record.source === 'manual' ||
+              record.source === 'part2_signal' ||
+              record.source === 'part3_language_bank' ||
+              record.source === 'part3_discussion_frame'
+              ? record.source
+              : 'part2_signal',
             signal,
             module: typeof record.module === 'string' ? record.module : undefined,
             part: typeof record.part === 'number' ? record.part : undefined,

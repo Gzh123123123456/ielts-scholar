@@ -11,6 +11,8 @@ import {
 import type { SpeakingPrompt } from '@/src/data/speaking/speakingPromptTypes';
 
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const topicIdFromTitle = (topic: string) =>
+  topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 const categoryMatchers: [SpeakingTopicCategory, string[]][] = [
   ['Work & Study', ['work', 'study', 'career', 'job', 'teacher', 'school', 'education', 'science', 'language']],
@@ -95,6 +97,186 @@ const activeSeasonalPart3 = mainlandPrompts
       }));
   });
 
+export type Part3DiscussionQuestionProvenance = 'active_bank_source' | 'product_supplement' | 'v1_fallback';
+
+export type Part3DiscussionFrame =
+  | 'cause_reason'
+  | 'change_trend'
+  | 'evaluation_stance'
+  | 'comparison_contrast'
+  | 'advantages_disadvantages'
+  | 'solution_suggestion'
+  | 'category_criteria'
+  | 'consequence_impact';
+
+export interface Part3DiscussionQuestion {
+  id: string;
+  question: string;
+  topic: string;
+  topicCategory?: SpeakingTopicCategory;
+  tags?: string[];
+  discussionFrame: Part3DiscussionFrame;
+  provenance: Part3DiscussionQuestionProvenance;
+  sourceQuestionId?: string;
+  supplementId?: string;
+  bankGroupId?: string;
+}
+
+export interface Part3DiscussionSet {
+  id: string;
+  topicId: string;
+  topic: string;
+  title: string;
+  topicCategory?: SpeakingTopicCategory;
+  tags: string[];
+  bankGroupId?: string;
+  bankCompleteness?: SpeakingPrompt['completeness'];
+  hasProductSupplement?: boolean;
+  questions: Part3DiscussionQuestion[];
+}
+
+const classifyPart3DiscussionFrame = (question: string): Part3DiscussionFrame => {
+  const normalized = question.toLowerCase().replace(/[’']/g, "'");
+  if (/advantage|disadvantage|benefit|drawback|positive and negative|pros and cons/.test(normalized)) return 'advantages_disadvantages';
+  if (/difference|different|compare|which .*more important|which .*better|prefer|rather|than|or .* older|young .* old|past and .*today/.test(normalized)) return 'comparison_contrast';
+  if (/how (?:has|have|do|does|did|can|could|might|will|would).*(?:change|changed)|what .*changes|in recent years|now than in the past|of the past and that of today/.test(normalized)) return 'change_trend';
+  if (/impact|effect|influence|affect|inspire/.test(normalized)) return 'consequence_impact';
+  if (/what kind|what kinds|what type|what types|what are the (?:qualities|features|characteristics|personalities)|what should .*consider|what makes/.test(normalized)) return 'category_criteria';
+  if (/how can|what can .*do|what can be done|what should .*do|how should|ways? to|solve|reduce|encourage|protect|improve/.test(normalized)) return 'solution_suggestion';
+  if (/why|what (?:causes|makes|motivates|leads to)|reason/.test(normalized)) return 'cause_reason';
+  return 'evaluation_stance';
+};
+
+const part3ProductSupplements: Record<string, string[]> = {
+  'sp2_2026may_foreign-country-short-stay_01': [
+    'What are the advantages and disadvantages of spending a short time abroad?',
+    'How can a short stay in another country affect a person\'s future plans?',
+  ],
+  'sp2_2026may_tech-product_01': [
+    'Why do some people always want to buy the latest technology?',
+    'How might new technology change people\'s daily lives in the future?',
+  ],
+  'sp2_2026may_app-program_01': [
+    'How can apps make people\'s lives more convenient?',
+  ],
+  'sp2_2026may_shopping-mall_01': [
+    'How have people\'s shopping habits changed in recent years?',
+    'Do you think shopping malls will remain popular in the future?',
+  ],
+};
+
+const part3DiscussionBlueprints = (count: number) => {
+  if (count < 3) return [];
+  if (count === 3) return [[1, 2, 3]];
+  if (count === 4) return [[1, 2, 3], [2, 3, 4]];
+  if (count === 5) return [[1, 2, 3], [3, 4, 5]];
+
+  const groups: number[][] = [];
+  for (let index = 1; index <= count; index += 3) {
+    const group = Array.from({ length: Math.min(3, count - index + 1) }, (_, offset) => index + offset);
+    if (group.length === 3) groups.push(group);
+  }
+  const last = groups[groups.length - 1];
+  if (last && last[last.length - 1] < count) {
+    groups.push([count - 2, count - 1, count]);
+  }
+  return groups;
+};
+
+const buildSeasonalPart3DiscussionSets = (): Part3DiscussionSet[] => {
+  const sourceGroups = mainlandPrompts
+    .filter(prompt => prompt.part === 2 && Array.isArray(prompt.followUps) && prompt.followUps.length > 0);
+
+  return sourceGroups.flatMap((prompt): Part3DiscussionSet[] => {
+    const topicCategory = toTopicCategory(prompt);
+    const topicId = topicIdFromTitle(prompt.topic);
+    const tags = prompt.tags.length ? prompt.tags : [topicCategory];
+    const sourceQuestions: Part3DiscussionQuestion[] = (prompt.followUps || [])
+      .map(question => question.trim())
+      .filter(Boolean)
+      .map((question, index) => ({
+        id: `${prompt.id}_fu_${String(index + 1).padStart(2, '0')}`,
+        question,
+        topic: prompt.topic,
+        topicCategory,
+        tags,
+        discussionFrame: classifyPart3DiscussionFrame(question),
+        provenance: 'active_bank_source',
+        sourceQuestionId: `${prompt.id}_fu_${String(index + 1).padStart(2, '0')}`,
+        bankGroupId: prompt.id,
+      }));
+    const supplementQuestions: Part3DiscussionQuestion[] = (part3ProductSupplements[prompt.id] || [])
+      .map(question => question.trim())
+      .filter(Boolean)
+      .map((question, index) => {
+        const supplementId = `${prompt.id}_product_supplement_${String(index + 1).padStart(2, '0')}`;
+        return {
+          id: supplementId,
+          question,
+          topic: prompt.topic,
+          topicCategory,
+          tags,
+          discussionFrame: classifyPart3DiscussionFrame(question),
+          provenance: 'product_supplement',
+          supplementId,
+          bankGroupId: prompt.id,
+        };
+      });
+    const discussionQuestions = [...sourceQuestions, ...supplementQuestions];
+
+    return part3DiscussionBlueprints(discussionQuestions.length).map((indexes, setIndex) => ({
+      id: `sp3set_2026may_${topicId}_${String(setIndex + 1).padStart(2, '0')}`,
+      topicId,
+      topic: prompt.topic,
+      title: prompt.topic,
+      topicCategory,
+      tags,
+      bankGroupId: prompt.id,
+      bankCompleteness: prompt.completeness,
+      hasProductSupplement: supplementQuestions.length > 0,
+      questions: indexes.map(index => discussionQuestions[index - 1]).filter(Boolean),
+    }));
+  });
+};
+
+const buildV1Part3DiscussionSets = (): Part3DiscussionSet[] => {
+  const byTopic = v1SpeakingPart3.reduce((map, question) => {
+    const topicId = topicIdFromTitle(question.topic);
+    const list = map.get(topicId) || [];
+    list.push(question);
+    map.set(topicId, list);
+    return map;
+  }, new Map<string, SpeakingQuestion[]>());
+
+  return Array.from(byTopic.entries()).flatMap(([topicId, questions]) => {
+    const first = questions[0];
+    const tags = first.tags || [first.topicCategory, first.topic].filter((value): value is string => Boolean(value));
+    const sourceQuestions: Part3DiscussionQuestion[] = questions.map(question => ({
+      id: question.id,
+      question: question.question,
+      topic: question.topic,
+      topicCategory: question.topicCategory,
+      tags: question.tags,
+      discussionFrame: classifyPart3DiscussionFrame(question.question),
+      provenance: 'v1_fallback',
+      sourceQuestionId: question.id,
+    }));
+
+    return part3DiscussionBlueprints(sourceQuestions.length).map((indexes, setIndex) => ({
+      id: `sp3set_v1_${topicId}_${String(setIndex + 1).padStart(2, '0')}`,
+      topicId,
+      topic: first.topic,
+      title: first.topic,
+      topicCategory: first.topicCategory,
+      tags,
+      questions: indexes.map(index => sourceQuestions[index - 1]).filter(Boolean),
+    }));
+  });
+};
+
+const activeSeasonalPart3DiscussionSets = buildSeasonalPart3DiscussionSets();
+const fallbackPart3DiscussionSets = buildV1Part3DiscussionSets();
+
 export const speakingPart1: SpeakingQuestion[] = activeSeasonalPart1.length
   ? activeSeasonalPart1
   : v1SpeakingPart1;
@@ -106,6 +288,10 @@ export const speakingPart2: SpeakingQuestion[] = activeSeasonalPart2.length
 export const speakingPart3: SpeakingQuestion[] = activeSeasonalPart3.length
   ? activeSeasonalPart3
   : v1SpeakingPart3;
+
+export const speakingPart3DiscussionSets: Part3DiscussionSet[] = activeSeasonalPart3DiscussionSets.length
+  ? activeSeasonalPart3DiscussionSets
+  : fallbackPart3DiscussionSets;
 
 export const activeSpeakingBankStats = {
   source: 'speaking-2026-05-08-mainland',
@@ -123,6 +309,9 @@ export const activeSpeakingBankStats = {
     part1: speakingPart1.length,
     part2: speakingPart2.length,
     part3: speakingPart3.length,
+  },
+  discussionSetCounts: {
+    part3: speakingPart3DiscussionSets.length,
   },
 };
 
@@ -148,9 +337,6 @@ export interface Part1TopicThreadSet {
   tags: string[];
   questions: Part1ThreadQuestion[];
 }
-
-const topicIdFromTitle = (topic: string) =>
-  topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 const sourceThreadQuestion = (question: SpeakingQuestion): Part1ThreadQuestion => ({
   id: question.id,

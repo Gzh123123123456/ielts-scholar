@@ -26,7 +26,7 @@ export interface SpeakingAnalysisRequest {
   part: number;
   question: string;
   transcript: string;
-  sessionKind?: 'single_question' | 'part1_topic_thread';
+  sessionKind?: 'single_question' | 'part1_topic_thread' | 'part3_discussion_thread';
   topic?: string;
   threadId?: string;
   threadAnswers?: SpeakingThreadAnswer[];

@@ -1,5 +1,5 @@
 ﻿import { formatConservativeBandEstimate, getTargetLabel, getTargetLabelZh } from './bands';
-import type { Part1DevelopmentTarget, SpeakingFeedback, SpeakingMaterialBankItem, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
+import type { Part1DevelopmentTarget, Part3AnswerFeedback, SpeakingFeedback, SpeakingMaterialBankItem, WritingFeedback, WritingTask1Feedback } from './ai/schemas';
 import { validatePart1ThreadFeedbackIntegrity } from './ai/part1ThreadIntegrity';
 import {
   buildPart1LearningDisplayModel,
@@ -28,7 +28,7 @@ interface MarkdownFilenameInput {
   topic?: string;
   prompt?: string;
   timestamp?: string | Date;
-  sessionKind?: 'part1_topic_thread' | 'single_question';
+  sessionKind?: 'part1_topic_thread' | 'part3_discussion_thread' | 'single_question';
 }
 
 const GENERIC_TOPIC_PATTERN = /academic task|task 1|task 2|writing|speaking|general/i;
@@ -1180,6 +1180,213 @@ ${exportExpressions.length ? `## 可积累表达
 ${exportExpressions.map(part1ExpressionItemLines).join('\n')}\n` : ''}
 ` : ''}
 
+  _Exported: ${formatExportDate(timestamp)}_`;
+};
+
+const part3FeedbackModeExportLabel = (mode?: string) => {
+  if (mode === 'language_repair') return 'Language repair';
+  if (mode === 'part3_generalisation') return 'Part 3 generalisation';
+  if (mode === 'answer_scope') return 'Answer scope';
+  if (mode === 'precision_upgrade') return 'Precision upgrade';
+  if (mode === 'compression_upgrade') return 'Compression upgrade';
+  if (mode === 'nuance_upgrade') return 'Nuance upgrade';
+  if (mode === 'micro_upgrade') return 'Micro-upgrade';
+  return 'Reasoning upgrade';
+};
+
+const splitPart3SpokenSentences = (text = '') =>
+  (text.replace(/\s+/g, ' ').trim().match(/[^.!?。！？]+[.!?。！？]?/g) || [])
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+
+const part3TryThisWordCount = (text: string) =>
+  text.trim().split(/\s+/).filter(Boolean).length;
+
+const isWeakPart3TryThisLine = (line = '') => {
+  const cleaned = line.replace(/\s+/g, ' ').trim();
+  if (!cleaned || /[\u3400-\u9fff]/.test(cleaned)) return true;
+  if (/[\[\]{}]/.test(cleaned)) return true;
+  const words = part3TryThisWordCount(cleaned);
+  const lower = cleaned.toLowerCase();
+  if (words < 7) return true;
+  if (/^(in my opinion|overall|to sum up|all in all|i'd say|i would say|yes|no|not really|it depends)\b/.test(lower) && words < 14) return true;
+  if (/\b(wide variety|different kinds|many things|several reasons|depends on the situation)\b/.test(lower) &&
+    !/\b(such as|including|like|because|while|whereas|rather than|instead of|not .* but|for example|for instance|which means|as a result)\b/.test(lower)) {
+    return true;
+  }
+  return false;
+};
+
+const hasPart3GroupSubject = (line: string) =>
+  /\b(people|families|workers|students|children|parents|older people|young people|readers|audiences|society|government|some people|others|those who|busy adults|modern life|modern families)\b/i.test(line);
+
+const isFirstPersonCenteredPart3Line = (line: string) =>
+  /\b(for me|personally|in my opinion|my family|my view|i think|i feel|i can|i usually|i personally)\b/i.test(line);
+
+const hasPart3CategoryContent = (line: string) => {
+  const lower = line.toLowerCase();
+  if (/\b(such as|including|like|a mix of|types of|categories|genre|genres|classic|online|self-help|fiction|non-fiction)\b/.test(lower)) return true;
+  return /,\s*[^,]+,\s*(and|or)\s+/.test(line);
+};
+
+const part3TryThisMatchesIssue = (sentence: string, item: Part3AnswerFeedback) => {
+  if (isWeakPart3TryThisLine(sentence)) return false;
+  if (item.feedbackMode === 'part3_generalisation') {
+    return hasPart3GroupSubject(sentence) && !isFirstPersonCenteredPart3Line(sentence);
+  }
+  if (item.feedbackMode === 'answer_scope' || item.questionFrame === 'category_criteria') {
+    return hasPart3CategoryContent(sentence);
+  }
+  return true;
+};
+
+const part3TryThisSentenceScore = (sentence: string) => {
+  if (isWeakPart3TryThisLine(sentence)) return -100;
+  const lower = sentence.toLowerCase();
+  let score = Math.min(part3TryThisWordCount(sentence), 32);
+  if (/\b(such as|including|like|for example|for instance)\b/.test(lower)) score += 16;
+  if (/\b(because|since|while|whereas|rather than|instead of|not .* but|which means|as a result|so that)\b/.test(lower)) score += 14;
+  if (/\b(people|families|workers|students|children|parents|older people|young people|readers|audiences|society|government)\b/.test(lower)) score += 8;
+  if (/,/.test(sentence)) score += 3;
+  if (/^(in my opinion|overall|to sum up|all in all|i'd say|i would say)\b/.test(lower)) score -= 10;
+  return score;
+};
+
+const part3TryThisLine = (item: Part3AnswerFeedback) => {
+  const upgradedLine = cleanLearningText(item.microUpgrade?.upgradedLine);
+  if (upgradedLine && part3TryThisMatchesIssue(upgradedLine, item)) return upgradedLine;
+  const candidates = splitPart3SpokenSentences(cleanLearningText(item.targetAnswer));
+  const best = candidates
+    .filter(sentence => part3TryThisMatchesIssue(sentence, item))
+    .map(sentence => ({ sentence, score: part3TryThisSentenceScore(sentence) }))
+    .sort((a, b) => b.score - a.score)[0];
+  if (best && best.score > 0) return best.sentence;
+  return candidates.find(sentence => part3TryThisMatchesIssue(sentence, item)) || '';
+};
+
+const part3ReusableFrameGuidance = (frame?: Part3AnswerFeedback['questionFrame']) => {
+  if (frame === 'category_criteria') return '替换方法：把 A/B/C 换成具体类别，再补选择原因。';
+  if (frame === 'solution_suggestion') return '替换方法：把 A/B 换成两个改进方向，C 换成具体动作。';
+  if (frame === 'comparison_contrast') return '替换方法：把 A/B 换成两类人、两个时代或两种场景。';
+  if (frame === 'cause_reason') return '替换方法：把 A 换成表层原因，B 换成更深层原因。';
+  if (frame === 'change_trend') return '替换方法：把 A/B 换成变化前后，再补原因。';
+  if (frame === 'advantages_disadvantages') return '替换方法：把 A 换成适用场景，B 换成风险或边界。';
+  if (frame === 'consequence_impact') return '替换方法：把 A 换成短期影响，B 换成长期结果。';
+  return '替换方法：把 X 换成题目对象，再用两类人或两种情况对照。';
+};
+
+const part3ReusableFrameFallback = (frame?: Part3AnswerFeedback['questionFrame']) => {
+  if (frame === 'category_criteria') return 'People tend to choose a mix of A, B and C, depending on their interests and lifestyle.';
+  if (frame === 'solution_suggestion') return 'X could improve both A and B, for example by doing C.';
+  if (frame === 'comparison_contrast') return 'A may..., because..., whereas B often...';
+  if (frame === 'cause_reason') return 'One reason is A, but there is also a deeper reason: B.';
+  if (frame === 'change_trend') return 'The biggest change is that A has become B, mainly because...';
+  if (frame === 'advantages_disadvantages') return 'It can be useful when A, but it becomes a problem if B.';
+  if (frame === 'consequence_impact') return 'This can lead to A in the short term, and B in the long run.';
+  return 'For some people, X can be difficult because..., but for others, it can be worthwhile because...';
+};
+
+const isBackendStylePart3Frame = (frame = '') =>
+  /[\[\]{}]/.test(frame) || /\bplaceholder\b/i.test(frame);
+
+const part3ReusableFrameLine = (item: Part3AnswerFeedback) => {
+  const providerFrame = cleanLearningText(item.thinkingDiagnosis?.reusableFrame);
+  return providerFrame && !isBackendStylePart3Frame(providerFrame)
+    ? providerFrame
+    : part3ReusableFrameFallback(item.questionFrame);
+};
+
+const part3LanguageExportItem = (item: unknown) => {
+  const record = item && typeof item === 'object' ? item as Record<string, unknown> : null;
+  const expressionSource = typeof item === 'string'
+    ? item
+    : typeof record?.expression === 'string'
+      ? record.expression
+      : typeof record?.phrase === 'string'
+        ? record.phrase
+        : typeof record?.term === 'string'
+          ? record.term
+          : '';
+  const expression = cleanLearningText(expressionSource);
+  if (!expression) return null;
+  const meaningSource = typeof record?.meaningZh === 'string'
+    ? record.meaningZh
+    : typeof record?.meaning === 'string'
+      ? record.meaning
+      : typeof record?.translationZh === 'string'
+        ? record.translationZh
+        : '';
+  return {
+    expression,
+    meaningZh: cleanLearningText(meaningSource),
+  };
+};
+
+const buildPart3DiscussionMarkdown = (
+  feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
+  timestamp?: string | Date,
+) => {
+  const part3 = feedback.part3Feedback;
+  const answers = part3?.answers || [];
+  const shortTopic = limitWords(part3?.topic || feedback.topic || feedback.question || 'Part 3 Discussion', 10);
+  const range = feedback.bandEstimateRange;
+  const estimateText = range && Number.isFinite(range.lower) && Number.isFinite(range.upper)
+    ? `${formatConservativeBandEstimate(range.lower)}-${formatConservativeBandEstimate(range.upper)}`
+    : `${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右`;
+  const thinkingBlocks = answers.map(item => {
+    const diagnosis = item.thinkingDiagnosis;
+    const tryLine = part3TryThisLine(item);
+    const upgradeRule = diagnosis?.upgradeRuleZh ||
+      [diagnosis?.mainCeilingZh || item.ctChain.missingLinkZh, diagnosis?.bestNextMoveZh || item.ctChain.nextMoveZh]
+        .filter(Boolean)
+        .join(' ');
+    const reusableFrame = part3ReusableFrameLine(item);
+    return cleanLines([
+      `### ${item.questionRef}. ${cleanLearningText(item.question)}`,
+      `- Mode: ${part3FeedbackModeExportLabel(item.feedbackMode)}`,
+      `- 这题怎么想: ${cleanLearningText(diagnosis?.questionThinkingZh || item.questionFrameGuidanceZh)}`,
+      (diagnosis?.retainedIdeaZh || diagnosis?.whatWorksZh) && `- 保留你的思路: ${cleanLearningText(diagnosis?.retainedIdeaZh || diagnosis?.whatWorksZh)}`,
+      upgradeRule && `- 升级规则: ${cleanLearningText(upgradeRule)}`,
+      reusableFrame && `- 可迁移句型: ${cleanLearningText(diagnosis?.reusableFrameZh || part3ReusableFrameGuidance(item.questionFrame))}\n  ${cleanLearningText(reusableFrame)}`,
+      tryLine && `- 试着这样说: ${tryLine}`,
+    ]).join('\n');
+  }).join('\n\n');
+  const language = (part3?.topicLanguage || []).length
+    ? (part3?.topicLanguage || []).slice(0, 3).map(section => {
+      const items = Array.isArray(section.items) ? section.items : [];
+      return cleanLines([
+        `### ${cleanLearningText(section.title)}`,
+        section.noteZh && cleanLearningText(section.noteZh),
+        items.slice(0, 6)
+          .map(part3LanguageExportItem)
+          .filter((item): item is { expression: string; meaningZh: string } => Boolean(item))
+          .map(item => `- ${item.expression}${item.meaningZh ? `：${item.meaningZh}` : ''}`)
+          .join('\n'),
+      ]).join('\n');
+    }).join('\n\n')
+    : '- 暂无稳定的题组专属表达。';
+  const nextAnswers = answers
+    .filter(item => item.targetAnswer.trim())
+    .map(item => cleanLines([
+      `### ${item.questionRef}. ${cleanLearningText(item.question)}`,
+      cleanLearningText(item.targetAnswer),
+    ]).join('\n\n'))
+    .join('\n\n');
+
+  return `# IELTS Speaking Part 3｜${shortTopic}
+
+## 1. 题组估计
+- Ideal-delivery estimate：${estimateText}
+
+## 2. Topic-bound Language
+${language}
+
+## 3. Thinking Diagnosis
+${part3?.sessionPriorityZh ? `${cleanLearningText(part3.sessionPriorityZh)}\n\n` : ''}${thinkingBlocks || '- 本次没有稳定的 Part 3 thinking diagnosis。'}
+
+## 4. Three Next Speakable Answers
+${nextAnswers || '- 本次没有可靠的 next speakable answer。'}
+
 _Exported: ${formatExportDate(timestamp)}_`;
 };
 
@@ -1195,6 +1402,9 @@ export const buildSpeakingTrainingMarkdown = (
   if (feedback.sessionKind === 'part1_topic_thread' && feedback.threadFeedback) {
     return buildPart1TopicThreadMarkdown(feedback, timestamp, options);
   }
+  if (feedback.sessionKind === 'part3_discussion_thread' && feedback.part3Feedback) {
+    return buildPart3DiscussionMarkdown(feedback, timestamp);
+  }
 
   const shortQuestion = limitWords(feedback.question, 9);
   const path = reviewCardAnswerPath(feedback).map(cleanLearningText).filter(Boolean);
@@ -1205,12 +1415,13 @@ export const buildSpeakingTrainingMarkdown = (
   const estimateText = range && Number.isFinite(range.lower) && Number.isFinite(range.upper)
     ? `${formatConservativeBandEstimate(range.lower)}-${formatConservativeBandEstimate(range.upper)}`
     : `${formatConservativeBandEstimate(feedback.bandEstimateExcludingPronunciation)} 左右`;
-  const estimateLine = `- 当前单题训练估计：${estimateText}，不含发音；样本短或证据有限时按保守值处理。`;
+  const estimateLine = `- Ideal-delivery estimate：${estimateText}`;
   const estimateNotes = cleanLines([
     feedback.scoreConsistencyNoteZh && `- Score consistency: ${feedback.scoreConsistencyNoteZh}`,
     range?.rationaleZh && `- Boundary rationale: ${range.rationaleZh}`,
     feedback.estimateRationaleZh && `- Estimate rationale: ${feedback.estimateRationaleZh}`,
   ]).join('\n');
+  const estimateNotesWithCeiling = estimateNotes;
   const transferTitle = feedback.part === 1
     ? '## 6. 可能追问｜Possible follow-ups'
     : '## 6. 可迁移题目';
@@ -1222,7 +1433,7 @@ export const buildSpeakingTrainingMarkdown = (
 
 ## 1. 本题要求
 ${estimateLine}
-${estimateNotes}
+${estimateNotesWithCeiling}
 ${reviewCardRequirements(feedback).map(item => `- ${item}`).join('\n')}${fillerNote}
 
 ## 2. 回答路线

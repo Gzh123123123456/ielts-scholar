@@ -22,6 +22,14 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
   "bandEstimateExcludingPronunciation": 0,
   "bandEstimateRange": { "lower": 5.5, "upper": 6.0, "rationaleZh": "string" },
   "estimateRationaleZh": "string",
+  "speakingCeilingDiagnosis": {
+    "whyNotLowerZh": "concise Chinese evidence for why the answer deserves at least the current level",
+    "whyNotHigherZh": "concise Chinese ceiling for why it is not yet the next stable level",
+    "nextBandTriggerZh": "one minimal Chinese action that would move the answer toward the next half/whole band",
+    "textOnlyNoteZh": "concise Chinese product premise: estimate assumes the current answer can be spoken naturally and clearly",
+    "partSpecificCeilingZh": "concise Chinese Part 1/2/3-specific ceiling, not an official separate part band",
+    "ceilingTags": ["too_written | not_precise_enough | limited_paraphrase_flexibility | over_explained | not_spontaneous_enough | weak_nuance | generic_reasoning | insufficient_part3_abstraction | minor_collocation_inaccuracy | grammar_errors_still_persistent | under_developed | part_inappropriate_development | delivery_unknown"]
+  },
   "highBandStabilityZh": "string",
   "nextStepZh": "string",
   "scores": {
@@ -96,6 +104,67 @@ export const speakingSchemaInstruction = `The JSON object must match this exact 
       "whyItWorksZh": "string"
     }]
   },
+  "part3Feedback": {
+    "topic": "string",
+    "threadId": "string",
+    "sessionPriorityZh": "string",
+    "answers": [{
+      "questionRef": "Q1",
+      "question": "exact Part 3 question",
+      "answer": "exact learner answer for this question",
+      "questionFrame": "cause_reason | change_trend | evaluation_stance | comparison_contrast | advantages_disadvantages | solution_suggestion | category_criteria | consequence_impact",
+      "questionFrameLabelZh": "short Chinese label for the question type",
+      "questionFrameGuidanceZh": "one concise Chinese instruction for how to answer this question type",
+      "feedbackMode": "language_repair | reasoning_upgrade | part3_generalisation | answer_scope | precision_upgrade | compression_upgrade | nuance_upgrade | micro_upgrade",
+      "thinkingDiagnosis": {
+        "questionThinkingZh": "这题怎么想：what this Part 3 question is really asking the learner to do",
+        "retainedIdeaZh": "保留你的思路：one useful learner idea/material worth keeping",
+        "upgradeRuleZh": "升级规则：what is missing, why it matters, and how to add it",
+        "reusableFrameZh": "可迁移句型：short Chinese note explaining how to reuse the frame",
+        "reusableFrame": "Natural English sentence frame with A/B/C or X placeholders; no square-bracket prompt syntax",
+        "whatWorksZh": "legacy fallback: what the current answer already does well",
+        "mainCeilingZh": "legacy fallback: the current growth edge that most limits the answer",
+        "bestNextMoveZh": "legacy fallback: the one next training move",
+        "answerControlZh": "whether it answers directly or wanders",
+        "generalisationZh": "whether it moves from personal example to broader people/society/topic level",
+        "nuanceZh": "whether it avoids absolute claims and uses condition/contrast where needed",
+        "supportZh": "whether reason + example/contrast/consequence are enough",
+        "speakabilityZh": "whether it sounds naturally spoken instead of written",
+        "examinerReadinessZh": "whether the learner could handle a likely why/how/change follow-up"
+      },
+      "ctChain": {
+        "claim": "the learner's current or improved core claim",
+        "reason": "main reason",
+        "exampleOrEvidence": "example, evidence, or concrete scenario",
+        "contrastOrCondition": "contrast, limitation, or condition",
+        "consequence": "result, impact, or wider implication",
+        "missingLinkZh": "Chinese diagnosis of the weakest logic link",
+        "nextMoveZh": "Chinese instruction for the next thinking move"
+      },
+      "microUpgrade": {
+        "focusZh": "one concise upgrade focus when a full rewrite is not needed",
+        "upgradedLine": "one spoken sentence or compact move the learner can reuse",
+        "whyItHelpsZh": "why this improves the answer"
+      },
+      "targetAnswer": "one natural spoken Part 3 next speakable answer for this exact question; may be a compact micro-version for strong answers",
+      "targetAnswerHighlights": [{
+        "quote": "exact substring copied from targetAnswer",
+        "role": "claim | reason | example | contrast | consequence | language",
+        "labelZh": "short Chinese label",
+        "whyItWorksZh": "string"
+      }]
+    }],
+    "topicLanguage": [{
+      "title": "short Chinese topic label, e.g. 书籍类型",
+      "noteZh": "optional very short Chinese note; omit if not needed",
+      "items": [{
+        "expression": "directly relevant spoken Part 3 expression",
+        "meaningZh": "very short Chinese meaning",
+        "role": "category | reason | contrast | solution | example | result | language",
+        "sourceQuestionRef": "Q1"
+      }]
+    }]
+  },
   "preservedStyle": [{
     "text": "string",
     "reasonZh": "string",
@@ -121,6 +190,14 @@ export const speakingPart1TopicThreadSchemaInstruction = `The JSON object must m
   "bandEstimateExcludingPronunciation": 0,
   "bandEstimateRange": { "lower": 5.5, "upper": 6.0, "rationaleZh": "string" },
   "estimateRationaleZh": "string",
+  "speakingCeilingDiagnosis": {
+    "whyNotLowerZh": "concise Chinese evidence for why the answer deserves at least the current level",
+    "whyNotHigherZh": "concise Chinese ceiling for why it is not yet the next stable level",
+    "nextBandTriggerZh": "one minimal Chinese action that would move the answer toward the next half/whole band",
+    "textOnlyNoteZh": "concise Chinese product premise: estimate assumes the current answer can be spoken naturally and clearly",
+    "partSpecificCeilingZh": "concise Chinese Part 1-specific ceiling, not an official separate part band",
+    "ceilingTags": ["too_written | not_precise_enough | limited_paraphrase_flexibility | over_explained | not_spontaneous_enough | weak_nuance | generic_reasoning | insufficient_part3_abstraction | minor_collocation_inaccuracy | grammar_errors_still_persistent | under_developed | part_inappropriate_development | delivery_unknown"]
+  },
   "scores": {
     "fluencyCoherence": 0,
     "lexicalResource": 0,
@@ -281,7 +358,7 @@ Return actionable topic-session feedback only:
 - Do not treat ASR casing, punctuation, spacing, capitalization, transcript spelling, or written-form cleanup as learner language errors. Do not recommend inflated, essay-like, or "more formal" Part 1 wording; prefer short, natural, direct spoken English.
 - Do not annotate or discuss transcript-only artifacts as learner errors anywhere in the result: capitalization, punctuation, spacing, ASR casing noise, spelling-only forms that cannot be confirmed in speech, or homophone spelling such as to/too when the spoken form is indistinguishable. If a span has a real structural issue plus casing/spelling cleanup, keep only the real structural issue and anchor only the real spoken-language problem.
 - Avoid over-absolute grammar explanations. If a word or structure behaves differently by meaning or context, explain why the proposed wording is more natural in this answer rather than saying the learner's alternative is never grammatical.
-- Pronunciation is not assessed in this mode. Do not claim pronunciation problems, correct pronunciation, pronunciation score impact, or delivery issues in estimateRationaleZh, bandEstimateRange.rationaleZh, annotations, thread-level patterns, retry plan, or material bank.
+- Pronunciation is not assessed in this mode. Treat that as a product premise, not a repeated learner-facing disclaimer. Do not claim pronunciation problems, correct pronunciation, pronunciation score impact, or delivery issues in estimateRationaleZh, bandEstimateRange.rationaleZh, speakingCeilingDiagnosis, annotations, thread-level patterns, retry plan, or material bank.
 - Before returning every repair and every cleanRetryAnswers item, self-check: grammatical, natural spoken IELTS Part 1 English, intended meaning preserved, concise enough for Part 1, not more formal or inflated. Return one preferred repair, not slash-separated alternatives, in better/combinedRepair.
 - CLEAN RETRY ANSWERS: return exactly one cleanRetryAnswers item for every Q in the thread. This is the learner's own answer rebuilt for immediate re-recording, not a Band target answer, model answer, or target conversation. Preserve real personal material, repair important grammar/collocation/structure, compress overlong detail, and never invent personal facts. A good Part 1 cleaner answer answers directly and normally includes one relevant reason, example, contrast, or concrete personal detail where the question invites it. One sentence is acceptable when adequate; two natural spoken sentences are often strongest for hometown, preferences, routines, experiences, or opinions; three may be appropriate to preserve a short contrast or important personal fact. Do not delete useful personal detail merely to satisfy "concise", do not turn a Part 1 repair into a mini Part 2 response, and do not pad an already-correct retry answer merely to appear higher band. Use noteZh only when you substantially compress, reorganize the answer, or need to preserve uncertainty because the intended stance cannot be safely recovered.
 - CLEAN RETRY CERTIFICATION AWARENESS: each displayed clean retry answer will be rejected before display if it still contains a genuine MUST FIX. Avoid introducing alternative wording merely for variety when the learner's repaired answer is already correct and concise. A valid cleaner answer may still admit optional polish; optional variation must not be treated as failure or used to trigger endless paraphrasing. Acceptable contextual vocabulary choices must not be promoted to MUST FIX only because a different expression is more specific.
@@ -304,7 +381,8 @@ Return actionable topic-session feedback only:
 - OPTIONAL POLISH: minor low-priority naturalness only; never put serious issues here.
 - NEXT RETRY PLAN: return concise grounded actions: one priority accuracy pattern, one answer-length/focus rule, and one useful expression or personal material item to try naturally next time. Do not advise more complexity when the problem is overexpansion. If developmentStatus is "needed", the plan must say that core accuracy may be stable but answer development limits the current result. This is a training blocker for topic completion, not a red grammar error, and must not demand long prepared responses.
 - NEXT RETRY FOCUS: keep as a compact legacy summary of nextRetryPlan.
-Current estimate is a low-key transcript-based topic-session practice estimate excluding pronunciation. Base it on the learner's current submitted answers, not on your cleaner answers or Material Bank. Absence of MUST FIX does not automatically justify 6.5-7.0 or 7.0+ if the answers are consistently thin or show limited language range. Accurate but very concise answer sets should keep a numerical practice estimate, but the estimate must be conservative and the rationale should say in concise Chinese that the language is accurate but there is not yet enough real-detail development / language range. Natural Part 1 answers do not need to be long: direct answer plus one relevant detail/reason is sufficient for many questions. If you return a higher range, the rationale must cite actual evidence from the submitted answers: specific personal details, natural elaboration, flexible but spoken-appropriate wording, or coherent direct answers. Never return "no issues" plus no optional improvement path while lowering the estimate only with vague simple-vocabulary reasoning. If evidence genuinely straddles two adjacent half-bands, return a bandEstimateRange with exactly one half-band step, for example 4.5-5.0 or 5.0-5.5, never a wider range.`;
+Current estimate is a low-key topic-session training estimate under ideal delivery: assume the current answer can be spoken naturally and clearly. Base it on the learner's current submitted answers, not on your cleaner answers or Material Bank. Do not repeat pronunciation or full-test disclaimers in the visible rationale. Absence of MUST FIX does not automatically justify 6.5-7.0 or 7.0+ if the answers are consistently thin or show limited language range. Accurate but very concise answer sets should keep a numerical practice estimate, but the estimate must be conservative and the rationale should say in concise Chinese that the language is accurate but there is not yet enough real-detail development / language range. Natural Part 1 answers do not need to be long: direct answer plus one relevant detail/reason is sufficient for many questions. If you return a higher range, the rationale must cite actual evidence from the submitted answers: specific personal details, natural elaboration, flexible but spoken-appropriate wording, or coherent direct answers. Never return "no issues" plus no optional improvement path while lowering the estimate only with vague simple-vocabulary reasoning. If evidence genuinely straddles two adjacent half-bands, return a bandEstimateRange with exactly one half-band step, for example 4.5-5.0 or 5.0-5.5, never a wider range.
+Return speakingCeilingDiagnosis as a concise Chinese teaching diagnosis. Part 1 ceiling is not abstract depth; it is natural, direct, specific conversation control. whyNotLowerZh should name what is already stable, whyNotHigherZh should name one real ceiling such as thin detail, template-like phrasing, over-expansion, limited range, or accuracy issues, and nextBandTriggerZh should give the smallest next retry move. Use 1-2 ceilingTags only. Do not invent an official Part 1 score rubric.`;
 
 export const speakingPart1LearningAssetsInstruction = `This is the independent IELTS Speaking Part 1 learning-assets pass.
 The core Part 1 analysis has already produced annotations and certified clean retry answers. Do not rescore, do not rewrite clean answers, do not create annotations, and do not discuss internal diagnostics.
@@ -398,9 +476,11 @@ export const speakingAudioTranscriptionSchemaInstruction = `The JSON object must
 }`;
 
 export const speakingPromptCalibration = `Speaking feedback must be spoken IELTS feedback, not writing-style feedback.
-Current estimate: this is a conservative single-question training estimate, excluding pronunciation. IELTS Speaking is scored across a complete test, so do not present one Part 1/2/3 answer as an official complete Speaking band. If the answer clearly fits one half-band, return a single bandEstimateExcludingPronunciation and omit bandEstimateRange or set it to null. If the evidence genuinely straddles two adjacent half-bands, return bandEstimateRange as an object with lower, upper, and rationaleZh, with exactly one half-band step, such as { "lower": 5.5, "upper": 6.0, "rationaleZh": "..." }. Do not return bandEstimateRange as a string. Do not use a range as a generic uncertainty escape hatch. Never return placeholder range objects, identical lower/upper values, lower/upper values outside 1.0-9.0, or ranges wider than one adjacent half-band step.
+Current estimate: this is an ideal-delivery training estimate. Assume the current answer can be spoken naturally and clearly, and do not repeat pronunciation or full-test disclaimers in learner-facing rationale. If the answer clearly fits one half-band, return a single bandEstimateExcludingPronunciation and omit bandEstimateRange or set it to null. If the evidence genuinely straddles two adjacent half-bands, return bandEstimateRange as an object with lower, upper, and rationaleZh, with exactly one half-band step, such as { "lower": 5.5, "upper": 6.0, "rationaleZh": "..." }. Do not return bandEstimateRange as a string. Do not use a range as a generic uncertainty escape hatch. Never return placeholder range objects, identical lower/upper values, lower/upper values outside 1.0-9.0, or ranges wider than one adjacent half-band step.
 Global target policy: keep the current estimate honest and conservative. Target answers / improved answers / model answers are pedagogical practice answers, not certified score guarantees. If the learner's current lower bound is below Band 7.0, generate a complete, natural, learnable Band 7 target answer with a clear margin over the original while preserving useful personal material. If the current lower bound is at or above 7.0 but not high-band-stable, generate a more mature Band 7+ target answer that improves precision, naturalness, development, and delivery, but do not label it Band 8+. If the current answer is already high-band-stable, switch to high-band stability. Do not inflate the current estimate to match the target. Do not label any learner-facing output as Band 8+, Advanced, Verified, Not Verified, or Band 9. Do not make stronger target answers more formal, more academic, or more essay-like by default; stronger means clearer logic, more precise language, stronger idea development, better examples, more natural flow, and examiner-friendly execution.
 Score consistency: pronunciation is not assessed and must never be treated as a hidden reason for lowering the headline estimate. If bandEstimateExcludingPronunciation is lower than all three visible criteria, either lower the relevant visible criterion or make estimateRationaleZh name a real cap such as insufficient sample, off-task content, overlong Part 1, essay-like Part 3, or malformed answer. If all visible criteria are 7.0 and there is no cap/fatal issue, the headline estimate should not be 6.5.
+Ceiling diagnosis: return speakingCeilingDiagnosis as a teaching diagnosis, not an official separate Part 1/2/3 score. Explain three things in concise Chinese: why the answer is not lower, why it is not yet the next stable level, and the smallest next-band trigger. Half bands mean the answer stably meets the lower whole band and shows some features of the next band, but not consistently. Do not mechanically ask "why not 8.0"; if the learner is around 6.5, explain the trigger for stable 7.0; if around 7.0, explain 7.5 or 8.0 only when evidence justifies that boundary.
+High-band ceiling lens: do not cap coherent, relevant, mostly error-free, flexible answers at 7.0 by default. Decide whether the visible text is: correct but still too written or not spontaneous enough; stable 7 with some 8-like precision; an 8.0 candidate with flexible, natural, mostly error-free language; or a rare 8.5+ candidate with near-full flexibility and precision. Use only 1-2 ceilingTags that actually explain the current ceiling. textOnlyNoteZh is a quiet product premise, not a disclaimer to repeat on the result page.
 Target answer process: first score the user's current answer, including bandEstimateRange only when genuinely on an adjacent half-band boundary. Then generate upgradedAnswer in the same response whenever a target answer is appropriate. Do not run or describe target certification, verifier status, repair loops, independent validation, self-scores, or target status. In high-band-stable cases, upgradedAnswer may be an empty string; use highBandStabilityZh and nextStepZh instead. Return concise rationale fields, not hidden reasoning.
 Question-answer match: if the transcript clearly answers a different prompt, add a fatalErrors item with tag "prompt_mismatch" and explanationZh "这段回答似乎没有回答当前题目，请确认是否选错题目。". Do not treat a wrong prompt only as weak grammar or vocabulary. Do not over-trigger for partially relevant answers.
 Preserve the learner's usable idea where possible, but expand it into exam-ready material instead of only recording it. In preservedStyle, return idea-development material grounded in the reviewed transcript: text = learner material or short summary; reasonZh = why it is useful; expansionZh = how to expand this exact material for the current part; sampleNextStep = one compact English next sentence/frame when safe; transferQuestions = 1-3 IELTS questions where the same material can transfer; partUseZh = how this material should be used in this part. Do not fabricate life events. If the transcript lacks detail, say what kind of real detail the learner should add instead of inventing it.
@@ -418,6 +498,7 @@ Part 1 rules:
 - Structure: direct answer + one specific detail + light reason/feeling.
 - A stronger Part 1 target normally stays 2-4 sentences. Do not add academic words, a long explanation, or a mini essay.
 - Do not overload advanced vocabulary or write polished paragraphs.
+- Part 1 ceiling is about natural, direct, specific conversation control. Do not reward over-developed or abstract essay-like answers merely because the grammar is good.
 - If the transcript is very short but meaningful, do not invent a full personal answer. Give starter development guidance or a bracketed starter such as: "Yes, I do. I usually read [type of books] when I want to relax. It helps me [personal reason]."
 - If you add example details not provided by the user, label them as a starter example or use brackets.
 - reusableExample.canBeReusedFor may include 1-3 likely same-topic follow-up IELTS questions.
@@ -429,6 +510,7 @@ Part 2 rules:
 - Band 7 Part 2 has a clear story spine, specific details, feeling, and why-it-matters. Band 7+ Part 2 is more vivid but believable, smoother, and more reflective, not literary.
 - A stronger Part 2 target should show setting, a specific scene, concrete action, challenge/change, feeling shift, and why it matters. Do not merely add vocabulary.
 - Do not treat the cue card as a checklist. Concrete details and personal reflection matter more than fancy vocabulary.
+- Part 2 ceiling must consider narrative control: timeline, scene detail, concrete action, emotional turn, cue-card coverage, and ending. Do not score only by grammar.
 
 Part 3 rules:
 - Abstract discussion, but face-to-face spoken answer, not Writing Task 2 spoken aloud.
@@ -438,16 +520,85 @@ Part 3 rules:
 - A stronger Part 3 target should have spoken reasoning depth: claim, condition or contrast, example or observation, consequence, and natural discussion rhythm. Do not make it sound like Writing Task 2.
 - Prefer spoken bridges such as "I'd say...", "I think...", "It really depends...", "One major change is...", and "A good example would be..."
 - Avoid writing-style connectors and essay phrases such as "Furthermore", "Moreover", "Consequently", "It is universally acknowledged that", and "In contemporary society".
+- Part 3 ceiling must consider whether the answer can generalize beyond personal experience, explain why/how, compare groups, use condition/concession, and discuss consequences, changes, or future. If an answer is mostly personal preference, diagnose it as too Part 1-like even if the grammar is good.
 - If the original answer already has a position and example, do not give generic advice like "add an example"; identify the real issue, such as grammar, word form, pronunciation-transcript error, weak cause/effect, weak consequence, unclear comparison, or spoken clarity.
 - Before finalizing any Band 7+ upgradedAnswer for an already-7.0 learner, self-check whether it clearly improves idea development, precision, organization, and naturalness without making it essay-like.`;
+
+export const speakingTranscriptEvidenceInstruction = `Shared spoken-transcript feedback contract for all Speaking parts:
+- Treat the ASR transcript as evidence of spoken language, not as an essay draft. The learner may have spoken with normal pauses, restarts, fillers, and no visible punctuation.
+- Before selecting visible feedback, build an internal full candidate list of meaningful spoken-language issues across the whole answer or thread. Then choose the visible items by stable teaching priority: prompt/task mismatch or meaning breakdown; broken sentence/clause structure; recurring grammar or word-form pattern; high-impact collocation/word choice; sentence-control/run-on clarity; then optional spoken naturalness. Do not let the display budget show only the first obvious errors while missing later, higher-impact errors.
+- Mandatory scan lanes for every answer before selecting visible items:
+  1. sentence skeleton: missing subject/verb/complement, broken "the reason is that..." clauses, run-on answers that need spoken chunking;
+  2. verb and noun collocation: wrong action + object pairs, wrong adaptation/source direction, wrong library/service/action wording, wrong access/distract/benefit patterns;
+  3. noun form and countability: plural uncountables, "one of the ... way", schoolwork/work, fiction/novel/work distinctions;
+  4. translated-sounding chunks that affect spoken naturalness: facility/service labels, electronic product/device wording, accident/conducive/indoor relaxation style phrases;
+  5. part-task fit: Part 1 directness and personal specificity, Part 2 story timeline and cue-card spine, Part 3 generalisation, comparison, category scope, solution layers, and reasoning depth.
+- Visible feedback is allowed to be selective, but it must be selective after this scan. Obvious high-impact items in later sentences should not disappear merely because earlier low-level errors used the budget.
+- Do not mark transcript-only artifacts as learner errors: capitalization, punctuation, spacing, proper-noun casing, book/title casing, ASR line breaks, spelling-only forms that cannot be confirmed in speech, or light fillers/restarts such as "well", "yes", "I think", "you know" when they are not excessive.
+- Still mark audible language problems that affect clarity, accuracy, or naturalness: missing sentence components, malformed clauses, subject-verb agreement, tense, articles/determiners, singular/plural and countability, word form, preposition, collocation, word choice, Chinglish noun/verb phrases, and unclear long sentence control.
+- A correction must be a complete natural spoken repair for that local issue. If the learner's phrase has both grammar and word-choice/collocation problems, fix both in the same repair instead of making a minimal grammar patch that leaves unnatural English. Prefer one clean repair over slash-separated alternatives.
+- Explanations should be spoken-use oriented, not grammar-label oriented. Briefly say what the learner is trying to express, why the current wording is unclear or unnatural, and give the natural spoken version. Avoid explanations that only say "missing that", "word order", or "nominalization" when the real issue is the wrong collocation, wrong meaning relation, or too-written expression.
+- Do not solve this by memorized blacklists. Infer the intended meaning from the question, part, and answer context. If a phrase is probably an ASR ambiguity rather than stable learner wording, skip it or mention it only as a low-priority check, never as a hard MUST FIX.
+- Apply the same evidence standard across Part 1, Part 2, and Part 3. The teaching surface differs by part, but the definition of a real spoken-language problem is shared.`;
+
+export const speakingPart3DiscussionFeedbackInstruction = `Part 3 discussion-thread feedback contract:
+- Apply this only when sessionKind is "part3_discussion_thread". For Part 1 and Part 2, set part3Feedback.answers to an empty array.
+- part3Feedback is the learner-facing source for Thinking Diagnosis, question frame, topic-bound language, and the final per-question Next Speakable Answers. Do not make the UI infer these from fatalErrors, naturalnessHints, band9Refinements, preservedStyle, or the generic upgradedAnswer.
+- Return exactly one part3Feedback.answers item per submitted threadAnswers item, in the same order, with questionRef values Q1, Q2, Q3.
+- Classify each questionFrame from the question's real demand:
+  cause_reason = why / causes / reasons;
+  change_trend = change over time;
+  evaluation_stance = do you think / agree / should / likely / value judgment;
+  comparison_contrast = compare two groups, periods, choices, or priorities;
+  advantages_disadvantages = benefits and drawbacks;
+  solution_suggestion = what should/can X do, improve, solve, encourage, protect, reduce;
+  category_criteria = types, kinds, qualities, criteria, what makes X;
+  consequence_impact = effects, impact, influence, results.
+- First diagnose the learner's current answer, then decide the single main issue type from evidence:
+  language_repair = grammar, collocation, or sentence structure affects clarity or naturalness;
+  reasoning_upgrade = there is a position, but the reason, support, condition, contrast, or consequence is shallow or broken;
+  part3_generalisation = the answer is too Part 1-like and stays around I/my experience instead of people, families, society, groups, or modern life;
+  answer_scope = the question asks for types, kinds, categories, criteria, qualities, or "what makes X", and the answer names too few categories, uses too narrow a scope, or misses the requested classification;
+  precision_upgrade = the answer is basically good, but wording is vague, generic, or not exact enough;
+  compression_upgrade = the answer is complete but too long, written, over-explained, or hard to say naturally;
+  nuance_upgrade = the answer is too absolute and needs a condition, concession, or "it depends" boundary;
+  micro_upgrade = use only when the main move is a tiny delivery polish and none of the more specific issue types above is a better fit.
+- Do not use a hard band threshold for feedbackMode. A learner can have good logic with grammar issues, or strong language with weak reasoning. Pick the mode from the answer evidence.
+- Do not create separate "student mode" and "teacher/high-band mode". Decide per answer inside the same thread; Q1 can need language repair while Q2 only needs a micro-upgrade.
+- Learner-facing diagnosis and guidance fields must be concise Chinese. English section titles are fine, but explanations should not become long bilingual paragraphs.
+- thinkingDiagnosis is the main teaching surface. Use the new learner-facing fields first:
+  questionThinkingZh = "这题怎么想": explain the question frame and thinking task, not praise. This must come before language repair. For category questions, say it needs 2-3 categories; for solution questions, split solution layers; for comparison questions, name the comparison dimension.
+  retainedIdeaZh = "保留你的思路": one short Chinese line naming useful learner material worth keeping. Keep it compact.
+  upgradeRuleZh = "升级规则": combine the true ceiling and the next move. Name what is missing, why it hurts, and how to fix it. When language_repair is the issue, quote the most damaging original phrase and corrected phrase here, for example "when while people having a meal -> during meals / when people are having a meal". Do not write generic notes like "there are grammar errors" without naming the broken place.
+  reusableFrameZh = "可迁移句型": one short Chinese note about how the English frame can transfer. Prefer notes like "把 X 换成 home cooking / family meals / reading / using libraries" rather than long explanation.
+  reusableFrame = natural English sentence frame with A/B/C or X placeholders. Do not use square-bracket prompt syntax like "[some people]" or "[reason]". It must look like learner material, not backend instructions.
+  Keep legacy whatWorksZh/mainCeilingZh/bestNextMoveZh only as compatibility summaries if useful; do not rely on them as the main teaching surface.
+- If an answer starts from "for me", "personally", "my family", or another personal-only frame and does not quickly generalise, diagnose it directly in Chinese: "这听起来太像 Part 1，需要立刻泛化到人群、社会场景或现实原因。" Do not soften this as merely "personal but universal".
+- Even in language_repair mode, the final targetAnswer must still answer as Part 3. Preserve the learner's usable stance, but generalise beyond the personal view in the first sentence or immediately after it. For example, move from "for me" to groups such as working adults, busy families, children, older people, audiences, schools, media, or modern city life when semantically relevant.
+- For answer_scope, the diagnosis must name the missing scope: categories, examples, criteria, groups, or qualities. The Try this line and targetAnswer must add concrete categories or criteria, not just say "a wide variety".
+- ctChain is a compact support structure, not a generic ideal outline. It should reflect the learner's answer and the needed next move. Fill claim, reason, exampleOrEvidence, contrastOrCondition, consequence only when useful. missingLinkZh and nextMoveZh should name the weakest logic link and next thinking move in Chinese.
+- targetAnswer is the final Next Speakable Answer shown after diagnosis. For weak answers, it can be a full 4-6 sentence spoken answer. For stronger answers, prefer a shorter, more spoken micro-version that keeps the same logic instead of expanding into essay prose.
+- For high-quality answers, keep the learner's logic and improve delivery only. Do not add more content just to look advanced.
+- microUpgrade is the "试着这样说" line for every feedbackMode. Return one English sentence, phrase, or compact spoken move, normally 12-35 words, that the learner can directly add to or swap into the answer. It must close the loop with upgradeRuleZh/reusableFrame. It is not an opening filler, not a conclusion, not a translation, and not another full model answer.
+- Never put square-bracket placeholders in microUpgrade or targetAnswer. Bracket placeholders belong to backend prompts, not learner-facing material.
+- For part3_generalisation, microUpgrade must not re-center the answer on "I / for me / personally". If preserving the learner's stance, convert it into a group contrast, e.g. busy people vs people who enjoy cooking, older people vs younger people, parents vs children, audiences vs performers. The sentence should sound like Part 3 discussion, not Part 1 personal preference.
+- For answer_scope, microUpgrade must add actual categories, criteria, or groups. Do not return a generic line like "young people read a wide variety of books" unless it names the categories.
+- Invalid Try this examples: "In my opinion, yes.", "Overall, I think...", "I'd say nowadays, young people read a wide variety of books.", "It depends on the situation." These are too generic unless they contain the actual repair, category, reason, contrast, or corrected phrase.
+- Good Try this rules by issue type: language_repair must include the corrected structure or phrase; part3_generalisation must move from I/my view to a group or wider context; answer_scope must include concrete categories or criteria; reasoning_upgrade must add a reason, contrast, example, or result; compression_upgrade must keep the key logic but make it shorter and more spoken.
+- For compression_upgrade, precision_upgrade, nuance_upgrade, and micro_upgrade, targetAnswer must be shorter, more spoken, and easier to deliver than a full rewrite: normally 4-5 short sentences or about 20-30 seconds. Avoid formal essay diction such as "several compelling reasons", "enduring popularity stems from", "fundamentally about fostering", "whenever feasible", or similar inflated wording unless the learner already used it naturally and it fits spoken delivery.
+- targetAnswerHighlights must quote exact substrings from targetAnswer. Use 1-3 highlights only. For micro_upgrade, prefer at most 2 highlights. Avoid visually over-marking nearly every clause.
+- Before final JSON, run a language-quality pass over reusableFrame, microUpgrade, targetAnswer, and topicLanguage. Avoid non-native chunks such as plural uncountable nouns, reversed adaptation direction, Chinglish facility/software labels, and inflated essay diction. Prefer spoken collocations such as "classic Chinese novels", "traditional Chinese fiction", "be adapted into TV dramas", "library facilities", "library services", "digital distractions", and "get distracted by" when semantically appropriate.
+- topicLanguage is a material bank, not another frame bank. It must contain only expressions that can fill the reusableFrame or targetAnswer for the current question set. Avoid broad category leakage: do not add technology/education/government language unless the questions themselves require that domain. Default to 2-3 compact sections. If the three questions cover distinct subtopics, use one section per question. Each section should contain 4-6 items; total topicLanguage should normally be 12-18 items, with a minimum of 8 useful items and a maximum of 20. Each item must include expression and a very short meaningZh. Use short Chinese section titles such as 书籍类型, 图书馆改进, 代际比较. Avoid long explanatory noteZh.
+- Do not solve leakage by blacklists. Solve it by semantic fit: every topicLanguage item must help answer at least one of the current questions.
+- Keep local learner-wording errors in fatalErrors/naturalnessHints for overlay. Keep broader topic vocabulary or reusable macro wording out of overlay; part3Feedback should focus on question frame, logic chain, and the target answer.`;
 
 export const speakingFeedbackDepthInstruction = `Avoid endless sentence-level nitpicking, but do not make low/mid-band feedback sparse.
 Low-noise feedback means layered, high-impact, and readable feedback, not little feedback.
 Silent coverage pass before selecting displayed feedback: for any substantial low/mid-band answer, first scan the transcript clause by clause for clear high-impact problems. Check especially narrative tense consistency, subject-verb or clause-form errors, articles/determiners, malformed noun phrases or word order, high-impact awkward phrasing/collocation, and important task/cue-card coverage gaps for the relevant Part when they materially weaken the response. Then output the meaningful fixes without nitpicking trivial slips or likely ASR noise.
 Classification rule: clear grammar errors must go in fatalErrors / MUST FIX, not only in naturalnessHints. This includes present tense inside an explicitly past narrative, missing articles in specific noun phrases, malformed non-finite clauses where a finite verb is needed, tense mismatch in a past narrative, subject-verb errors, article/determiner errors, clause-form errors, and malformed noun phrases. naturalnessHints are for understandable but non-fatal wording improvements, collocation upgrades, or smoother spoken phrasing.
-Coverage rule: do not omit a separate unrelated clear grammar error merely to keep the page short. If one longer correction clearly covers two linked errors, return one card explaining both; otherwise keep separate unrelated high-impact issues separate. Do not duplicate cards for the same underlying phrase.
+Coverage rule: do not omit a separate unrelated clear grammar, word-form, collocation, or sentence-control problem merely to keep the page short. If one longer correction clearly covers linked errors, return one card explaining both; otherwise keep separate unrelated high-impact issues separate. Do not duplicate cards for the same underlying phrase. If the transcript has many issues, group recurring patterns through a representative span, but still include later high-impact problems when they are more important than earlier minor ones.
 Correction depth by current estimate:
-- Below 6.5: return about 5-8 high-impact correction items across fatalErrors and naturalnessHints when the transcript has enough material. Include at least 3-5 original phrase fixes if the answer contains enough stable wording. Use fatalErrors for clear grammar, collocation, word-choice, tense, or meaning problems that can affect IELTS score. Use naturalnessHints for important spoken phrase upgrades that are not fatal but would noticeably improve LR/GRA/FC. Do not list trivial slips.
+- Below 6.5: select about 5-8 high-impact visible correction items across fatalErrors and naturalnessHints when the transcript has enough material. Include at least 3-5 original phrase fixes if the answer contains enough stable wording. Use fatalErrors for clear grammar, collocation, word-choice, tense, or meaning problems that can affect IELTS score. Use naturalnessHints for important spoken phrase upgrades that are not fatal but would noticeably improve LR/GRA/FC. Do not list trivial slips, but do not hide obvious high-impact issues just because they occur later in the answer.
 - 6.5-7.5: return fewer but still meaningful targeted fixes, focused on precision, coherence, spoken naturalness, and idea development.
 - 8.0+ or high-band stable: keep feedback concise and do not force many corrections.
 Do not invent errors. Do not correct every tiny spoken imperfection. Do not mark isolated likely ASR artifacts as definite grammar errors. If a phrase could be ASR, either avoid making it a Must Fix or phrase the explanation as "check this phrase". Functional-word homophones such as will/well, went/but, and of/off should not be heavily penalized unless repeated or meaning-breaking.
@@ -463,7 +614,8 @@ export const speakingPart2NativeFeedbackInstruction = `Part 2 native feedback co
 - annotations must be provider-native anchored annotations for necessary local repairs only: copy exact learner wording into sourceQuote, choose severity, and explain why that span deserves repair. If a note cannot be anchored to the learner's words, do not put it in annotations.
 - Use must_fix only for issues that materially affect score, story clarity, meaning, or timeline control. Use better_spoken_choice for useful but non-fatal improvements. Use optional_polish sparingly.
 - Do not use annotations for answer-building strategy, generic opener directness, richer story frames, low-yield polish, or language-signal enrichment. Route those to storyModules or languageSignals only. A clearer opener is usually not an annotation unless the original wording creates real confusion.
-- Annotation volume must adapt to the learner level and error density. For mid/high-band answers, prefer 0-3 high-signal annotations over many phrase cards. For low-band or structurally unstable answers, return enough anchored local repairs to teach the recurring grammar pattern, normally 4-8 when the transcript contains that many real teachable errors. If one sentence repeatedly misses past tense, agreement, articles, word forms, or basic sentence structure, show the repeated local repairs or a grouped annotation with multiple layers; do not hide them just to keep the UI short.
+- Annotation selection must be stable for the same transcript. First make an internal full candidate list, then choose the visible annotations by this priority order: meaning/story/timeline-breaking must_fix issues; recurring grammar patterns; high-impact lexical precision/collocation; then optional spoken polish. If two candidates have similar value, keep the earlier sourceQuote in the transcript. Do not alternate between equally minor candidates across retests.
+- Annotation volume must adapt to the learner level and error density, but stay within a stable visible budget. For mid/high-band answers, prefer 0-3 high-signal annotations over many phrase cards. For 5.5-6.0 style answers, normally return 4-5 anchored repairs. For low-band or structurally unstable answers, return up to 6 anchored repairs and group related layers inside the same sourceQuote where possible. If one sentence repeatedly misses past tense, agreement, articles, word forms, or basic sentence structure, show the recurring pattern through a representative span or a grouped annotation rather than a different random set each pass.
 - storyModules should be modular material, not a memorized answer: what/who/where, background, concrete details, what happened, feeling, why it mattered, and current/future influence. Mark AI-suggested additions as suggested_confirm and confirmationNeeded true when they are not confirmed personal memory.
 - languageSignals are the main Part 2 language-growth surface, not a short afterthought. Return exactly six items every time in this order, one for each signal: idiomatic_expression, tense, connector, phrasal_verb, collocation, and clause. The UI only displays your fields; it will not infer, patch, classify, blacklist, or whitelist these signals locally.
 - Before writing languageSignals, run a provider-side teacher planning pass:
@@ -747,12 +899,13 @@ ${speakingAudioTranscriptionSchemaInstruction}`, params.audioBase64, params.mime
 
 You are an IELTS Speaking Part 1 topic-session feedback engine for a local-first practice app.
 Chinese is for diagnosis and explanations. English is for learner wording, corrections, phrase fixes, reusable versions, and short frames.
+${speakingTranscriptEvidenceInstruction}
 ${speakingPart1TopicThreadInstruction}
 
 ${speakingPart1TopicThreadSchemaInstruction}
 
 Input:
-${JSON.stringify(params, null, 2)}`);
+${JSON.stringify(params, null, 2)}`, 0);
     }
 
     const partFocus = params.part === 1
@@ -764,12 +917,14 @@ ${JSON.stringify(params, null, 2)}`);
     return this.generateJson(`${strictJsonInstruction}
 
 You are an IELTS Speaking feedback engine for a local-first practice app.
-Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null and the note must say pronunciation is not formally assessed in V1.
+Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null. Treat ideal delivery as a quiet product premise, not a repeated learner-facing disclaimer.
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 ${speakingPromptCalibration}
+${speakingTranscriptEvidenceInstruction}
 ${speakingFeedbackDepthInstruction}
 ${speakingPart2NativeFeedbackInstruction}
+${speakingPart3DiscussionFeedbackInstruction}
 If the answer is already strong, return an empty fatalErrors array and use naturalnessHints or band9Refinements for concise grounded idea and expression upgrades.
 Feedback must be target-uplift training feedback. Keep the current estimate defensible and conservative, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim at least Band 7.0+.
 If the learner is weak or medium, produce a clean, natural Band 7 target answer for that part with enough improvement margin, not merely a minimal correction. If the learner is already around Band 7.0 or above but not high-band-stable, upgradedAnswer must become a meaningfully stronger Band 7+ training answer rather than another ordinary Band 7 answer. Do not call it Band 8+, Advanced, Verified, Not Verified, or certified.
@@ -783,7 +938,7 @@ Do not use targetRepairFocus, priorTargetAnswer, or authoritativeScore to descri
 ${speakingSchemaInstruction}
 
 Input:
-${JSON.stringify(params, null, 2)}`, 0.1);
+${JSON.stringify(params, null, 2)}`, 0);
   }
 
   async generatePart1LearningAssets(params: import('./base').Part1LearningAssetsRequest): Promise<string> {
@@ -816,7 +971,7 @@ ${JSON.stringify(params, null, 2)}`, 0.45);
 You are the authoritative blind IELTS Speaking text scorer for a local-first training app.
 Score only the submitted transcript against the question. The transcript may be any answer text; do not infer whether it is a learner original, a generated target, or a retest.
 Inputs allowed for judging: Speaking part, question, transcript, and part-specific requirements. Do not use or ask for target floors, target labels, original scores, candidate status, or target certification wording.
-This is a text-based single-question training estimate excluding pronunciation. Pronunciation must be null.
+This is an ideal-delivery single-question training estimate. Pronunciation must be null. Do not repeat pronunciation or full-test disclaimers in rationaleZh.
 Use the same rubric and strictness for every submitted text:
 - fluency/coherence: answer fit, progression, part-appropriate development, spoken organization
 - lexical resource: natural precision, collocation, topic vocabulary, spoken idiom without fake formality

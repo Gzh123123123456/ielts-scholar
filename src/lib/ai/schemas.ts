@@ -83,6 +83,30 @@ export interface BandEstimateRange {
   rationaleZh?: string;
 }
 
+export type SpeakingCeilingTag =
+  | 'too_written'
+  | 'not_precise_enough'
+  | 'limited_paraphrase_flexibility'
+  | 'over_explained'
+  | 'not_spontaneous_enough'
+  | 'weak_nuance'
+  | 'generic_reasoning'
+  | 'insufficient_part3_abstraction'
+  | 'minor_collocation_inaccuracy'
+  | 'grammar_errors_still_persistent'
+  | 'under_developed'
+  | 'part_inappropriate_development'
+  | 'delivery_unknown';
+
+export interface SpeakingCeilingDiagnosis {
+  whyNotLowerZh?: string;
+  whyNotHigherZh?: string;
+  nextBandTriggerZh?: string;
+  textOnlyNoteZh?: string;
+  partSpecificCeilingZh?: string;
+  ceilingTags?: SpeakingCeilingTag[];
+}
+
 export interface SpeakingScoreOnlyResult {
   module: 'speaking';
   operation: 'speaking_score_only';
@@ -433,22 +457,129 @@ export interface SpeakingThreadFeedback {
   previousCleanerConflictCount?: number;
 }
 
+export type Part3QuestionFrame =
+  | 'cause_reason'
+  | 'change_trend'
+  | 'evaluation_stance'
+  | 'comparison_contrast'
+  | 'advantages_disadvantages'
+  | 'solution_suggestion'
+  | 'category_criteria'
+  | 'consequence_impact';
+
+export type Part3TargetAnswerHighlightRole =
+  | 'claim'
+  | 'reason'
+  | 'example'
+  | 'contrast'
+  | 'consequence'
+  | 'language';
+
+export interface Part3TargetAnswerHighlight {
+  quote: string;
+  role?: Part3TargetAnswerHighlightRole;
+  labelZh: string;
+  whyItWorksZh: string;
+}
+
+export interface Part3CriticalThinkingChain {
+  claim?: string;
+  reason?: string;
+  exampleOrEvidence?: string;
+  contrastOrCondition?: string;
+  consequence?: string;
+  missingLinkZh?: string;
+  nextMoveZh?: string;
+}
+
+export type Part3FeedbackMode =
+  | 'language_repair'
+  | 'reasoning_upgrade'
+  | 'part3_generalisation'
+  | 'answer_scope'
+  | 'precision_upgrade'
+  | 'compression_upgrade'
+  | 'nuance_upgrade'
+  | 'micro_upgrade';
+
+export interface Part3ThinkingDiagnosis {
+  questionThinkingZh?: string;
+  retainedIdeaZh?: string;
+  upgradeRuleZh?: string;
+  reusableFrameZh?: string;
+  reusableFrame?: string; // Natural A/B/C or X frame; do not store square-bracket prompt syntax.
+  whatWorksZh?: string;
+  mainCeilingZh?: string;
+  bestNextMoveZh?: string;
+  answerControlZh?: string;
+  generalisationZh?: string;
+  nuanceZh?: string;
+  supportZh?: string;
+  speakabilityZh?: string;
+  examinerReadinessZh?: string;
+}
+
+export interface Part3MicroUpgrade {
+  focusZh: string;
+  upgradedLine: string;
+  whyItHelpsZh: string;
+}
+
+export interface Part3TopicLanguageItem {
+  expression: string;
+  meaningZh?: string;
+  role?: string;
+  sourceQuestionRef?: string;
+}
+
+export interface Part3TopicLanguageSection {
+  title: string;
+  noteZh?: string;
+  items: Part3TopicLanguageItem[];
+}
+
+export interface Part3AnswerFeedback {
+  questionRef: string;
+  question: string;
+  answer: string;
+  questionFrame: Part3QuestionFrame;
+  questionFrameLabelZh: string;
+  questionFrameGuidanceZh: string;
+  ctChain: Part3CriticalThinkingChain;
+  feedbackMode?: Part3FeedbackMode;
+  thinkingDiagnosis?: Part3ThinkingDiagnosis;
+  microUpgrade?: Part3MicroUpgrade;
+  likelyExaminerFollowUp?: string;
+  targetAnswer: string;
+  targetAnswerHighlights: Part3TargetAnswerHighlight[];
+}
+
+export interface Part3DiscussionFeedback {
+  topic: string;
+  threadId: string;
+  answers: Part3AnswerFeedback[];
+  topicLanguage?: Part3TopicLanguageSection[];
+  sessionPriorityZh?: string;
+}
+
 export interface SpeakingFeedback {
   mode: IELTSMode;
   module: 'speaking';
   part: SpeakingPart;
-  sessionKind?: 'single_question' | 'part1_topic_thread';
+  sessionKind?: 'single_question' | 'part1_topic_thread' | 'part3_discussion_thread';
   topic?: string;
   threadId?: string;
   threadAnswers?: SpeakingThreadAnswer[];
   part1RetryReference?: Part1RetryReferenceContext;
   threadFeedback?: SpeakingThreadFeedback;
   part2Feedback?: Part2StoryFeedback;
+  part3Feedback?: Part3DiscussionFeedback;
   question: string;
   transcript: string;
   bandEstimateExcludingPronunciation: number;
   bandEstimateRange?: BandEstimateRange;
   estimateRationaleZh?: string;
+  speakingCeilingDiagnosis?: SpeakingCeilingDiagnosis;
   targetBandFloor?: number;
   targetLayer?: string;
   targetValidationZh?: string;

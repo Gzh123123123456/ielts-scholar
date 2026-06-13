@@ -57,16 +57,18 @@ interface PracticeRecordBase {
 export interface SpeakingPracticeRecord extends PracticeRecordBase {
   module: 'speaking';
   part: 1 | 2 | 3;
-  sessionKind?: 'single_question' | 'part1_topic_thread';
+  sessionKind?: 'single_question' | 'part1_topic_thread' | 'part3_discussion_thread';
   topicId?: string;
   threadId?: string;
   threadQuestions?: {
     id: string;
     question: string;
     topic: string;
-    provenance?: 'active_bank_source' | 'product_supplement';
+    provenance?: 'active_bank_source' | 'product_supplement' | 'v1_fallback';
     sourceQuestionId?: string;
     supplementId?: string;
+    discussionFrame?: string;
+    bankGroupId?: string;
   }[];
   threadAnswers?: {
     questionId: string;
@@ -228,7 +230,13 @@ const asTranscriptSource = (value: unknown): SpeakingPracticeRecord['transcriptS
     : undefined;
 
 const asSpeakingSessionKind = (value: unknown): SpeakingPracticeRecord['sessionKind'] =>
-  value === 'part1_topic_thread' ? 'part1_topic_thread' : value === 'single_question' ? 'single_question' : undefined;
+  value === 'part1_topic_thread'
+    ? 'part1_topic_thread'
+    : value === 'part3_discussion_thread'
+      ? 'part3_discussion_thread'
+      : value === 'single_question'
+        ? 'single_question'
+        : undefined;
 
 const asSpeakingPart = (value: unknown): 1 | 2 | 3 =>
   value === 2 || value === 3 ? value : 1;
@@ -258,9 +266,17 @@ const sanitizeThreadQuestions = (value: unknown): SpeakingPracticeRecord['thread
       id: asString(item.id),
       question: asString(item.question),
       topic: asString(item.topic),
-      provenance: (item.provenance === 'product_supplement' ? 'product_supplement' : 'active_bank_source') as 'active_bank_source' | 'product_supplement',
+      provenance: (
+        item.provenance === 'product_supplement'
+          ? 'product_supplement'
+          : item.provenance === 'v1_fallback'
+            ? 'v1_fallback'
+            : 'active_bank_source'
+      ) as 'active_bank_source' | 'product_supplement' | 'v1_fallback',
       sourceQuestionId: asOptionalString(item.sourceQuestionId),
       supplementId: asOptionalString(item.supplementId),
+      discussionFrame: asOptionalString(item.discussionFrame),
+      bankGroupId: asOptionalString(item.bankGroupId),
     })).filter(item => item.id && item.question)
     : undefined;
 
@@ -916,7 +932,8 @@ const sanitizeSpeakingFeedback = (value: unknown): SpeakingFeedback | undefined 
   const scores = isObject(value.scores) ? value.scores : {};
   const part = asSpeakingPart(value.part);
   const sessionKind = asSpeakingSessionKind(value.sessionKind);
-  const threadAnswers = sessionKind === 'part1_topic_thread'
+  const hasThreadAnswers = sessionKind === 'part1_topic_thread' || sessionKind === 'part3_discussion_thread';
+  const threadAnswers = hasThreadAnswers
     ? Array.isArray(value.threadAnswers)
       ? value.threadAnswers.filter(isObject).map(item => ({
         questionId: asString(item.questionId),

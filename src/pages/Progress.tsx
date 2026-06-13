@@ -171,7 +171,9 @@ const speakingRecordPreview = (record: SpeakingPracticeRecord) =>
     ? preview(record.topic || record.feedback?.topic || record.question)
     : preview(record.question);
 
-const masteredSignalLabel = (value?: string) => {
+const masteredSignalLabel = (value?: string, source?: string) => {
+  if (source === 'part3_language_bank') return 'Part 3 topic language';
+  if (source === 'part3_discussion_frame') return 'Part 3 discussion frame';
   const labels: Record<string, string> = {
     idiomatic_expression: 'Idiomatic expression',
     tense: 'Tense',
@@ -474,7 +476,7 @@ export default function Progress() {
                     </button>
                   </div>
                   <p className="mt-1 text-xs font-sans uppercase tracking-widest text-paper-ink/40">
-                    {masteredSignalLabel(item.signal)}
+                    {masteredSignalLabel(item.signal, item.source)}
                     {item.count > 1 ? ` · ${item.count} times` : ''}
                   </p>
                 </div>

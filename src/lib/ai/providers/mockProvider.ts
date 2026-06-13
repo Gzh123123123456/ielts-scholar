@@ -212,10 +212,10 @@ export class MockProvider implements AIProvider {
         transcript,
         bandEstimateExcludingPronunciation: 6.0,
         estimateRationaleZh: isStableFixture
-          ? 'Mock topic-thread estimate: the submitted answers are accurate and include enough direct Part 1 development from the learner answers. Pronunciation is not formally scored.'
+          ? 'Mock topic-thread estimate: the submitted answers are accurate and include enough direct Part 1 development from the learner answers.'
           : isThinStableFixture || isMixedSufficiencyFixture
-            ? 'Mock topic-thread estimate: core accuracy is stable, but the submitted answers are still thin and need one real supporting detail. Pronunciation is not formally scored.'
-            : 'Mock topic-thread estimate: answers are understandable, but several short-answer control and phrasing issues remain. Pronunciation is not formally scored.',
+            ? 'Mock topic-thread estimate: core accuracy is stable, but the submitted answers are still thin and need one real supporting detail.'
+            : 'Mock topic-thread estimate: answers are understandable, but several short-answer control and phrasing issues remain.',
         scores: {
           fluencyCoherence: 6.0,
           lexicalResource: 6.0,
@@ -384,23 +384,156 @@ export class MockProvider implements AIProvider {
       const words = params.transcript.trim().split(/\s+/).filter(Boolean);
       return words.slice(0, Math.min(words.length, 8)).join(' ');
     })();
+    const part3ThreadAnswers = params.sessionKind === 'part3_discussion_thread'
+      ? params.threadAnswers || []
+      : [];
+    const mockPart3Mode = conservativeEstimate >= 7.5
+      ? 'compression_upgrade'
+      : conservativeEstimate >= 6.5
+        ? 'reasoning_upgrade'
+        : 'answer_scope';
+    const mockPart3Feedback = part3ThreadAnswers.length ? {
+      topic: params.topic || 'Part 3 Discussion',
+      threadId: params.threadId || 'mock_part3_thread',
+      sessionPriorityZh: mockPart3Mode === 'compression_upgrade'
+        ? '这组回答已经有清楚观点；下一步不是写得更长，而是更口语、更精准、更能承接追问。'
+        : '这组回答的重点不是背范文，而是把个人判断推进到原因、人群差异、例子和后果。',
+      answers: part3ThreadAnswers.map((answer, index) => {
+        const questionRef = `Q${index + 1}`;
+        const targetAnswer = mockPart3Mode === 'compression_upgrade'
+          ? "I'd say it depends on the situation. The main issue isn't the idea itself, but whether people can explain the reason clearly and keep it natural in a real conversation."
+          : "I'd say it depends on the group of people. For some people, this can be useful because it saves time and gives them more flexibility. But in other cases, it may weaken communication or make the habit less meaningful. So the answer is not simply yes or no; it depends on the reason and the wider effect.";
+        const tryThisLine = mockPart3Mode === 'compression_upgrade'
+          ? 'The issue is not whether it happens occasionally, but whether it changes people’s habits in the long run.'
+          : 'For many working adults, the real issue is not the activity itself, but the time and effort around it.';
+        const highlightQuote = mockPart3Mode === 'compression_upgrade'
+          ? "The main issue isn't the idea itself"
+          : 'it depends on the group of people';
+        return {
+          questionRef,
+          question: answer.question,
+          answer: answer.answer,
+          questionFrame: index === 1 ? 'cause_reason' : 'evaluation_stance',
+          questionFrameLabelZh: index === 1 ? '原因分析题' : '观点判断题',
+          questionFrameGuidanceZh: index === 1
+            ? '先解释表层原因，再推进到现实压力或心理需求。'
+            : '先给有边界的判断，再用人群差异、原因或结果支撑。',
+          feedbackMode: mockPart3Mode,
+          thinkingDiagnosis: {
+            questionThinkingZh: index === 1
+              ? 'Mock：这是原因题，要先说表层原因，再补现实压力或心理需求。'
+              : 'Mock：这是观点题，要先给边界，再用人群差异和结果支撑。',
+            retainedIdeaZh: 'Mock：回答已经有基本观点，说明不是完全跑题。',
+            upgradeRuleZh: mockPart3Mode === 'compression_upgrade'
+              ? '保留原逻辑，但把书面解释压缩成更自然的一小段口语。'
+              : '当前范围太窄，下一步要补一个具体人群、分类或现实场景，再说明结果。',
+            reusableFrameZh: '把 A/B 替换成当前题目里的两类人、原因或场景。',
+            reusableFrame: 'For A, the issue is often B, whereas for C, it is more about D.',
+            whatWorksZh: 'Mock：回答已经有基本观点，说明不是完全跑题。',
+            mainCeilingZh: mockPart3Mode === 'compression_upgrade'
+              ? '主要上限是答案略像书面解释，口语里的互动感和压缩度还可以更强。'
+              : '主要上限是回答范围太窄，没有把题目要求的类型、原因或人群差异说具体。',
+            bestNextMoveZh: mockPart3Mode === 'compression_upgrade'
+              ? '保留原逻辑，把它压缩成更自然的一小段口语。'
+              : '用 direct answer -> reason -> group contrast/example -> result 的顺序补一层讨论。',
+            generalisationZh: '检查是否从 I / my family 推进到 people / families / working adults / children 等人群层面。',
+            supportZh: '每题至少要有一个 reason，并尽量补 example、contrast 或 consequence 中的一个。',
+            speakabilityZh: mockPart3Mode === 'compression_upgrade'
+              ? '避免把答案加长成 essay paragraph；更像真实考场交流会更强。'
+              : '句子可以先短一点，但逻辑关系要听得清楚。',
+            examinerReadinessZh: '如果考官继续追问 why 或 how, 需要还有一个可展开的原因。'
+          },
+          ctChain: {
+            claim: 'It depends on the situation.',
+            reason: 'Different groups are affected by different practical pressures.',
+            exampleOrEvidence: 'Working adults, families, and students may not make the same choice.',
+            contrastOrCondition: 'It can be positive when it saves time, but negative when it weakens communication.',
+            consequence: 'The wider effect matters more than a simple personal preference.',
+            missingLinkZh: '需要把个人判断推到人群差异、原因和结果。',
+            nextMoveZh: '补一个具体人群或现实场景，再说明它带来的结果。',
+          },
+          microUpgrade: {
+            focusZh: mockPart3Mode === 'compression_upgrade'
+              ? '把成熟但偏书面的解释压缩成更像考场口语的一句话。'
+              : '先补一个具体分类、人群或现实压力，再接原因。',
+            upgradedLine: tryThisLine,
+            whyItHelpsZh: '这句话保留 nuance，同时比大段解释更容易自然说出来。',
+          },
+          targetAnswer,
+          targetAnswerHighlights: [
+            {
+              quote: highlightQuote,
+              role: 'contrast',
+              labelZh: '人群差异',
+              whyItWorksZh: 'Part 3 需要从个人判断推进到不同人群的情况。',
+            },
+            {
+              quote: 'the wider effect',
+              role: 'consequence',
+              labelZh: '结果意识',
+              whyItWorksZh: '这把答案从简单观点推进到讨论层面。',
+            },
+          ].filter(item => targetAnswer.toLowerCase().includes(item.quote.toLowerCase())),
+        };
+      }),
+      topicLanguage: [
+        {
+          title: '人群与场景',
+          noteZh: '',
+          items: [
+            { expression: 'working adults', meaningZh: '上班族' },
+            { expression: 'busy families', meaningZh: '忙碌家庭' },
+            { expression: 'different schedules', meaningZh: '不同作息' },
+            { expression: 'practical pressure', meaningZh: '现实压力' },
+            { expression: 'social habits', meaningZh: '社交习惯' },
+            { expression: 'long-term effect', meaningZh: '长期影响' },
+          ],
+        },
+      ],
+    } : undefined;
     return {
       mode: 'practice',
       module: 'speaking',
       part: params.part as any,
+      sessionKind: params.sessionKind,
+      topic: params.topic,
+      threadId: params.threadId,
+      threadAnswers: params.threadAnswers,
       question: params.question,
       transcript: params.transcript,
       bandEstimateExcludingPronunciation: conservativeEstimate,
-      bandEstimateRange: isPowerCutDemo ? {
-        lower: isStrongPowerCutDemo ? 7.0 : 5.5,
-        upper: isStrongPowerCutDemo ? 7.5 : 6.0,
-        rationaleZh: isStrongPowerCutDemo
-          ? 'Mock boundary demo: this strong Part 2 story has enough development for a 7.0-7.5 range, excluding pronunciation.'
-          : 'Mock boundary demo: the story has usable personal material, but frequent grammar and collocation issues keep it between adjacent half-bands.',
-      } : undefined,
-      estimateRationaleZh: conservativeEstimate >= 7
-        ? '可见语言维度已经接近 7.0：有清楚延展、例子或因果关系；发音未评估。'
-        : '当前回答仍按单题训练样本保守估计：内容延展、自然口语节奏或 Part 适配还不稳定；发音未评估。',
+        bandEstimateRange: isPowerCutDemo ? {
+          lower: isStrongPowerCutDemo ? 7.0 : 5.5,
+          upper: isStrongPowerCutDemo ? 7.5 : 6.0,
+          rationaleZh: isStrongPowerCutDemo
+            ? 'Mock boundary demo: this strong Part 2 story has enough development for a 7.0-7.5 ideal-delivery range.'
+            : 'Mock boundary demo: the story has usable personal material, but frequent grammar and collocation issues keep it between adjacent half-bands.',
+        } : undefined,
+        estimateRationaleZh: conservativeEstimate >= 7
+        ? 'Ideal-delivery estimate：有清楚延展、例子或因果关系，语言维度已经接近 7.0。'
+        : 'Ideal-delivery estimate：内容延展、自然口语节奏或 Part 适配还不稳定。',
+      speakingCeilingDiagnosis: {
+        whyNotLowerZh: conservativeEstimate >= 7
+          ? '回答能直接回应题目，并且有基本展开，不是只给一句空泛判断。'
+          : '至少能表达核心意思，部分句子和话题词可以保留。',
+        whyNotHigherZh: conservativeEstimate >= 7
+          ? (params.part === 3
+              ? '主要 ceiling 是讨论还可以更自然、更精准，避免像写作段落一样完整但略显书面。'
+              : '主要 ceiling 是表达还不够稳定自然，部分细节或搭配仍需要更精准。')
+          : '目前还缺少稳定展开和自然连接，复杂表达一多就容易影响清晰度。',
+        nextBandTriggerZh: params.part === 3
+          ? '下一步只加一个条件或对比，把原因和后果说得更像现场讨论。'
+          : '下一步先稳住一个具体细节，再用更自然的短句说清楚。',
+        textOnlyNoteZh: '默认按当前答案能自然、清楚、流畅地说出时估计。',
+        partSpecificCeilingZh: params.part === 1
+          ? 'Part 1 看自然、直接和一个小扩展，不奖励过度复杂。'
+          : params.part === 2
+            ? 'Part 2 看故事线、画面细节和感受转折，不只看语法。'
+            : 'Part 3 看能否从个人观点上升到人群、原因、对比和影响。',
+        ceilingTags: conservativeEstimate >= 7
+          ? (params.part === 3 ? ['too_written', 'not_spontaneous_enough'] : ['not_precise_enough'])
+          : ['under_developed'],
+      },
       highBandStabilityZh: conservativeEstimate >= 8
         ? '保持自然、清晰和限时稳定；不要为了显得更高级而拉长或书面化。'
         : '',
@@ -414,6 +547,7 @@ export class MockProvider implements AIProvider {
         pronunciation: null,
         pronunciationNote: 'Not formally assessed in V1; this is a single-question training estimate only.',
       },
+      part3Feedback: mockPart3Feedback,
       fatalErrors: hasGrammarDemoError ? [
         {
           original: 'I likes to play football',
@@ -981,8 +1115,8 @@ export class MockProvider implements AIProvider {
       },
       bandEstimateExcludingPronunciation: estimate,
       rationaleZh: isPowerCutDemo
-        ? 'Mock score-only boundary demo for the power-cut answer; pronunciation is excluded.'
-        : 'Mock score-only estimate based on answer length, cohesion markers, and part fit; pronunciation is excluded.',
+        ? 'Mock score-only boundary demo for the power-cut answer under ideal delivery.'
+        : 'Mock score-only ideal-delivery estimate based on answer length, cohesion markers, and part fit.',
       boundaryStatus: estimate >= 8 ? 'borderline_8' : estimate >= 7 ? 'borderline_7' : 'clear',
     };
   }

@@ -8,12 +8,14 @@ import {
   speakingPart1LearningAssetsSchemaInstruction,
   speakingFeedbackDepthInstruction,
   speakingPart2NativeFeedbackInstruction,
+  speakingPart3DiscussionFeedbackInstruction,
   speakingPart1TopicThreadInstruction,
   speakingPart1TopicThreadSchemaInstruction,
   speakingPromptCalibration,
   speakingScoreOnlySchemaInstruction,
   speakingSchemaInstruction,
   speakingTargetValidationSchemaInstruction,
+  speakingTranscriptEvidenceInstruction,
   strictJsonInstruction,
   writingSchemaInstruction,
   writingTargetValidationSchemaInstruction,
@@ -71,12 +73,13 @@ export class DeepSeekProvider implements AIProvider {
 
 You are an IELTS Speaking Part 1 topic-session feedback engine for a local-first practice app.
 Chinese is for diagnosis and explanations. English is for learner wording, corrections, phrase fixes, reusable versions, and short frames.
+${speakingTranscriptEvidenceInstruction}
 ${speakingPart1TopicThreadInstruction}
 
 ${speakingPart1TopicThreadSchemaInstruction}
 
 Input:
-${JSON.stringify(params, null, 2)}`, 0.1);
+${JSON.stringify(params, null, 2)}`, 0);
     }
 
     const partFocus = params.part === 1
@@ -88,14 +91,16 @@ ${JSON.stringify(params, null, 2)}`, 0.1);
     return this.generateJson(`${strictJsonInstruction}
 
 You are an IELTS Speaking feedback engine for a local-first practice app.
-Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null and the note must say pronunciation is not formally assessed in V1.
+Assess transcript-based speaking only. Do not provide a pronunciation score; pronunciation must be null. Treat ideal delivery as a quiet product premise, not a repeated learner-facing disclaimer.
 Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 ${speakingPromptCalibration}
+${speakingTranscriptEvidenceInstruction}
 ${speakingFeedbackDepthInstruction}
 ${speakingPart2NativeFeedbackInstruction}
+${speakingPart3DiscussionFeedbackInstruction}
 If the transcript is extremely short, nonsensical, or too thin for the part, return conservative insufficient-sample feedback.
-Feedback must be target-uplift training feedback. The current score is a conservative single-question training estimate, excluding pronunciation, not an official complete IELTS Speaking band. If evidence genuinely sits between two adjacent half-bands, return bandEstimateRange as an object with lower, upper, and rationaleZh in this same analysis pass; otherwise return a single estimate only and omit bandEstimateRange or set it to null. Do not return bandEstimateRange as a string. Do not return placeholder range objects, identical lower/upper values, or ranges wider than one adjacent half-band step.
+Feedback must be target-uplift training feedback. The current score is an ideal-delivery single-question training estimate: assume the current answer can be spoken naturally and clearly. Do not add formal-score disclaimers in learner-facing feedback. If evidence genuinely sits between two adjacent half-bands, return bandEstimateRange as an object with lower, upper, and rationaleZh in this same analysis pass; otherwise return a single estimate only and omit bandEstimateRange or set it to null. Do not return bandEstimateRange as a string. Do not return placeholder range objects, identical lower/upper values, or ranges wider than one adjacent half-band step.
 For weak or medium answers, make upgradedAnswer, naturalnessHints, and practice direction aim at a natural Band 7 training target with a small safety margin, not merely a minimal correction. If the learner's lower bound is 7.0 or above, upgradedAnswer must become a meaningfully stronger Band 7+ answer rather than another ordinary Band 7 answer. Do not describe the target as Band 8+, Advanced, Verified, Not Verified, or certified. If the learner is already high-band-stable, switch to high-band stability instead of generating a fake higher answer; upgradedAnswer may be an empty string in that state, and highBandStabilityZh/nextStepZh should carry the guidance. Do not label output as Band 9.
 If the transcript clearly answers a different prompt, add fatalErrors tag "prompt_mismatch" with explanationZh "这段回答似乎没有回答当前题目，请确认是否选错题目。", and do not treat the problem only as grammar or vocabulary.
 Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
@@ -107,7 +112,7 @@ If authoritativeScore is provided in the input, treat it as the locked visible c
 ${speakingSchemaInstruction}
 
 Input:
-${JSON.stringify(params, null, 2)}`, 0.1);
+${JSON.stringify(params, null, 2)}`, 0);
   }
 
   async scoreSpeakingOnly(params: {
@@ -126,7 +131,7 @@ ${JSON.stringify(params, null, 2)}`, 0.1);
 You are the authoritative blind IELTS Speaking text scorer for a local-first training app.
 Score only the submitted transcript against the question. Do not infer whether it is a learner answer, generated target, or retest.
 Do not use target floors, target labels, original scores, candidate status, or target certification wording.
-This is a text-based single-question training estimate excluding pronunciation. Pronunciation must be null.
+This is an ideal-delivery single-question training estimate. Pronunciation must be null. Do not repeat pronunciation or full-test disclaimers in rationaleZh.
 Use the same strict FC/LR/GRA rubric for every submitted text. If evidence sits on a boundary, prefer the lower visible estimate. Do not relax the score because the answer is polished or generated. Do not apply an extra penalty just because it is one question.
 ${partRules}
 
