@@ -226,7 +226,7 @@ export default function PracticeHistory() {
       setStorageError(STORAGE_FULL_MESSAGE);
       return;
     }
-    navigate('/writing/task1');
+    navigate('/writing/task1', { state: { restoreWritingTask1RecordId: record.id } });
   };
 
   const deleteSpeakingAttempt = async (record: SpeakingPracticeRecord) => {

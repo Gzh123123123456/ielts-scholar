@@ -20,6 +20,7 @@ import {
 } from '@/src/lib/practiceRecords';
 import {
   getActiveWritingTask1,
+  getPracticeRecord,
   saveActiveWritingTask1,
   upsertPracticeRecord,
   deleteActiveWritingTask1,
@@ -28,12 +29,46 @@ import {
   buildMarkdownExportFilename,
   buildWritingTask1TrainingMarkdown,
 } from '@/src/lib/markdownExport';
+import {
+  buildWritingTask1EvidenceLedger,
+  summarizeEvidenceLedger,
+} from '@/src/lib/evidenceLedger';
 
 const emptyPlan: WritingTask1QuickPlan = {
   overview: '',
   keyFeatures: '',
   comparisons: '',
   paragraphPlan: '',
+};
+
+const writingTask1TaskTypes: WritingTask1AcademicPrompt['taskType'][] = [
+  'line graph',
+  'bar chart',
+  'table',
+  'pie chart',
+  'mixed chart',
+  'process',
+  'map',
+];
+
+const promptFromSavedTask1Record = (record: WritingTask1PracticeRecord): WritingTask1AcademicPrompt => {
+  const taskType = writingTask1TaskTypes.includes(record.taskType as WritingTask1AcademicPrompt['taskType'])
+    ? record.taskType as WritingTask1AcademicPrompt['taskType']
+    : 'line graph';
+  return {
+    id: record.questionId || record.id,
+    taskType,
+    topic: record.topic || 'Saved Task 1',
+    tags: [],
+    instruction: record.instruction || record.question,
+    visualBrief: record.visualBrief || '',
+    data: record.dataSummary || [],
+    expectedOverview: record.quickPlan?.overview || '',
+    expectedKeyFeatures: record.quickPlan?.keyFeatures ? [record.quickPlan.keyFeatures] : [],
+    expectedComparisons: record.quickPlan?.comparisons ? [record.quickPlan.comparisons] : [],
+    commonTraps: [],
+    reusablePatterns: [],
+  };
 };
 
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
@@ -215,10 +250,15 @@ ${feedback.improvedReport || feedback.modelExcerpt || 'No improved report return
 };
 
 export default function WritingTask1Placeholder() {
-  const { setProviderDiagnostic } = useApp();
+  const { addDebugLog, setProviderDiagnostic } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
-  const selectedWritingTask1PromptId = (location.state as { selectedWritingTask1PromptId?: string } | null)?.selectedWritingTask1PromptId;
+  const routeState = location.state as {
+    selectedWritingTask1PromptId?: string;
+    restoreWritingTask1RecordId?: string;
+  } | null;
+  const selectedWritingTask1PromptId = routeState?.selectedWritingTask1PromptId;
+  const restoreWritingTask1RecordId = routeState?.restoreWritingTask1RecordId;
   const selectedPrompt = selectedWritingTask1PromptId
     ? writingTask1Academic.find(item => item.id === selectedWritingTask1PromptId)
     : undefined;
@@ -226,19 +266,36 @@ export default function WritingTask1Placeholder() {
   const [activeLoaded, setActiveLoaded] = useState(false);
   const initialActiveRecordRef = useRef<any>(null);
   const isInitialRestoreRef = useRef(false);
+  const lastTask1EvidenceLedgerLogRef = useRef('');
   const initialPrompt = selectedPrompt || writingTask1Academic[0];
 
   useEffect(() => {
     if (selectedPrompt) { setActiveLoaded(true); return; }
-    getActiveWritingTask1().then(rec => {
-      if (rec) {
-        setActiveRecord(rec);
-        initialActiveRecordRef.current = rec;
-        isInitialRestoreRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        let record = await getActiveWritingTask1();
+        if (restoreWritingTask1RecordId) {
+          const restoredRecord = await getPracticeRecord(restoreWritingTask1RecordId);
+          if (restoredRecord?.module === 'writing_task1') {
+            record = restoredRecord;
+          }
+        }
+        if (cancelled) return;
+        if (record) {
+          setActiveRecord(record);
+          initialActiveRecordRef.current = record;
+          isInitialRestoreRef.current = true;
+        }
+        setActiveLoaded(true);
+      } catch {
+        if (!cancelled) setActiveLoaded(true);
       }
-      setActiveLoaded(true);
-    }).catch(() => setActiveLoaded(true));
-  }, [selectedPrompt]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [restoreWritingTask1RecordId, selectedPrompt]);
 
   const [recordId, setRecordId] = useState(selectedPrompt ? createRecordId('writing_task1') : '');
   const [createdAt, setCreatedAt] = useState(selectedPrompt ? new Date().toISOString() : '');
@@ -256,7 +313,7 @@ export default function WritingTask1Placeholder() {
     setReport(activeRecord.report || '');
     setFeedback(activeRecord.feedback);
     const matchedPrompt = writingTask1Academic.find(p => p.id === activeRecord.questionId);
-    if (matchedPrompt) setPrompt(matchedPrompt);
+    setPrompt(matchedPrompt || promptFromSavedTask1Record(activeRecord));
   }, [activeRecord]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [providerErrorMessage, setProviderErrorMessage] = useState(
@@ -268,6 +325,30 @@ export default function WritingTask1Placeholder() {
   const words = countWords(report);
   const status = providerErrorMessage ? 'provider_failed' : feedback ? 'analyzed' : 'draft';
   const currentMarkdown = feedback ? buildWritingTask1TrainingMarkdown(feedback, prompt, quickPlan) : '';
+  const task1EvidenceLedger = useMemo(
+    () => feedback ? buildWritingTask1EvidenceLedger(feedback) : [],
+    [feedback],
+  );
+  const task1EvidenceSummary = useMemo(
+    () => summarizeEvidenceLedger(task1EvidenceLedger),
+    [task1EvidenceLedger],
+  );
+
+  useEffect(() => {
+    if (!feedback || !task1EvidenceSummary.total) return;
+    const signature = [
+      recordId,
+      feedback.report.length,
+      task1EvidenceSummary.total,
+      task1EvidenceSummary.anchored,
+      task1EvidenceSummary.missingDisplayRequired,
+    ].join('::');
+    if (lastTask1EvidenceLedgerLogRef.current === signature) return;
+    lastTask1EvidenceLedgerLogRef.current = signature;
+    addDebugLog(
+      `Task 1 evidence ledger: ${task1EvidenceSummary.anchored}/${task1EvidenceSummary.total} anchored; ${task1EvidenceSummary.missingDisplayRequired} required missing.`,
+    );
+  }, [addDebugLog, feedback, recordId, task1EvidenceSummary]);
 
   const buildRecord = (
     nextFeedback = feedback,

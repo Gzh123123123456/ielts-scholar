@@ -1,13 +1,13 @@
 # Current State
 
-_Last updated: 2026-06-10_
+_Last updated: 2026-06-17_
 
 This is the active baseline, not a history log. Verify branch and sync state with git commands before work.
 
 ## Current Validated Baseline
 
-- Current closeout baseline: Speaking Part 2 provider-output QA/repair, six-signal calibration, mastered-expression memory, and History/Storage panel cleanup are implemented for the 2026-06-10 closeout.
-- Previous pushed workflow checkpoint: `ecb7de4 Simplify workflow docs and add Codex skills`.
+- Current closeout baseline: local-first history/progress replay tooling, feedback-quality loop tooling, Speaking feedback QA/recovery, and Writing Task 1 / Task 2 record integration are implemented for the 2026-06-17 closeout.
+- Previous pushed workflow checkpoint before this closeout: `ecb7de4 Simplify workflow docs and add Codex skills`.
 - Workflow/docs/skills simplification remains the current workflow baseline.
 - Codex is the primary implementation agent for scoped product work.
 - Claude Code is an optional docs/status/lint/build helper unless explicitly approved for more.
@@ -16,6 +16,7 @@ This is the active baseline, not a history log. Verify branch and sync state wit
 - Browser/client API keys are not production-safe; no SaaS provider/key architecture exists yet.
 - Question-bank browsing, History, Progress, active attempts, and IndexedDB-backed practice records are implemented for the current local-first prototype.
 - A lightweight global storage/backup drawer is mounted app-wide for repository status, backup export/import, and storage maintenance; full practice history lives on `/practice-history`.
+- Practice history restore/open behavior and Progress summaries now have dedicated replay/verification scripts so regressions can be checked without manual UI-only inspection.
 - Task 2 annotated essay overlay baseline is implemented; future work should be polish/consolidation unless explicitly scoped.
 - Writing Task 2 basic practice, framework coach/extraction, local-first records, feedback rendering, and export are implemented, but target/score/feedback consistency still needs a separate future audit.
 - Writing Task 1 Academic basic practice is implemented with text-based visual briefs; full calibration remains future work and requires real samples.
@@ -42,7 +43,7 @@ This is the active baseline, not a history log. Verify branch and sync state wit
 
 - Speaking Part 1 topic-thread practice is implemented as a development checkpoint: one-topic natural 3-4 question sets, multiple coherent thread sets for larger topics, and traceable product-supplement questions where the source topic is incomplete.
 - Part 1 results are organized around annotated original answers, one cleaner retry answer per question, thread-level patterns, Material Bank, and a Next Retry Plan.
-- Part 1 clean-retry integrity checks, saved-result safeguards, annotation de-duplication, transcript-spelling/pronunciation boundary tightening, audio-transcript candidate gating, exact-thread retry, coverage-aware/fair topic selection, and topic-thread markdown/export refinements are implemented.
+- Part 1 clean-retry integrity checks, saved-result safeguards, clean-retry recovery for incomplete provider output, annotation de-duplication, transcript-spelling/pronunciation boundary tightening, audio-transcript candidate gating, exact-thread retry, coverage-aware/fair topic selection, and topic-thread markdown/export refinements are implemented.
 
 ### Speaking Part 2
 
@@ -62,11 +63,12 @@ This is the active baseline, not a history log. Verify branch and sync state wit
 - Part 2 Best upgrades can be marked mastered. This is a teaching-asset memory, not a language blacklist: future analysis should avoid re-teaching the exact mastered asset while still allowing natural use and correction.
 - Speaking result-page retest keeps the previous result visible when re-analysis fails.
 - Saved Part 2 history records are sanitized/restored with `part2Feedback` so older history entries do not open to blank result pages.
+- Part 2 feedback-quality regressions are tracked through replay and judge fixtures, including annotation span quality, route gating, score consistency, and language-signal usefulness.
 
 ### Speaking Part 3
 
-- Speaking Part 3 still uses individual follow-up questions derived from Part 2 prompts.
-- Discussion-flow refinement remains upcoming product work.
+- Speaking Part 3 discussion-thread review is implemented for grouped follow-up answers, with task diagnosis, repair-theme guidance, reusable patterns, and next speakable answers separated in the UI.
+- Part 3 feedback-quality regressions are tracked through judge fixtures for answer scope, sentence control, comparison logic, and high-impact semantic repairs.
 
 ## Storage Baseline
 

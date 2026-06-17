@@ -11,10 +11,12 @@ import {
   speakingPart3DiscussionFeedbackInstruction,
   speakingPart1TopicThreadInstruction,
   speakingPart1TopicThreadSchemaInstruction,
+  speakingProfileCapsuleInstruction,
   speakingPromptCalibration,
   speakingScoreOnlySchemaInstruction,
   speakingSchemaInstruction,
   speakingTargetValidationSchemaInstruction,
+  speakingTeacherQualitySelfCheckInstruction,
   speakingTranscriptEvidenceInstruction,
   strictJsonInstruction,
   writingSchemaInstruction,
@@ -74,6 +76,7 @@ export class DeepSeekProvider implements AIProvider {
 You are an IELTS Speaking Part 1 topic-session feedback engine for a local-first practice app.
 Chinese is for diagnosis and explanations. English is for learner wording, corrections, phrase fixes, reusable versions, and short frames.
 ${speakingTranscriptEvidenceInstruction}
+${speakingProfileCapsuleInstruction}
 ${speakingPart1TopicThreadInstruction}
 
 ${speakingPart1TopicThreadSchemaInstruction}
@@ -96,7 +99,9 @@ Keep feedback concise, strict, and useful for a Chinese-speaking IELTS learner.
 ${partFocus}
 ${speakingPromptCalibration}
 ${speakingTranscriptEvidenceInstruction}
+${speakingProfileCapsuleInstruction}
 ${speakingFeedbackDepthInstruction}
+${speakingTeacherQualitySelfCheckInstruction}
 ${speakingPart2NativeFeedbackInstruction}
 ${speakingPart3DiscussionFeedbackInstruction}
 If the transcript is extremely short, nonsensical, or too thin for the part, return conservative insufficient-sample feedback.

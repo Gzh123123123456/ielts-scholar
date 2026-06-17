@@ -22,6 +22,45 @@ export interface MasteredSpeakingExpressionHint {
   count?: number;
 }
 
+export interface SpeakingProfileCapsule {
+  evidenceLevel: 'low' | 'building' | 'stable';
+  analyzedAttempts: number;
+  partCounts: Record<1 | 2 | 3, number>;
+  overusedChunks: {
+    canonical: string;
+    count: number;
+    recentCount: number;
+    examples: string[];
+  }[];
+  grammarPatterns: {
+    label: string;
+    count: number;
+    contexts: string[];
+    examples: string[];
+  }[];
+  part2WeakSignals: {
+    signal: string;
+    weakCount: number;
+    examples: string[];
+  }[];
+  part3Patterns: {
+    label: string;
+    count: number;
+    examples: string[];
+  }[];
+  reusableMaterials: {
+    material: string;
+    useCases: string[];
+    examples: string[];
+  }[];
+  savedExpressions: {
+    expression: string;
+    originalSnippet: string;
+  }[];
+  masteredExpressions: MasteredSpeakingExpressionHint[];
+  instruction: string;
+}
+
 export interface SpeakingAnalysisRequest {
   part: number;
   question: string;
@@ -36,6 +75,7 @@ export interface SpeakingAnalysisRequest {
   targetAttempt?: number;
   priorTargetAnswer?: string;
   masteredExpressions?: MasteredSpeakingExpressionHint[];
+  speakingProfileCapsule?: SpeakingProfileCapsule;
 }
 
 export interface SpeakingScoreOnlyRequest {

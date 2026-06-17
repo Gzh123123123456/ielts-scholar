@@ -22,14 +22,22 @@ import {
   importFromParsedJson,
   initializePracticeRepository,
   isRepositoryReady,
+  listPracticeRecords,
   previewImportFromParsedJson,
+  previewPracticeHistoryDedupe,
   releaseLegacyLocalStorage,
+  runPracticeHistoryDedupe,
   type ImportPreview,
   type ImportReport,
   type LegacyRecoveryImportMeta,
   type MigrationReport,
   type StorageHealth,
 } from '@/src/lib/practiceRepository';
+import type {
+  PracticeHistoryDedupePlan,
+  PracticeHistoryDedupeRunReport,
+} from '@/src/lib/practiceHistoryDedupe';
+import { buildFeedbackHistoryReplayReport } from '@/src/lib/feedbackHistoryReplay';
 
 type StorageUsageSnapshot = ReturnType<typeof getStorageUsage>;
 
@@ -51,6 +59,7 @@ export const HistoryPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingReplay, setIsExportingReplay] = useState(false);
   const [storageUsage, setStorageUsage] = useState<StorageUsageSnapshot | null>(null);
   const [storageHealth, setStorageHealth] = useState<StorageHealth | null>(null);
   const [migrationReport, setMigrationReport] = useState<MigrationReport | null>(null);
@@ -58,6 +67,11 @@ export const HistoryPanel: React.FC = () => {
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [pendingImportData, setPendingImportData] = useState<unknown>(null);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const [dedupePlan, setDedupePlan] = useState<PracticeHistoryDedupePlan | null>(null);
+  const [dedupeReport, setDedupeReport] = useState<PracticeHistoryDedupeRunReport | null>(null);
+  const [isPreviewingDedupe, setIsPreviewingDedupe] = useState(false);
+  const [isRunningDedupe, setIsRunningDedupe] = useState(false);
+  const [dedupeBackupConfirmed, setDedupeBackupConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -108,6 +122,32 @@ export const HistoryPanel: React.FC = () => {
     }
   };
 
+  const handleExportFeedbackReplay = async () => {
+    setIsExportingReplay(true);
+    setError(null);
+    try {
+      const records = await listPracticeRecords();
+      const report = buildFeedbackHistoryReplayReport(records, {
+        limit: 24,
+        modules: ['speaking'],
+        speakingParts: [1, 2, 3],
+        includePackets: true,
+        includeTeacherJudgePrompts: false,
+      });
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ielts-scholar-feedback-history-replay-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (replayError) {
+      setError(replayError instanceof Error ? replayError.message : 'Feedback replay export failed.');
+    } finally {
+      setIsExportingReplay(false);
+    }
+  };
+
   const handleImport = () => {
     setError(null);
     const input = document.createElement('input');
@@ -146,6 +186,46 @@ export const HistoryPanel: React.FC = () => {
   const cancelImport = () => {
     setImportPreview(null);
     setPendingImportData(null);
+  };
+
+  const handlePreviewDedupe = async () => {
+    setIsPreviewingDedupe(true);
+    setError(null);
+    try {
+      const plan = await previewPracticeHistoryDedupe();
+      setDedupePlan(plan);
+      setDedupeReport(null);
+    } catch (dedupeError) {
+      setError(dedupeError instanceof Error ? dedupeError.message : 'History cleanup preview failed.');
+    } finally {
+      setIsPreviewingDedupe(false);
+    }
+  };
+
+  const handleRunDedupe = async () => {
+    if (!dedupePlan || dedupePlan.deleteCount === 0) return;
+    if (!dedupeBackupConfirmed) {
+      setError('Export a complete backup first, then confirm it here before deleting duplicate history.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${dedupePlan.deleteCount} older analyzed duplicate records?\n\nThis keeps the newest record in each duplicate topic group and does not touch drafts, failed records, active states, or legacy archive.`,
+    );
+    if (!confirmed) return;
+
+    setIsRunningDedupe(true);
+    setError(null);
+    try {
+      const report = await runPracticeHistoryDedupe();
+      setDedupeReport(report);
+      setDedupePlan(report.after);
+      await refreshMaintenance();
+    } catch (dedupeError) {
+      setError(dedupeError instanceof Error ? dedupeError.message : 'History cleanup failed.');
+    } finally {
+      setIsRunningDedupe(false);
+    }
   };
 
   const handleReleaseStorage = async () => {
@@ -245,6 +325,15 @@ export const HistoryPanel: React.FC = () => {
                   <Archive className="w-3 h-3" />
                   View Practice History
                 </button>
+                <button
+                  type="button"
+                  onClick={handleExportFeedbackReplay}
+                  disabled={isExportingReplay}
+                  className="col-span-2 flex items-center justify-center gap-1 rounded border border-paper-ink/15 bg-paper-50 px-2 py-2 text-[11px] text-paper-ink/65 hover:border-accent-terracotta/40 hover:text-accent-terracotta disabled:opacity-50"
+                >
+                  <History className="w-3 h-3" />
+                  {isExportingReplay ? 'Exporting Replay' : 'Export Feedback Replay'}
+                </button>
                 {canReleaseLegacyStorage() && (
                   <button
                     type="button"
@@ -266,6 +355,90 @@ export const HistoryPanel: React.FC = () => {
                 </div>
               </section>
             )}
+
+            <section className="border-t border-paper-ink/10 pt-3 space-y-3">
+              <h4 className="font-bold uppercase tracking-widest text-paper-ink/45">History Cleanup</h4>
+              <p className="text-[11px] leading-5 text-paper-ink/55">
+                Keeps the latest analyzed record for each matching module, part, and topic key.
+              </p>
+              <button
+                type="button"
+                onClick={handlePreviewDedupe}
+                disabled={isPreviewingDedupe || isRunningDedupe}
+                className="w-full rounded border border-paper-ink/15 bg-paper-50 px-2 py-2 text-[11px] text-paper-ink/65 hover:border-accent-terracotta/40 hover:text-accent-terracotta disabled:opacity-50"
+              >
+                {isPreviewingDedupe ? 'Checking duplicates' : 'Preview Duplicate Topics'}
+              </button>
+
+              {dedupePlan && (
+                <div className="space-y-3 rounded border border-paper-ink/10 bg-paper-100/50 p-3">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="font-mono text-sm text-paper-ink">{dedupePlan.eligibleRecords}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-paper-ink/40">Analyzed</p>
+                    </div>
+                    <div>
+                      <p className="font-mono text-sm text-paper-ink">{dedupePlan.duplicateGroupCount}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-paper-ink/40">Groups</p>
+                    </div>
+                    <div>
+                      <p className="font-mono text-sm text-accent-terracotta">{dedupePlan.deleteCount}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-paper-ink/40">Delete</p>
+                    </div>
+                  </div>
+
+                  {dedupePlan.groups.length > 0 ? (
+                    <div className="space-y-2">
+                      {dedupePlan.groups.slice(0, 4).map(group => (
+                        <div key={group.key} className="rounded border border-paper-ink/10 bg-paper-50 px-2 py-2">
+                          <p className="truncate font-bold text-paper-ink/75" title={group.label}>{group.label}</p>
+                          <p className="mt-1 text-[11px] text-paper-ink/50">
+                            Keep 1 latest, delete {group.remove.length} older {group.remove.length === 1 ? 'record' : 'records'}
+                          </p>
+                        </div>
+                      ))}
+                      {dedupePlan.groups.length > 4 && (
+                        <p className="text-[11px] text-paper-ink/45">+ {dedupePlan.groups.length - 4} more duplicate groups</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-green-800">No analyzed duplicate topic groups found.</p>
+                  )}
+
+                  <label className="flex items-start gap-2 text-[11px] leading-5 text-paper-ink/65">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={dedupeBackupConfirmed}
+                      onChange={event => setDedupeBackupConfirmed(event.target.checked)}
+                    />
+                    <span>I exported a complete backup from this browser.</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleRunDedupe}
+                    disabled={
+                      isRunningDedupe ||
+                      !dedupeBackupConfirmed ||
+                      dedupePlan.deleteCount === 0
+                    }
+                    className="w-full rounded border border-red-700/25 px-2 py-2 text-[11px] text-red-800 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {isRunningDedupe ? 'Deleting duplicates' : 'Delete Older Duplicate Records'}
+                  </button>
+                </div>
+              )}
+
+              {dedupeReport && (
+                <div className="rounded border border-green-700/15 bg-green-50/40 px-3 py-2 text-[11px] leading-5 text-green-900">
+                  Deleted {dedupeReport.deletedCount} of {dedupeReport.attemptedDeleteCount} selected records.
+                  {dedupeReport.failedIds.length > 0 && (
+                    <span className="text-red-800"> {dedupeReport.failedIds.length} records still remain.</span>
+                  )}
+                </div>
+              )}
+            </section>
 
             {importPreview && (
               <section className="border-t border-paper-ink/10 pt-3 space-y-3">

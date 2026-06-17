@@ -9,6 +9,13 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "verify:history-restore-ui": "node scripts/verify-history-restore-ui.mjs",
+    "verify:progress-ui": "node scripts/verify-progress-ui.mjs",
+    "verify:evidence-ledger": "tsx scripts/verify-evidence-ledger.ts",
+    "verify:feedback-judge": "tsx scripts/verify-feedback-judge.ts",
+    "verify:feedback-history-replay": "tsx scripts/verify-feedback-history-replay.ts",
+    "replay:feedback-history": "tsx scripts/replay-feedback-history.ts",
+    "replay:feedback-reanalysis": "tsx scripts/replay-feedback-reanalysis.ts",
     "verify:part1-runtime-fixtures": "tsx scripts/verify-part1-runtime-fixtures.mjs"
   },
   "dependencies": {
@@ -29,6 +36,7 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
+    "playwright": "^1.60.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

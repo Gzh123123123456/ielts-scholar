@@ -26,6 +26,11 @@ import {
   STORE_NAMES,
   closeDatabase,
 } from '@/src/lib/storage/indexedDb';
+import {
+  buildPracticeHistoryDedupePlan,
+  type PracticeHistoryDedupePlan,
+  type PracticeHistoryDedupeRunReport,
+} from '@/src/lib/practiceHistoryDedupe';
 
 // ──────────────────────────────────────
 // Types
@@ -445,6 +450,35 @@ export async function deletePracticeRecord(id: string, _module?: string): Promis
   } catch (err) {
     console.error('[ielts] Failed to delete practice record:', err);
   }
+}
+
+export async function previewPracticeHistoryDedupe(): Promise<PracticeHistoryDedupePlan> {
+  const records = await listPracticeRecords();
+  return buildPracticeHistoryDedupePlan(records);
+}
+
+export async function runPracticeHistoryDedupe(): Promise<PracticeHistoryDedupeRunReport> {
+  const before = await previewPracticeHistoryDedupe();
+  const candidates = before.groups.flatMap(group => group.remove);
+
+  for (const candidate of candidates) {
+    await deletePracticeRecord(candidate.id, candidate.module);
+  }
+
+  const afterRecords = await listPracticeRecords();
+  const remainingIds = new Set(afterRecords.map(record => record.id));
+  const failedIds = candidates
+    .filter(candidate => remainingIds.has(candidate.id))
+    .map(candidate => candidate.id);
+
+  return {
+    completedAt: new Date().toISOString(),
+    before,
+    after: buildPracticeHistoryDedupePlan(afterRecords),
+    attemptedDeleteCount: candidates.length,
+    deletedCount: candidates.length - failedIds.length,
+    failedIds,
+  };
 }
 
 export async function getAnalyzedPracticeRecords(): Promise<PracticeRecord[]> {

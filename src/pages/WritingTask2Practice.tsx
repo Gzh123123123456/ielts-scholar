@@ -37,6 +37,10 @@ import {
   buildMarkdownExportFilename,
   buildWritingTask2TrainingMarkdown,
 } from '@/src/lib/markdownExport';
+import {
+  buildWritingTask2EvidenceLedger,
+  summarizeEvidenceLedger,
+} from '@/src/lib/evidenceLedger';
 import { Send, ArrowRight, FileDown, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
 
 type LanguageBankView = {
@@ -2003,6 +2007,20 @@ ${exportHasSubstantialModelAnswer ? `${highlightedModelAnswer}${feedback.modelAn
     () => feedback ? getAnnotatedCorrectionSpans(resultEssay, feedback.sentenceFeedback, essayParagraphs) : [],
     [essayParagraphs, feedback, resultEssay],
   );
+  const writingEvidenceLedger = useMemo(
+    () => feedback ? buildWritingTask2EvidenceLedger(feedback) : [],
+    [feedback],
+  );
+  const writingEvidenceSummary = useMemo(
+    () => summarizeEvidenceLedger(writingEvidenceLedger),
+    [writingEvidenceLedger],
+  );
+  useEffect(() => {
+    if (!feedback || !writingEvidenceSummary.total) return;
+    addDebugLog(
+      `Writing evidence ledger: ${writingEvidenceSummary.anchored}/${writingEvidenceSummary.total} anchored; ${writingEvidenceSummary.missingDisplayRequired} required missing.`,
+    );
+  }, [addDebugLog, feedback, writingEvidenceSummary]);
   const selectedCorrectionSpan = annotatedCorrectionSpans.find(span => span.correctionId === selectedCorrectionId) || null;
   const selectedCorrection = selectedCorrectionSpan?.correction || null;
   const selectedCorrectionIndex = selectedCorrectionSpan?.correctionIndex ?? -1;

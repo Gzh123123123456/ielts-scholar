@@ -1,6 +1,6 @@
 ﻿# Codebase Map
 
-_Last updated: 2026-05-29_
+_Last updated: 2026-06-17_
 
 ## Purpose
 
@@ -22,6 +22,17 @@ This is a navigation map for Codex and future agents. It is not a product spec, 
 - `/progress` -> `src/pages/Progress.tsx`.
 - `/practice-history` -> `src/pages/PracticeHistory.tsx`.
 - Global diagnostics render from `src/components/ui/DebugPanel.tsx` and `src/components/ui/ApiStatusPanel.tsx`.
+
+## Verification and replay scripts
+
+- `scripts/verify-history-restore-ui.mjs` checks history restore/open behavior.
+- `scripts/verify-progress-ui.mjs` checks Progress page data rendering and coverage summaries.
+- `scripts/verify-evidence-ledger.ts` checks transcript-evidence extraction used by feedback QA.
+- `scripts/verify-feedback-judge.ts` runs hard-safety feedback judge fixtures for Speaking feedback quality.
+- `scripts/verify-feedback-history-replay.ts` checks feedback-history replay plumbing.
+- `scripts/replay-feedback-history.ts` replays saved feedback records through the judge harness.
+- `scripts/replay-feedback-reanalysis.ts` re-runs provider re-analysis for selected saved feedback records.
+- `docs/SPEAKING_FEEDBACK_QUALITY_LOOP.md` records the active Speaking feedback-quality loop and regression evidence.
 
 ## Speaking runtime map
 
@@ -63,6 +74,7 @@ Before changing Speaking feedback, inspect:
 - Speaking target labels are pedagogical: current lower bound below 7.0 shows `BAND 7 TARGET ANSWER`, current lower bound at or above 7.0 shows `BAND 7+ TARGET ANSWER`, and existing high-band-stable output may show `STANDARD ANSWER`.
 - Provider diagnostics may stay in Debug Panel / API Status, but validation provider failures must not appear in the normal learner target-answer area.
 - If one answer exposes a bug, inspect the shared provider, safety, rendering, or workflow path rather than editing data or behavior for that exact sample.
+- Feedback-quality loop work should use `.agents/skills/ielts-feedback-loop/SKILL.md`, the judge harness in `src/lib/feedbackJudgeHarness.ts`, and replay scripts rather than relying on screenshot-only checks.
 - Speaking Part 2 has a dedicated `part2Feedback` contract in `src/lib/ai/schemas.ts`, normalized in `src/lib/ai/safety.ts`, persisted/restored through `src/lib/practiceRecords.ts` / `src/lib/practiceRepository.ts`, rendered in `src/pages/SpeakingPractice.tsx`, and exported in `src/lib/markdownExport.ts`.
 - Part 2 provider prompt policy lives in `speakingPart2NativeFeedbackInstruction` in `src/lib/ai/providers/geminiProvider.ts`; DeepSeek imports the same instruction. Mock fixtures in `src/lib/ai/providers/mockProvider.ts` should demonstrate the same contract.
 - Part 2 learner-facing target output is `NEXT SPEAKABLE VERSION`, driven by `part2Feedback.nextSpeakableVersion`, not the old Band 7 target-answer label.
@@ -125,6 +137,7 @@ Score, diagnosis, target layer, target output, UI, export, and history must stay
 - A lightweight global storage/backup drawer lives in `src/components/ui/HistoryPanel.tsx` and is mounted from `src/App.tsx`; full filtering, restore, and delete behavior live on `/practice-history`.
 - Progress summaries and coverage are data-derived in `src/pages/Progress.tsx`.
 - Question-bank practice counts are computed in `src/components/practice/QuestionBankModal.tsx` from analyzed records with feedback. Do not hardcode counts.
+- `src/lib/feedbackHistoryReplay.ts`, `src/lib/practiceHistoryDedupe.ts`, and `src/lib/evidenceLedger.ts` support replay, history cleanup, and feedback-quality verification workflows.
 
 ## Storage architecture map
 

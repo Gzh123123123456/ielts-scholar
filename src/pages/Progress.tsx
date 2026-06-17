@@ -1,9 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { PageShell } from '@/src/components/ui/PageShell';
 import { TopBar } from '@/src/components/ui/TopBar';
 import { PaperCard } from '@/src/components/ui/PaperCard';
 import { SerifButton } from '@/src/components/ui/SerifButton';
 import { useApp } from '@/src/context/AppContext';
+import type { MasteredExpressionMemory, SavedExpressionMemory } from '@/src/context/AppContext';
+import {
+  Bookmark,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+  MessagesSquare,
+  PenLine,
+  Repeat2,
+  SlidersHorizontal,
+  Undo2,
+  UserRound,
+  Wrench,
+} from 'lucide-react';
 import {
   speakingTopicCategories,
   writingTask1Academic,
@@ -31,6 +47,16 @@ import {
   formatApproxBandEstimate,
   formatBandEstimate,
 } from '@/src/lib/bands';
+import { buildSpeakingProfile } from '@/src/lib/speakingProfile';
+import type {
+  SpeakingProfileEvidence,
+  SpeakingProfileGrammarPattern,
+  SpeakingProfileMaterialCluster,
+  SpeakingProfilePart2Signal,
+  SpeakingProfilePart3Pattern,
+  SpeakingProfileRepeatedChunk,
+  SpeakingProfileSummary,
+} from '@/src/lib/speakingProfile';
 
 const task1VisualTypes: WritingTask1AcademicTaskType[] = [
   'line graph',
@@ -291,11 +317,18 @@ const buildTrainingSuggestions = (
 };
 
 export default function Progress() {
-  const { profile, forgetMasteredExpression } = useApp();
+  const location = useLocation();
+  const { profile, forgetMasteredExpression, updateSavedExpression, removeSavedExpression } = useApp();
   const [, setResetVersion] = useState(0);
   const [records, setRecords] = useState<PracticeRecord[]>([]);
   const [recordsLoaded, setRecordsLoaded] = useState(false);
   const masteredExpressions = profile.masteredExpressions || [];
+  const savedExpressions = profile.savedExpressions || [];
+  const progressView = location.pathname.endsWith('/speaking')
+    ? 'speaking'
+    : location.pathname.endsWith('/writing')
+      ? 'writing'
+      : 'overview';
 
   useEffect(() => {
     listPracticeRecords().then(recs => { setRecords(recs); setRecordsLoaded(true); }).catch(() => setRecordsLoaded(true));
@@ -346,6 +379,13 @@ export default function Progress() {
     task2Coverage,
     unfinishedDrafts,
   );
+  const speakingProfile = useMemo(() => buildSpeakingProfile(
+    speakingRecords,
+    {
+      masteredExpressions,
+      savedExpressions,
+    },
+  ), [speakingRecords, masteredExpressions, savedExpressions]);
 
   const clearAllPersonalData = () => {
     const confirmed = window.confirm('清空所有个人数据？这将删除 IndexedDB 中的所有练习记录、草稿、存档会话、反馈以及本地设置和诊断数据。这个操作不能撤销。');
@@ -355,6 +395,162 @@ export default function Progress() {
       setRecords([]);
     });
   };
+
+  if (progressView === 'overview') {
+    return (
+      <PageShell size="wide">
+        <TopBar />
+
+        <div className="mb-10 text-center max-w-2xl mx-auto">
+          <h2 className="text-3xl">Your Training Snapshot</h2>
+        </div>
+
+        <div className="space-y-8">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <ProgressEntryCard
+              to="/progress/speaking"
+              title="Speaking"
+              subtitle="Profile, repeated chunks, grammar patterns, material clusters, Part 2 signals, and Part 3 discussion patterns."
+              metric={formatApproxBandEstimate(speakingEstimate)}
+              meta={`${scoredSpeaking.length} analyzed attempts`}
+              icon={<UserRound className="h-5 w-5" />}
+            />
+            <ProgressEntryCard
+              to="/progress/writing"
+              title="Writing"
+              subtitle="Task 1 and Task 2 estimates, recent writing records, topic coverage, and draft status."
+              metric={formatApproxBandEstimate(writingEstimate)}
+              meta={`T2 ${scoredWritingTask2.length} / T1 ${scoredWritingTask1.length}`}
+              icon={<PenLine className="h-5 w-5" />}
+            />
+          </div>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <SnapshotCard label="Speaking Estimate" value={formatApproxBandEstimate(speakingEstimate)} muted={speakingEstimate === null} />
+            <SnapshotCard label="Writing Estimate" value={formatApproxBandEstimate(writingEstimate)} muted={writingEstimate === null} />
+            <SnapshotCard label="Analyzed Attempts" value={`S ${scoredSpeaking.length} / W ${scoredWritingTask2.length + scoredWritingTask1.length}`} />
+            <SnapshotCard label="Last Practice" value={latestRecord ? formatDate(getTimestamp(latestRecord)) : 'No records yet'} small />
+          </div>
+
+          <PaperCard className="border-l-2 border-l-red-800/70">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-red-900 mb-2">Clear Local Personal Data</h3>
+                <p className="text-sm leading-7 text-paper-ink/60">
+                  This clears IELTS Scholar browser records, drafts, feedback, diagnostics, and local settings. It does not touch env files or other sites.
+                </p>
+              </div>
+              <SerifButton onClick={clearAllPersonalData} variant="outline" className="border-red-800/40 text-red-900 hover:bg-red-50">
+                Clear Local Data
+              </SerifButton>
+            </div>
+          </PaperCard>
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (progressView === 'speaking') {
+    return (
+      <PageShell size="wide">
+        <TopBar />
+
+        <ProgressSubpageHeader title="Speaking Progress" />
+
+        <div className="space-y-8">
+          <div className="grid md:grid-cols-3 gap-6">
+            <SnapshotCard label="Speaking Estimate" value={formatApproxBandEstimate(speakingEstimate)} muted={speakingEstimate === null} />
+            <SnapshotCard label="Analyzed Speaking" value={scoredSpeaking.length} />
+            <SnapshotCard label="Saved Expressions" value={savedExpressions.length} />
+          </div>
+
+          <ScoreList
+            title="Recent Speaking Training Estimates"
+            empty="No analyzed Speaking attempts yet."
+            records={recentSpeakingScores.map(record => ({
+              id: record.id,
+              date: formatDate(getTimestamp(record)),
+              label: speakingRecordLabel(record),
+              question: speakingRecordPreview(record),
+              score: getSpeakingScore(record),
+            }))}
+          />
+
+          <SpeakingProfilePanel
+            profile={speakingProfile}
+            masteredExpressions={masteredExpressions}
+            savedExpressions={savedExpressions}
+            onForgetMastered={forgetMasteredExpression}
+            onUpdateSaved={updateSavedExpression}
+            onRemoveSaved={removeSavedExpression}
+          />
+
+          <CoverageList title="Speaking Topic Coverage" coverage={speakingCoverage} />
+          <CoverageNote />
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (progressView === 'writing') {
+    const writingSuggestions = trainingSuggestions.filter(suggestion =>
+      !suggestion.title.startsWith('Cover Speaking') &&
+      !suggestion.title.startsWith('Add more analyzed Speaking')
+    );
+    return (
+      <PageShell size="wide">
+        <TopBar />
+
+        <ProgressSubpageHeader title="Writing Progress" />
+
+        <div className="space-y-8">
+          <div className="grid md:grid-cols-3 gap-6">
+            <SnapshotCard label="Writing Estimate" value={formatApproxBandEstimate(writingEstimate)} muted={writingEstimate === null} />
+            <SnapshotCard label="Task 2 Attempts" value={scoredWritingTask2.length} />
+            <SnapshotCard label="Task 1 Attempts" value={scoredWritingTask1.length} />
+          </div>
+
+          <ScoreList
+            title="Recent Writing Training Estimates"
+            empty="No analyzed Writing attempts yet."
+            records={recentWritingScores.map(record => ({
+              id: record.id,
+              date: formatDate(getTimestamp(record)),
+              label: record.module === 'writing_task1'
+                ? `Writing Task 1 / ${getTask1VisualType(record) || record.taskType}`
+                : `Writing Task 2 / ${getWritingTask2Topic(record as WritingTask2PracticeRecord) || (record as WritingTask2PracticeRecord).questionData?.type || 'practice'}`,
+              question: preview(record.question),
+              score: record.module === 'writing_task1'
+                ? getWritingTask1Score(record)
+                : getWritingTask2Score(record as WritingTask2PracticeRecord),
+            }))}
+          />
+
+          <PaperCard>
+            <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Suggested Training Plan</h3>
+            {writingSuggestions.length === 0 ? (
+              <p className="text-sm text-paper-ink/55">No writing-specific suggestions yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {writingSuggestions.map((suggestion, index) => (
+                  <div key={`${suggestion.title}-${index}`} className="border-l-2 border-l-accent-terracotta/40 pl-4 py-1">
+                    <p className="text-base font-bold text-paper-ink leading-7">{suggestion.title}</p>
+                    <p className="text-sm leading-7 text-paper-ink/65">{suggestion.reason}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </PaperCard>
+
+          <div className="grid xl:grid-cols-2 gap-8">
+            <CoverageList title="Writing Task 1 Visual Type Coverage" coverage={task1Coverage} />
+            <CoverageList title="Writing Task 2 Topic Coverage" coverage={task2Coverage} />
+          </div>
+          <CoverageNote />
+        </div>
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell size="wide">
@@ -457,33 +653,14 @@ export default function Progress() {
           )}
         </PaperCard>
 
-        <PaperCard>
-          <h3 className="text-sm font-bold uppercase tracking-widest mb-4">已掌握表达</h3>
-          {masteredExpressions.length === 0 ? (
-            <p className="text-sm text-paper-ink/55">还没有保存的已掌握表达。你可以在 Part 2 六信号卡片里确认掌握。</p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {masteredExpressions.slice(0, 12).map(item => (
-                <div key={item.id} className="border border-paper-ink/10 bg-paper-100/40 px-3 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-bold leading-6 text-paper-ink">{item.expression}</p>
-                    <button
-                      type="button"
-                      onClick={() => forgetMasteredExpression({ expression: item.expression, signal: item.signal })}
-                      className="shrink-0 text-[10px] font-sans uppercase tracking-widest text-paper-ink/35 transition-colors hover:text-accent-terracotta"
-                    >
-                      删除
-                    </button>
-                  </div>
-                  <p className="mt-1 text-xs font-sans uppercase tracking-widest text-paper-ink/40">
-                    {masteredSignalLabel(item.signal, item.source)}
-                    {item.count > 1 ? ` · ${item.count} times` : ''}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </PaperCard>
+        <SpeakingProfilePanel
+          profile={speakingProfile}
+          masteredExpressions={masteredExpressions}
+          savedExpressions={savedExpressions}
+          onForgetMastered={forgetMasteredExpression}
+          onUpdateSaved={updateSavedExpression}
+          onRemoveSaved={removeSavedExpression}
+        />
 
         <div className="grid xl:grid-cols-3 gap-8">
           <CoverageList title="Speaking Topic Coverage" coverage={speakingCoverage} />
@@ -576,4 +753,420 @@ const CoverageList: React.FC<CoverageListProps> = ({ title, coverage }) => (
       ))}
     </div>
   </PaperCard>
+);
+
+const CoverageNote: React.FC = () => (
+  <p className="text-xs text-paper-ink/50 text-center">
+    Coverage is based on local preparation records and prompt metadata, not an official IELTS syllabus.
+  </p>
+);
+
+const ProgressSubpageHeader: React.FC<{ title: string }> = ({ title }) => (
+  <div className="mb-10 text-center max-w-2xl mx-auto">
+    <p className="mb-3 text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/35">
+      <Link to="/progress" className="hover:text-accent-terracotta">Progress</Link>
+    </p>
+    <h2 className="text-3xl">{title}</h2>
+  </div>
+);
+
+const SnapshotCard: React.FC<{
+  label: string;
+  value: string | number;
+  muted?: boolean;
+  small?: boolean;
+}> = ({ label, value, muted, small }) => (
+  <PaperCard className="text-center py-8">
+    <div className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+      {label}
+    </div>
+    <div className={muted
+      ? 'text-lg font-bold text-paper-ink/45 pt-2'
+      : small
+        ? 'text-sm font-bold text-paper-ink pt-2 font-sans leading-6'
+        : 'text-3xl font-bold text-accent-terracotta'}
+    >
+      {value}
+    </div>
+  </PaperCard>
+);
+
+const ProgressEntryCard: React.FC<{
+  to: string;
+  title: string;
+  subtitle: string;
+  metric: string;
+  meta: string;
+  icon: React.ReactNode;
+}> = ({ to, title, subtitle, metric, meta, icon }) => (
+  <Link to={to} className="block">
+    <PaperCard className="h-full transition-colors hover:border-accent-terracotta/35">
+      <div className="flex items-start justify-between gap-4">
+        <span className="grid h-10 w-10 place-items-center border border-paper-ink/10 text-accent-terracotta">
+          {icon}
+        </span>
+        <div className="text-right">
+          <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">{meta}</p>
+          <p className="mt-1 text-2xl font-bold text-accent-terracotta">{metric}</p>
+        </div>
+      </div>
+      <h3 className="mt-6 text-2xl text-paper-ink">{title}</h3>
+      <p className="mt-3 text-sm leading-7 text-paper-ink/60">{subtitle}</p>
+      <p className="mt-5 text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta">
+        Open {title}
+      </p>
+    </PaperCard>
+  </Link>
+);
+
+interface SpeakingProfilePanelProps {
+  profile: SpeakingProfileSummary;
+  masteredExpressions: MasteredExpressionMemory[];
+  savedExpressions: SavedExpressionMemory[];
+  onForgetMastered: (item: { expression: string; signal?: string }) => void;
+  onUpdateSaved: (item: { id: string; expression: string }) => void;
+  onRemoveSaved: (id: string) => void;
+}
+
+const partLabel = (part?: 1 | 2 | 3) => part ? `Part ${part}` : 'Speaking';
+
+const evidencePreview = (evidence: SpeakingProfileEvidence) => (
+  <div key={`${evidence.context}-${evidence.text}`} className="border-l border-paper-ink/10 pl-3">
+    <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
+      {partLabel(evidence.part)} / {preview(evidence.context)}
+    </p>
+    <p className="mt-1 text-sm leading-6 text-paper-ink/65">{preview(evidence.text)}</p>
+  </div>
+);
+
+const ProfileEmpty: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <p className="py-4 text-sm leading-7 text-paper-ink/50">{children}</p>
+);
+
+const ProfileSection: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}> = ({ icon, title, children }) => (
+  <div className="border border-paper-ink/10 bg-paper-ink/[0.015] p-4">
+    <div className="mb-4 flex items-center gap-2">
+      <span className="grid h-8 w-8 place-items-center border border-paper-ink/10 text-paper-ink/55">
+        {icon}
+      </span>
+      <h4 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/60">{title}</h4>
+    </div>
+    {children}
+  </div>
+);
+
+const RepeatedChunkList: React.FC<{ chunks: SpeakingProfileRepeatedChunk[] }> = ({ chunks }) => (
+  chunks.length ? (
+    <div className="space-y-4">
+      {chunks.map(chunk => (
+        <div key={chunk.canonical} className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-base font-bold text-paper-ink">{chunk.canonical}</p>
+            <span className="border border-accent-terracotta/25 px-2 py-0.5 text-[10px] font-sans uppercase tracking-widest text-accent-terracotta">
+              {chunk.count} uses
+            </span>
+          </div>
+          <p className="text-sm leading-7 text-paper-ink/60">{chunk.note}</p>
+          <p className="text-xs leading-6 text-paper-ink/55">
+            Range: {chunk.alternatives.slice(0, 4).join(' / ')}
+          </p>
+          <div className="space-y-2">{chunk.evidence.slice(0, 2).map(evidencePreview)}</div>
+        </div>
+      ))}
+    </div>
+  ) : <ProfileEmpty>No expression has reached the 3-use threshold yet.</ProfileEmpty>
+);
+
+const GrammarPatternList: React.FC<{ patterns: SpeakingProfileGrammarPattern[] }> = ({ patterns }) => (
+  patterns.length ? (
+    <div className="space-y-4">
+      {patterns.map(pattern => (
+        <div key={pattern.key} className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-base font-bold text-paper-ink">{pattern.label}</p>
+            <span className="text-xs font-sans uppercase tracking-widest text-paper-ink/40">{pattern.count} signals</span>
+          </div>
+          {pattern.contexts.length > 0 && (
+            <p className="text-xs leading-6 text-paper-ink/55">
+              Contexts: {pattern.contexts.map(item => preview(item)).join(' / ')}
+            </p>
+          )}
+          <div className="space-y-2">{pattern.evidence.slice(0, 2).map(evidencePreview)}</div>
+        </div>
+      ))}
+    </div>
+  ) : <ProfileEmpty>No repeated grammar pattern is strong enough yet.</ProfileEmpty>
+);
+
+const MaterialClusterList: React.FC<{ clusters: SpeakingProfileMaterialCluster[] }> = ({ clusters }) => (
+  clusters.length ? (
+    <div className="space-y-4">
+      {clusters.map(cluster => (
+        <div key={cluster.material} className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-base font-bold text-paper-ink">{cluster.material}</p>
+              <p className="text-xs font-sans uppercase tracking-widest text-paper-ink/40">
+                Part 1 {cluster.partCounts[1] || 0} / Part 2 {cluster.partCounts[2] || 0} / Part 3 {cluster.partCounts[3] || 0}
+              </p>
+            </div>
+            <Link
+              to="/practice-history"
+              className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta hover:text-paper-ink"
+            >
+              Review History
+            </Link>
+          </div>
+          {cluster.useCases.length > 0 && (
+            <p className="text-xs leading-6 text-paper-ink/55">
+              Useful for: {cluster.useCases.join(' / ')}
+            </p>
+          )}
+          <p className="text-xs leading-6 text-paper-ink/55">
+            Development: {cluster.developmentFocus.join(' / ')}
+          </p>
+          <div className="space-y-2">{cluster.evidence.slice(0, 2).map(evidencePreview)}</div>
+        </div>
+      ))}
+    </div>
+  ) : <ProfileEmpty>No reusable material cluster is strong enough yet.</ProfileEmpty>
+);
+
+const Part2SignalList: React.FC<{ signals: SpeakingProfilePart2Signal[] }> = ({ signals }) => (
+  signals.length ? (
+    <div className="space-y-3">
+      {signals.map(signal => (
+        <div key={signal.signal} className="border-b border-paper-ink/5 pb-3 last:border-b-0 last:pb-0">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-bold text-paper-ink">{signal.label}</p>
+            <span className="text-xs font-sans uppercase tracking-widest text-paper-ink/40">
+              {signal.weakCount}/{signal.totalCount} weak
+            </span>
+          </div>
+          <div className="mt-2 space-y-2">{signal.evidence.slice(0, 1).map(evidencePreview)}</div>
+        </div>
+      ))}
+    </div>
+  ) : <ProfileEmpty>No repeated weak Part 2 signal yet.</ProfileEmpty>
+);
+
+const Part3PatternList: React.FC<{ patterns: SpeakingProfilePart3Pattern[] }> = ({ patterns }) => (
+  patterns.length ? (
+    <div className="space-y-3">
+      {patterns.map(pattern => (
+        <div key={pattern.key} className="border-b border-paper-ink/5 pb-3 last:border-b-0 last:pb-0">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-bold text-paper-ink">{pattern.label}</p>
+            <span className="text-xs font-sans uppercase tracking-widest text-paper-ink/40">{pattern.count} signals</span>
+          </div>
+          <div className="mt-2 space-y-2">{pattern.evidence.slice(0, 1).map(evidencePreview)}</div>
+        </div>
+      ))}
+    </div>
+  ) : <ProfileEmpty>No repeated Part 3 discussion pattern yet.</ProfileEmpty>
+);
+
+const SavedExpressionList: React.FC<{
+  expressions: SavedExpressionMemory[];
+  onUpdate: (item: { id: string; expression: string }) => void;
+  onRemove: (id: string) => void;
+}> = ({ expressions, onUpdate, onRemove }) => (
+  expressions.length ? (
+    <div className="space-y-3">
+      {expressions.slice(0, 8).map(item => (
+        <SavedExpressionCard key={item.id} item={item} onUpdate={onUpdate} onRemove={onRemove} />
+      ))}
+    </div>
+  ) : <ProfileEmpty>Select text anywhere in the app and save it here.</ProfileEmpty>
+);
+
+const SavedExpressionCard: React.FC<{
+  item: SavedExpressionMemory;
+  onUpdate: (item: { id: string; expression: string }) => void;
+  onRemove: (id: string) => void;
+}> = ({ item, onUpdate, onRemove }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(item.expression);
+
+  const save = () => {
+    const clean = draft.replace(/\s+/g, ' ').trim();
+    if (!clean) return;
+    onUpdate({ id: item.id, expression: clean });
+    setEditing(false);
+  };
+
+  return (
+    <div className="border border-paper-ink/10 bg-paper-100/40 px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="flex gap-2">
+              <input
+                value={draft}
+                onChange={event => setDraft(event.target.value)}
+                className="min-w-0 flex-1 border border-paper-ink/15 bg-white px-2 py-1 text-sm font-sans text-paper-ink outline-none focus:border-accent-terracotta"
+              />
+              <button
+                type="button"
+                onClick={save}
+                className="text-[10px] font-sans uppercase tracking-widest text-accent-terracotta hover:text-paper-ink"
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm font-bold leading-6 text-paper-ink">{item.expression}</p>
+          )}
+          <p className="mt-1 text-xs leading-5 text-paper-ink/50">Snippet: {preview(item.originalSnippet)}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(item.expression);
+              setEditing(value => !value);
+            }}
+            className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35 transition-colors hover:text-accent-terracotta"
+          >
+            {editing ? 'Cancel' : 'Edit'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(item.id)}
+            className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35 transition-colors hover:text-accent-terracotta"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MasteredExpressionFoldout: React.FC<{
+  expressions: MasteredExpressionMemory[];
+  onForget: (item: { expression: string; signal?: string }) => void;
+}> = ({ expressions, onForget }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-paper-ink/10 bg-paper-100/40">
+      <button
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <span className="flex items-center gap-2 text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/60">
+          <CheckCircle2 className="h-4 w-4" />
+          Mastered Expressions
+          <span className="text-paper-ink/35">({expressions.length})</span>
+        </span>
+        {open ? <ChevronDown className="h-4 w-4 text-paper-ink/45" /> : <ChevronRight className="h-4 w-4 text-paper-ink/45" />}
+      </button>
+      {open && (
+        <div className="grid gap-3 border-t border-paper-ink/10 p-4 md:grid-cols-2 xl:grid-cols-3">
+          {expressions.length === 0 ? (
+            <p className="text-sm text-paper-ink/55">No mastered expressions yet.</p>
+          ) : expressions.slice(0, 60).map(item => (
+            <div key={item.id} className="border border-paper-ink/10 bg-paper-ink/[0.015] px-3 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-bold leading-6 text-paper-ink">{item.expression}</p>
+                <button
+                  type="button"
+                  onClick={() => onForget({ expression: item.expression, signal: item.signal })}
+                  className="flex shrink-0 items-center gap-1 text-[10px] font-sans uppercase tracking-widest text-paper-ink/35 transition-colors hover:text-accent-terracotta"
+                >
+                  <Undo2 className="h-3 w-3" />
+                  Undo
+                </button>
+              </div>
+              <p className="mt-1 text-xs font-sans uppercase tracking-widest text-paper-ink/40">
+                {masteredSignalLabel(item.signal, item.source)}
+                {item.count > 1 ? ` / ${item.count} times` : ''}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SpeakingProfilePanel: React.FC<SpeakingProfilePanelProps> = ({
+  profile,
+  masteredExpressions,
+  savedExpressions,
+  onForgetMastered,
+  onUpdateSaved,
+  onRemoveSaved,
+}) => {
+  const hasProfileContent = profile.repeatedChunks.length > 0 ||
+    profile.grammarPatterns.length > 0 ||
+    profile.materialClusters.length > 0 ||
+    profile.part2Signals.length > 0 ||
+    profile.part3Patterns.length > 0 ||
+    savedExpressions.length > 0 ||
+    masteredExpressions.length > 0;
+
+  return (
+    <PaperCard>
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 place-items-center border border-paper-ink/10 text-accent-terracotta">
+            <UserRound className="h-5 w-5" />
+          </span>
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-widest">Speaking Profile</h3>
+            <p className="mt-2 text-sm leading-7 text-paper-ink/60">
+              Derived from local Speaking records. Profile items stay bounded and evidence-based.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-right sm:grid-cols-4">
+          <ProfileMetric label="Evidence" value={profile.evidenceLabel} />
+          <ProfileMetric label="P1" value={profile.partCounts[1]} />
+          <ProfileMetric label="P2" value={profile.partCounts[2]} />
+          <ProfileMetric label="P3" value={profile.partCounts[3]} />
+        </div>
+      </div>
+
+      {!hasProfileContent ? (
+        <ProfileEmpty>More analyzed Speaking attempts will make this profile more useful.</ProfileEmpty>
+      ) : (
+        <div className="space-y-5">
+          <div className="grid gap-5 xl:grid-cols-2">
+            <ProfileSection icon={<Repeat2 className="h-4 w-4" />} title="Repeated Chunks">
+              <RepeatedChunkList chunks={profile.repeatedChunks} />
+            </ProfileSection>
+            <ProfileSection icon={<Wrench className="h-4 w-4" />} title="Recurring Grammar">
+              <GrammarPatternList patterns={profile.grammarPatterns} />
+            </ProfileSection>
+            <ProfileSection icon={<Layers className="h-4 w-4" />} title="Reusable Material">
+              <MaterialClusterList clusters={profile.materialClusters} />
+            </ProfileSection>
+            <ProfileSection icon={<SlidersHorizontal className="h-4 w-4" />} title="Part 2 Six Signals">
+              <Part2SignalList signals={profile.part2Signals} />
+            </ProfileSection>
+            <ProfileSection icon={<MessagesSquare className="h-4 w-4" />} title="Part 3 Discussion">
+              <Part3PatternList patterns={profile.part3Patterns} />
+            </ProfileSection>
+            <ProfileSection icon={<Bookmark className="h-4 w-4" />} title="Saved Expressions">
+              <SavedExpressionList expressions={savedExpressions} onUpdate={onUpdateSaved} onRemove={onRemoveSaved} />
+            </ProfileSection>
+          </div>
+          <MasteredExpressionFoldout expressions={masteredExpressions} onForget={onForgetMastered} />
+        </div>
+      )}
+    </PaperCard>
+  );
+};
+
+const ProfileMetric: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
+  <div className="border border-paper-ink/10 px-3 py-2">
+    <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">{label}</p>
+    <p className="mt-1 text-sm font-bold text-paper-ink">{value}</p>
+  </div>
 );

@@ -856,15 +856,13 @@ const normalizeSpeakingScoreOnly = (
       part,
     )),
   };
-  const visibleScoreValues = Object.values(visibleScores).filter(score => Number.isFinite(score) && score > 0);
   const headlineSource =
     source.bandEstimateExcludingPronunciation ??
     source.bandEstimate ??
     source.estimatedBand ??
     source.overallBand;
-  const headlineFallback = visibleScoreValues.length ? Math.min(...visibleScoreValues) : FALLBACK_SCORE;
   const headline = normalizeHalfBandScore(applySpeakingLengthCap(
-    asNumber(headlineSource, 'bandEstimateExcludingPronunciation', validationErrors, headlineFallback),
+    asNumber(headlineSource, 'bandEstimateExcludingPronunciation', validationErrors, FALLBACK_SCORE),
     transcriptWords,
     part,
   ));
@@ -873,8 +871,15 @@ const normalizeSpeakingScoreOnly = (
     visibleScores.lexicalResource,
     visibleScores.grammaticalRangeAccuracy,
   );
+  const maximumVisibleScore = Math.max(
+    visibleScores.fluencyCoherence,
+    visibleScores.lexicalResource,
+    visibleScores.grammaticalRangeAccuracy,
+  );
   const normalizedHeadline = headline > 0 && minimumVisibleScore > 0 && headline < minimumVisibleScore
     ? minimumVisibleScore
+    : headline > 0 && maximumVisibleScore > 0 && headline > maximumVisibleScore
+      ? maximumVisibleScore
     : headline;
   const boundary = source.boundaryStatus === 'borderline_7' ||
     source.boundaryStatus === 'borderline_8' ||
@@ -2828,6 +2833,136 @@ const normalizePart1CleanRetryAnswers = (
     .filter((item, index, items) => items.findIndex(candidate => candidate.questionRef === item.questionRef) === index);
 };
 
+const replaceFirstPart1CleanRetryQuote = (text: string, original: string, better: string) => {
+  const cleanOriginal = safeLearningText(original).trim();
+  const cleanBetter = safeLearningText(better).trim();
+  if (!cleanOriginal || !cleanBetter) return text;
+  const index = text.toLowerCase().indexOf(cleanOriginal.toLowerCase());
+  if (index < 0) return text;
+  return `${text.slice(0, index)}${cleanBetter}${text.slice(index + cleanOriginal.length)}`;
+};
+
+const selectPart1CleanRetryLayer = (annotation: Part1AnswerAnnotation) =>
+  annotation.layers
+    .filter(layer =>
+      safeLearningText(layer.original).trim() &&
+      safeLearningText(layer.better).trim() &&
+      part1AnnotationKeyText(layer.original) !== part1AnnotationKeyText(layer.better),
+    )
+    .sort((a, b) => part1SeverityRank[b.severity] - part1SeverityRank[a.severity] || b.original.length - a.original.length)[0];
+
+const part1CleanRetryTokenOverlap = (left: string, right: string) => {
+  const leftTokens = new Set(normalizeTranscriptFormatText(left).split(/\s+/).filter(token => token.length >= 4));
+  const rightTokens = normalizeTranscriptFormatText(right).split(/\s+/).filter(token => token.length >= 4);
+  if (!leftTokens.size || !rightTokens.length) return 0;
+  const shared = rightTokens.filter(token => leftTokens.has(token)).length;
+  return shared / Math.max(leftTokens.size, rightTokens.length);
+};
+
+const isReusablePart1RetryReferenceAnswer = (currentAnswer: string, priorAnswer: string) => {
+  const currentKey = normalizeTranscriptFormatText(currentAnswer);
+  const priorKey = normalizeTranscriptFormatText(priorAnswer);
+  if (!currentKey || !priorKey) return false;
+  if (currentKey === priorKey) return true;
+  return part1CleanRetryTokenOverlap(currentAnswer, priorAnswer) >= 0.65;
+};
+
+const buildPart1CleanRetryFallbackFromAnnotations = (
+  answerText: string,
+  annotations: Part1AnswerAnnotation[],
+) => {
+  let repaired = answerText.trim();
+  let changed = false;
+  const seen = new Set<string>();
+  const candidates = annotations
+    .flatMap(annotation => {
+      const layer = selectPart1CleanRetryLayer(annotation);
+      if (!layer) return [];
+      const layerCandidate = {
+        original: layer.original,
+        better: layer.better,
+        severity: layer.severity,
+      };
+      const combinedCandidate = annotation.combinedRepair
+        ? {
+          original: annotation.sourceQuote,
+          better: annotation.combinedRepair,
+          severity: layer.severity,
+        }
+        : null;
+      return [layerCandidate, combinedCandidate].filter((item): item is typeof layerCandidate => Boolean(item));
+    })
+    .filter(candidate => textKeyContains(answerText, candidate.original))
+    .sort((a, b) => b.original.length - a.original.length || part1SeverityRank[b.severity] - part1SeverityRank[a.severity]);
+
+  candidates.forEach(candidate => {
+    const key = `${part1AnnotationKeyText(candidate.original)}::${part1AnnotationKeyText(candidate.better)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const next = replaceFirstPart1CleanRetryQuote(repaired, candidate.original, candidate.better);
+    if (next !== repaired) {
+      repaired = next;
+      changed = true;
+    }
+  });
+
+  const answer = stripGenericPart1CleanRetryOpener(polishPart1RepairText(repaired));
+  return {
+    answer: answer || answerText.trim(),
+    changed,
+  };
+};
+
+const completePart1CleanRetryAnswers = (
+  providerAnswers: Part1CleanRetryAnswer[],
+  answers: NonNullable<SpeakingRequest['threadAnswers']>,
+  annotations: Part1AnswerAnnotation[],
+  retryReference?: Part1RetryReferenceContext,
+) => {
+  const providerByRef = new Map(providerAnswers.map(answer => [answer.questionRef, answer] as const));
+  const priorByRef = part1RetryReferenceByQuestion(retryReference);
+  const filledRefs: string[] = [];
+  const fallbackSources: string[] = [];
+  const cleanRetryAnswers = answers.map((answer, index): Part1CleanRetryAnswer => {
+    const questionRef = `Q${index + 1}`;
+    const providerAnswer = providerByRef.get(questionRef);
+    if (providerAnswer?.answer.trim()) return providerAnswer;
+    const answerAnnotations = annotations.filter(annotation => annotation.questionRef === questionRef);
+    const annotationFallback = buildPart1CleanRetryFallbackFromAnnotations(answer.answer, answerAnnotations);
+    if (annotationFallback.changed && annotationFallback.answer.trim()) {
+      filledRefs.push(questionRef);
+      fallbackSources.push(`${questionRef}:annotation`);
+      return {
+        questionRef,
+        answer: annotationFallback.answer,
+        noteZh: 'Filled from grounded transcript repairs because the provider omitted this clean answer.',
+      };
+    }
+    const prior = priorByRef.get(questionRef);
+    if (prior?.answer && isReusablePart1RetryReferenceAnswer(answer.answer, prior.answer)) {
+      filledRefs.push(questionRef);
+      fallbackSources.push(`${questionRef}:retry_reference`);
+      return {
+        questionRef,
+        answer: stripGenericPart1CleanRetryOpener(polishPart1RepairText(prior.answer)),
+        noteZh: 'Filled from the previous certified retry answer because the provider omitted this clean answer.',
+      };
+    }
+    filledRefs.push(questionRef);
+    fallbackSources.push(`${questionRef}:original`);
+    return {
+      questionRef,
+      answer: stripGenericPart1CleanRetryOpener(polishPart1RepairText(answer.answer)),
+      noteZh: 'Provider omitted this clean answer; learner wording was preserved for certification instead of blocking the report.',
+    };
+  });
+  return {
+    answers: cleanRetryAnswers,
+    filledRefs,
+    fallbackSources,
+  };
+};
+
 const normalizePart1CertificationAnswerSet = (
   value: unknown,
   request: Part1CertificationRequest,
@@ -3023,7 +3158,7 @@ const normalizePart1DevelopmentTargets = (
       const answerIndex = Number((questionRef || 'Q0').replace(/^Q/i, '')) - 1;
       const learnerAnswer = answers[answerIndex]?.answer || '';
       const reasonZh = sanitizePart1FeedbackText(
-        safeLearningText(asString(record.reasonZh ?? record.reason, '', `threadFeedback.developmentTargets[${index}].reasonZh`, validationErrors)),
+        safeLearningText(optionalSafeString(record.reasonZh ?? record.reason) || ''),
       ) || '';
       const developmentMoveZh = sanitizePart1FeedbackText(
         safeLearningText(asString(record.developmentMoveZh ?? record.developmentMove, '', `threadFeedback.developmentTargets[${index}].developmentMoveZh`, validationErrors)),
@@ -3406,7 +3541,11 @@ const normalizePart1TopicThreadFeedback = (
   const materialSource = isRecord(threadSource.materialBank) ? threadSource.materialBank : {};
   const highImpactPhraseFixes = normalizeThreadPhraseItems(threadSource.highImpactPhraseFixes, answers, validationErrors, 'threadFeedback.highImpactPhraseFixes');
   const optionalPolish = normalizeThreadPhraseItems(threadSource.optionalPolish, answers, validationErrors, 'threadFeedback.optionalPolish');
-  const cleanRetryAnswers = normalizePart1CleanRetryAnswers(threadSource.cleanRetryAnswers ?? [], answers, validationErrors);
+  const cleanRetryValidationWarnings: string[] = [];
+  const providerCleanRetryAnswers = normalizePart1CleanRetryAnswers(threadSource.cleanRetryAnswers ?? [], answers, cleanRetryValidationWarnings);
+  if (cleanRetryValidationWarnings.length) {
+    normalizedFields.push(`part1CleanRetryProviderWarnings:${cleanRetryValidationWarnings.length}`);
+  }
   const annotationDiagnostics: Part1AnnotationDiagnostics = {
     severityDowngradedFromMustFix: 0,
     cleanerConflictsFound: 0,
@@ -3414,8 +3553,20 @@ const normalizePart1TopicThreadFeedback = (
   };
   const providerAnnotations = normalizePart1AnswerAnnotations(threadSource.annotations ?? [], answers, validationErrors, request.retryReference, annotationDiagnostics);
   const fallbackAnnotations = annotationsFromThreadItems(answers, mustFixWithAttribution, highImpactPhraseFixes, optionalPolish, request.retryReference);
+  const mergedAnnotationCandidates = mergePart1AnswerAnnotations(providerAnnotations, fallbackAnnotations);
+  const cleanRetryCompletion = completePart1CleanRetryAnswers(
+    providerCleanRetryAnswers,
+    answers,
+    mergedAnnotationCandidates,
+    request.retryReference,
+  );
+  const cleanRetryAnswers = cleanRetryCompletion.answers;
+  if (cleanRetryCompletion.filledRefs.length) {
+    normalizedFields.push(`part1CleanRetryFilled:${cleanRetryCompletion.filledRefs.join(',')}`);
+    normalizedFields.push(`part1CleanRetryFallbackSources:${cleanRetryCompletion.fallbackSources.join(',')}`);
+  }
   const annotations = resolvePart1AnnotationCleanerConsistency(
-    mergePart1AnswerAnnotations(providerAnnotations, fallbackAnnotations),
+    mergedAnnotationCandidates,
     cleanRetryAnswers,
     annotationDiagnostics,
   );
@@ -4069,18 +4220,13 @@ const normalizeSpeakingFeedback = (
     source.bandEstimate ??
     source.estimatedBand ??
     source.overallBand;
-  const rawScoreFallbackValues = [
-    scores.fluencyCoherence,
-    scores.lexicalResource,
-    scores.grammaticalRangeAccuracy,
-  ].filter((score): score is number => typeof score === 'number' && Number.isFinite(score) && score > 0);
-  const headlineFallback = rawScoreFallbackValues.length ? Math.min(...rawScoreFallbackValues) : FALLBACK_SCORE;
+  const hasExplicitHeadline = typeof headlineSource === 'number' && Number.isFinite(headlineSource) && headlineSource > 0;
   const cappedHeadline = normalizeHalfBandScore(applySpeakingLengthCap(
     asNumber(
       headlineSource,
       'bandEstimateExcludingPronunciation',
       validationErrors,
-      headlineFallback,
+      FALLBACK_SCORE,
     ),
     transcriptWords,
     part,
@@ -4115,43 +4261,81 @@ const normalizeSpeakingFeedback = (
     visibleScores.lexicalResource,
     visibleScores.grammaticalRangeAccuracy,
   );
-  const shouldNormalizeSpeakingScore =
+  const maximumVisibleScore = Math.max(
+    visibleScores.fluencyCoherence,
+    visibleScores.lexicalResource,
+    visibleScores.grammaticalRangeAccuracy,
+  );
+  const shouldRaiseSpeakingScoreToVisibleCriteria =
     promptAwareHeadline > 0 &&
     minimumVisibleScore > 0 &&
     promptAwareHeadline < minimumVisibleScore &&
     !hasQualityCap &&
     !hasProviderFatalIssue;
-  const normalizedHeadline = shouldNormalizeSpeakingScore ? minimumVisibleScore : promptAwareHeadline;
-  if (shouldNormalizeSpeakingScore) {
+  const shouldLowerSpeakingScoreToVisibleCriteria =
+    promptAwareHeadline > 0 &&
+    maximumVisibleScore > 0 &&
+    promptAwareHeadline > maximumVisibleScore &&
+    !hasQualityCap &&
+    !hasProviderFatalIssue;
+  const normalizedHeadline = shouldRaiseSpeakingScoreToVisibleCriteria
+    ? minimumVisibleScore
+    : shouldLowerSpeakingScoreToVisibleCriteria
+      ? maximumVisibleScore
+      : promptAwareHeadline;
+  if (shouldRaiseSpeakingScoreToVisibleCriteria || shouldLowerSpeakingScoreToVisibleCriteria) {
     normalizedFields.push('speakingScoreConsistency');
   }
-  const bandEstimateRange = normalizeSpeakingBandEstimateRange(
-    source.bandEstimateRange,
-    normalizedHeadline,
-    hasQualityCap || Boolean(promptMismatchWarning),
-    normalizedFields,
-  );
-  const expectedSpeakingTargetLayer = speakingTargetLayerForEstimate(normalizedHeadline);
+  const bandEstimateRange = hasExplicitHeadline
+    ? normalizeSpeakingBandEstimateRange(
+      source.bandEstimateRange,
+      normalizedHeadline,
+      hasQualityCap || Boolean(promptMismatchWarning),
+      normalizedFields,
+    )
+    : normalizeValidSpeakingBandEstimateRange(source.bandEstimateRange);
+  const criterionConsistentBandEstimateRange = bandEstimateRange &&
+    minimumVisibleScore > 0 &&
+    maximumVisibleScore > 0 &&
+    !hasQualityCap &&
+    !hasProviderFatalIssue &&
+    bandEstimateRange.lower > maximumVisibleScore
+      ? undefined
+      : bandEstimateRange;
+  if (bandEstimateRange && !criterionConsistentBandEstimateRange) {
+    normalizedFields.push('speakingBandRangeCriterionConsistency');
+  }
+  const layerEstimate = normalizedHeadline > 0 ? normalizedHeadline : criterionConsistentBandEstimateRange?.lower || 0;
+  const expectedSpeakingTargetLayer = speakingTargetLayerForEstimate(layerEstimate);
   const providerSpeakingTargetLayer = normalizeTargetAnswerLayer(source.targetAnswerLayer);
   const speakingTargetAnswerLayer = expectedSpeakingTargetLayer;
   if (providerSpeakingTargetLayer && providerSpeakingTargetLayer !== expectedSpeakingTargetLayer) {
     normalizedFields.push('targetLayerConsistency');
   }
   const speakingTargetFloor = targetFloorForLayer(speakingTargetAnswerLayer);
-  const speakingTargetLayer = getTargetLabel(normalizedHeadline, 'answer');
+  const speakingTargetLayer = getTargetLabel(layerEstimate, 'answer');
   const targetAnswerSelfScores = normalizeSpeakingTargetSelfScores(source.targetAnswerSelfScores);
   const providerTargetAnswerStatus = normalizeTargetAnswerStatus(source.targetAnswerStatus);
-  const currentAnswerIsHighBand = normalizedHeadline >= 8 && !hasQualityCap && !hasProviderFatalIssue;
-  const rawUpgradedAnswer = currentAnswerIsHighBand
-    ? ''
-    : limitTransformation
-      ? buildInsufficientSpeakingTransformation(part)
-      : asString(
-          source.upgradedAnswer,
-          'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
-          'upgradedAnswer',
-          validationErrors,
-        );
+  const currentAnswerIsHighBand = layerEstimate >= 8 && !hasQualityCap && !hasProviderFatalIssue;
+  const rootUpgradedAnswer = optionalSafeString(source.upgradedAnswer);
+  const part3ThreadRootTargetOptional =
+    request.sessionKind === 'part3_discussion_thread' && !rootUpgradedAnswer;
+  let rawUpgradedAnswer = '';
+  if (currentAnswerIsHighBand) {
+    rawUpgradedAnswer = '';
+  } else if (limitTransformation) {
+    rawUpgradedAnswer = buildInsufficientSpeakingTransformation(part);
+  } else if (!part3ThreadRootTargetOptional) {
+    rawUpgradedAnswer = asString(
+      rootUpgradedAnswer,
+      'The provider returned incomplete feedback. Please retry analysis after checking the Debug Panel.',
+      'upgradedAnswer',
+      validationErrors,
+    );
+  }
+  if (part3ThreadRootTargetOptional) {
+    normalizedFields.push('part3RootUpgradedAnswerOptional');
+  }
   const hasTargetAnswer = Boolean(rawUpgradedAnswer.trim()) && !isProviderIncompleteSpeakingAnswer(rawUpgradedAnswer);
   const targetAnswerStatus: TargetAnswerStatus = (() => {
     if (currentAnswerIsHighBand) return 'meets_target';
@@ -4166,8 +4350,10 @@ const normalizeSpeakingFeedback = (
     normalizedFields.push('targetAnswerIntegrity');
   }
   const providerScoreConsistencyNote = optionalSafeString(source.scoreConsistencyNoteZh);
-  const scoreConsistencyNoteZh = shouldNormalizeSpeakingScore
+  const scoreConsistencyNoteZh = shouldRaiseSpeakingScoreToVisibleCriteria
     ? `Score normalized: without a quality cap, the visible estimate should not fall below the minimum visible language score ${formatConservativeBandEstimate(minimumVisibleScore)}.`
+    : shouldLowerSpeakingScoreToVisibleCriteria
+      ? `Score normalized: without a quality cap, the visible estimate should not exceed the strongest visible language score ${formatConservativeBandEstimate(maximumVisibleScore)}.`
     : providerScoreConsistencyNote;
 
   const defaultTargetValidationZh = currentAnswerIsHighBand
@@ -4191,7 +4377,7 @@ const normalizeSpeakingFeedback = (
     question: asString(source.question, request.question || FALLBACK_TEXT, 'question', validationErrors),
     transcript: asString(source.transcript, request.transcript || FALLBACK_TEXT, 'transcript', validationErrors),
     bandEstimateExcludingPronunciation: normalizedHeadline,
-    bandEstimateRange,
+    bandEstimateRange: criterionConsistentBandEstimateRange,
     estimateRationaleZh: optionalSafeString(source.estimateRationaleZh),
     speakingCeilingDiagnosis: normalizeSpeakingCeilingDiagnosis(source.speakingCeilingDiagnosis),
     targetBandFloor: speakingTargetFloor,
@@ -4339,7 +4525,7 @@ const normalizeSpeakingFeedback = (
     targetState: resolvedSpeakingTargetState,
     targetLayer: resolvedSpeakingTargetState === 'high_band_stable'
       ? feedbackWithoutMarkdown.targetLayer
-      : normalizedHeadline >= 7
+      : layerEstimate >= 7
         ? 'Band 7+ Target Answer'
         : 'Band 7 Target Answer',
     targetValidationZh: resolvedSpeakingTargetState === 'high_band_stable'

@@ -54,6 +54,11 @@ import {
   formatPart1IssueTypeLabel,
 } from '@/src/lib/markdownExport';
 import {
+  buildSpeakingEvidenceLedger,
+  evidenceLedgerItemsToPart1Annotations,
+  summarizeEvidenceLedger,
+} from '@/src/lib/evidenceLedger';
+import {
   buildPart1LearningDisplayModel,
   evaluatePart1LearningPayloadQuality,
   findPart1AnnotationDisplaySpans,
@@ -66,6 +71,7 @@ import {
   isHighBandStableState,
   resolveSpeakingTargetState,
 } from '@/src/lib/scoreLayer';
+import { buildSpeakingProfileCapsule } from '@/src/lib/speakingProfile';
 import {
   ActiveSpeakingPracticeSession,
   createRecordId,
@@ -846,84 +852,103 @@ const part3ReusableFrame = (item: Part3AnswerFeedback) => {
   };
 };
 
-const splitPart3SpokenSentences = (text = '') =>
-  (text.replace(/\s+/g, ' ').trim().match(/[^.!?。！？]+[.!?。！？]?/g) || [])
-    .map(sentence => sentence.trim())
-    .filter(Boolean);
+const spokenWordCount = (text = '') => text.trim().split(/\s+/).filter(Boolean).length;
 
-const part3TryThisWordCount = (text: string) =>
-  text.trim().split(/\s+/).filter(Boolean).length;
-
-const isWeakPart3TryThisLine = (line = '') => {
-  const cleaned = line.replace(/\s+/g, ' ').trim();
-  if (!cleaned) return true;
-  if (/[\[\]{}]/.test(cleaned)) return true;
-  if (/[\u3400-\u9fff]/.test(cleaned)) return true;
-
-  const words = part3TryThisWordCount(cleaned);
-  const lower = cleaned.toLowerCase();
-  if (words < 7) return true;
-  if (/^(in my opinion|overall|to sum up|all in all|i'd say|i would say|yes|no|not really|it depends)\b/.test(lower) && words < 14) {
-    return true;
-  }
-  if (/\b(wide variety|different kinds|many things|several reasons|depends on the situation)\b/.test(lower) &&
-    !/\b(such as|including|like|because|while|whereas|rather than|instead of|not .* but|for example|for instance|which means|as a result)\b/.test(lower)) {
-    return true;
-  }
-  return false;
+const part1DevelopmentModeLabel = (mode?: Part1DevelopmentTarget['developmentMode']) => {
+  if (mode === 'needs_content') return 'Answer development';
+  if (mode === 'expression_upgrade') return 'Expression control';
+  if (mode === 'no_extra_content') return 'Answer control';
+  return 'Answer-level reminder';
 };
 
-const hasPart3GroupSubject = (line: string) =>
-  /\b(people|families|workers|students|children|parents|older people|young people|readers|audiences|society|government|some people|others|those who|busy adults|modern life|modern families)\b/i.test(line);
-
-const isFirstPersonCenteredPart3Line = (line: string) =>
-  /\b(for me|personally|in my opinion|my family|my view|i think|i feel|i can|i usually|i personally)\b/i.test(line);
-
-const hasPart3CategoryContent = (line: string) => {
-  const lower = line.toLowerCase();
-  if (/\b(such as|including|like|a mix of|types of|categories|genre|genres|classic|online|self-help|fiction|non-fiction)\b/.test(lower)) return true;
-  return /,\s*[^,]+,\s*(and|or)\s+/.test(line);
-};
-
-const part3TryThisMatchesIssue = (sentence: string, item: Part3AnswerFeedback) => {
-  if (isWeakPart3TryThisLine(sentence)) return false;
-  if (item.feedbackMode === 'part3_generalisation') {
-    return hasPart3GroupSubject(sentence) && !isFirstPersonCenteredPart3Line(sentence);
+const buildPart1AnswerLevelReminder = ({
+  answer,
+  developmentTarget,
+  actionSummary,
+}: {
+  answer: string;
+  developmentTarget?: Part1DevelopmentTarget;
+  actionSummary?: string;
+}) => {
+  const reason = normalizePart1LearnerText(developmentTarget?.reasonZh || '');
+  const move = normalizePart1LearnerText(developmentTarget?.developmentMoveZh || actionSummary || '');
+  if (reason || move) {
+    return {
+      label: part1DevelopmentModeLabel(developmentTarget?.developmentMode),
+      primary: reason || move,
+      secondary: reason && move && reason !== move ? move : '',
+    };
   }
-  if (item.feedbackMode === 'answer_scope' || item.questionFrame === 'category_criteria') {
-    return hasPart3CategoryContent(sentence);
+  if (spokenWordCount(answer) <= 14) {
+    return {
+      label: 'Answer development',
+      primary: 'This answer is relevant, but it is still close to a one-line reply.',
+      secondary: 'Part 1 usually sounds more natural with a direct answer, one short reason or detail, and a natural stop.',
+    };
   }
-  return true;
+  return null;
 };
 
-const part3TryThisSentenceScore = (sentence: string) => {
-  if (isWeakPart3TryThisLine(sentence)) return -100;
-  const lower = sentence.toLowerCase();
-  let score = Math.min(part3TryThisWordCount(sentence), 32);
-  if (/\b(such as|including|like|for example|for instance)\b/.test(lower)) score += 16;
-  if (/\b(because|since|while|whereas|rather than|instead of|not .* but|which means|as a result|so that)\b/.test(lower)) score += 14;
-  if (/\b(people|families|workers|students|children|parents|older people|young people|readers|audiences|society|government)\b/.test(lower)) score += 8;
-  if (/,/.test(sentence)) score += 3;
-  if (/^(in my opinion|overall|to sum up|all in all|i'd say|i would say)\b/.test(lower)) score -= 10;
-  return score;
+const buildPart2AnswerRouteRows = (part2Feedback: SpeakingFeedback['part2Feedback']) => {
+  if (!part2Feedback) return [];
+  const normalizeRouteText = (text = '') => text.toLowerCase().replace(/\s+/g, ' ').trim();
+  const isConcreteRouteText = (text = '') => {
+    const normalized = normalizeRouteText(text);
+    if (!normalized) return false;
+    const genericLanguageOnly = /\b(grammar|tense|article|articles|naturalness|collocation|word choice|vocabulary|sentence structure|accuracy)\b|语法|时态|冠词|自然度|搭配|词语|词汇|句式|准确性|地道/.test(normalized);
+    const routeSignal = /\b(cue|card|story|route|opening|sequence|timeline|turning point|ending|what it is|what it contains|how long|who kept|why it matters|family album|album|photo|photos|memory|memories|meaningful)\b|故事线|结构|开头|顺序|线索|覆盖|保存多久|谁保存|里面|包含|相册|照片|回忆|意义|为什么重要/.test(normalized);
+    const routeGapSignal = /\b(missing|thin|unclear|add|split|reorganize|rebuild|needs?|should make clear|not clear|too vague|opening|what it is|what it contains|how long|who kept|why it matters)\b|缺少|不清楚|不够清楚|补|拆|重组|开头|保存多久|谁保存|里面|为什么重要/.test(normalized);
+    if (genericLanguageOnly && !routeGapSignal) return false;
+    return routeSignal || !genericLanguageOnly;
+  };
+  const routeModuleRoles = new Set([
+    'what_who_where',
+    'background',
+    'concrete_details',
+    'what_happened',
+    'feeling',
+    'why_it_mattered',
+  ]);
+  const priorityFocus = isConcreteRouteText(part2Feedback.priorityFocusZh)
+    ? part2Feedback.priorityFocusZh
+    : '';
+  const rows = [
+    priorityFocus
+      ? { label: 'Main route', value: priorityFocus }
+      : null,
+    ...part2Feedback.storyModules
+      .filter(module => routeModuleRoles.has(module.role))
+      .filter(module => module.status === 'thin' || module.status === 'missing')
+      .filter(module => isConcreteRouteText(`${module.coachingZh} ${module.improvedVersion} ${module.sourceWording}`))
+      .slice(0, 3)
+      .map(module => ({
+        label: part2StoryRoleLabel(module.role),
+        value: isConcreteRouteText(module.coachingZh) ? module.coachingZh : module.improvedVersion,
+      })),
+  ].filter((row): row is { label: string; value: string } => Boolean(row?.value));
+  return rows;
 };
 
-const part3TryThisLine = (item: Part3AnswerFeedback) => {
-  const upgradedLine = item.microUpgrade?.upgradedLine?.trim();
-  if (upgradedLine && part3TryThisMatchesIssue(upgradedLine, item)) return upgradedLine;
-
-  const targetAnswer = item.targetAnswer?.trim();
-  if (!targetAnswer) return '';
-
-  const candidates = splitPart3SpokenSentences(targetAnswer);
-  const best = candidates
-    .filter(sentence => part3TryThisMatchesIssue(sentence, item))
-    .map(sentence => ({ sentence, score: part3TryThisSentenceScore(sentence) }))
-    .sort((a, b) => b.score - a.score)[0];
-  if (best && best.score > 0) return best.sentence;
-
-  const firstUsable = candidates.find(sentence => part3TryThisMatchesIssue(sentence, item));
-  return firstUsable || '';
+const buildPart3AnswerReminderRows = (item?: Part3AnswerFeedback) => {
+  if (!item) return [];
+  const repairTheme = item.thinkingDiagnosis?.upgradeRuleZh ||
+    [item.thinkingDiagnosis?.mainCeilingZh || item.ctChain.missingLinkZh, item.thinkingDiagnosis?.bestNextMoveZh || item.ctChain.nextMoveZh]
+      .filter(Boolean)
+      .join(' ');
+  const reusablePattern = item.thinkingDiagnosis?.reusableFrame ||
+    item.thinkingDiagnosis?.reusableFrameZh ||
+    '';
+  return [
+    {
+      label: 'Question task',
+      value: item.thinkingDiagnosis?.questionThinkingZh || item.questionFrameGuidanceZh || part3QuestionFrameGuidance(item.questionFrame),
+    },
+    {
+      label: 'Repair theme',
+      value: repairTheme,
+    },
+    reusablePattern ? { label: 'Reusable pattern', value: reusablePattern } : null,
+  ].filter((row): row is { label: string; value: string } => Boolean(row?.value));
 };
 
 type Part3AnnotationPriority = 'blocking' | 'grammar' | 'naturalness' | 'part3';
@@ -1917,6 +1942,7 @@ export default function SpeakingPractice() {
   const threadAnnotationRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const speakingAnnotationRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const lastPart1AnnotationCoverageLogRef = useRef('');
+  const lastSpeakingEvidenceLedgerLogRef = useRef('');
 
   useEffect(() => {
     setHiddenPart2SignalUpgradeKeys([]);
@@ -2308,12 +2334,14 @@ export default function SpeakingPractice() {
     status: 'draft' | 'analyzed' | 'provider_failed' = feedback ? 'analyzed' : 'draft',
     feedbackOverride: SpeakingFeedback | null = feedback,
     transcriptOverride = transcript,
+    threadAnswersOverride?: LockedThreadAnswer[],
   ): SpeakingPracticeRecord | null => {
     if (!question) return null;
     const timestamp = new Date().toISOString();
     const existing = activeSessionRef.current?.attemptsByPart[part]?.id === activeAttemptIdRef.current
       ? activeSessionRef.current.attemptsByPart[part]
       : undefined;
+    const recordThreadAnswers = threadAnswersOverride || lockedThreadAnswers;
     const sessionKind: SpeakingPracticeRecord['sessionKind'] = part1Thread
       ? 'part1_topic_thread'
       : part3DiscussionSet
@@ -2336,9 +2364,9 @@ export default function SpeakingPractice() {
       topicId: threadTopicId,
       threadId,
       threadQuestions,
-      threadAnswers: part1Thread || part3DiscussionSet ? lockedThreadAnswers : undefined,
+      threadAnswers: part1Thread || part3DiscussionSet ? recordThreadAnswers : undefined,
       activeThreadIndex: part1Thread || part3DiscussionSet ? activeThreadIndex : undefined,
-      threadCompleted: part1Thread || part3DiscussionSet ? (status === 'analyzed' || lockedThreadAnswers.length >= threadQuestionCount) : undefined,
+      threadCompleted: part1Thread || part3DiscussionSet ? (status === 'analyzed' || recordThreadAnswers.length >= threadQuestionCount) : undefined,
       retryChainId: part1Thread ? part1RetryReference?.retryChainId : undefined,
       parentAttemptId: part1Thread ? part1RetryReference?.parentAttemptId : undefined,
       priorCleanRetryAnswers: part1Thread ? part1RetryReference?.cleanRetryAnswers : undefined,
@@ -2575,6 +2603,21 @@ export default function SpeakingPractice() {
       record.status === 'analyzed' &&
       Boolean(record.feedback)
     );
+  };
+  const buildCurrentSpeakingProfileCapsule = async () => {
+    try {
+      const all = await listPracticeRecords({ module: 'speaking' });
+      const speakingRecords = all.filter((record): record is SpeakingPracticeRecord =>
+        record.module === 'speaking' && record.status === 'analyzed' && Boolean(record.feedback)
+      );
+      return buildSpeakingProfileCapsule(speakingRecords, {
+        masteredExpressions: profile.masteredExpressions,
+        savedExpressions: profile.savedExpressions,
+      });
+    } catch (error) {
+      addDebugLog(`Speaking profile capsule unavailable: ${error}`);
+      return undefined;
+    }
   };
 
   const chooseLeastRecentlyAnalyzedThread = (
@@ -3618,15 +3661,18 @@ export default function SpeakingPractice() {
     setProviderErrorMessage('');
     setProviderDiagnostic(null);
     addDebugLog('Starting Part 1 topic-thread AI analysis flow...');
-    const restorePreviousResultAfterReanalysisFailure = () => {
+    const restorePreviousResultAfterReanalysisFailure = (
+      message = '回测失败：当前结果已保留，已锁定的回答没有丢失。',
+    ) => {
       if (!options.preserveCurrentResultOnFailure || !previousFeedback) return false;
       setFeedback(previousFeedback);
-      setProviderErrorMessage('Re-analysis could not be completed. The current result is still shown and the locked answers are preserved.');
+      setProviderErrorMessage(message);
       setStep('results');
       addDebugLog('Part 1 result-page re-analysis failed; previous result kept visible.');
       return true;
     };
     try {
+      const speakingProfileCapsule = await buildCurrentSpeakingProfileCapsule();
       const analysisRequest = {
         part: 1,
         sessionKind: 'part1_topic_thread',
@@ -3640,6 +3686,7 @@ export default function SpeakingPractice() {
           answer: answer.transcript,
         })),
         retryReference: part1RetryReference || undefined,
+        speakingProfileCapsule,
       } as const;
       let { feedback: result, diagnostic } = await routedAnalyzeSpeaking(analysisRequest, false);
       const expectedThreadAnswers = answers.map(answer => ({
@@ -3674,10 +3721,10 @@ export default function SpeakingPractice() {
       setProviderDiagnostic(diagnosticWithIntegrity);
 
       if (diagnostic.failureKind === 'provider_unavailable') {
-        if (restorePreviousResultAfterReanalysisFailure()) return;
+        if (restorePreviousResultAfterReanalysisFailure('回测失败：AI provider 暂时不可用，当前结果已保留。')) return;
         setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
         setStep('editing');
-        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript, answers);
         if (failedBase) {
           const failedRecord = {
             ...failedBase,
@@ -3713,12 +3760,12 @@ export default function SpeakingPractice() {
       if (integrity.unknownCleanRetryRefs.length) addDebugLog(`Unknown clean retry answer refs: ${integrity.unknownCleanRetryRefs.join(', ')}`);
 
       if (diagnostic.failureKind === 'parse_or_schema' || !integrity.ok) {
-        if (restorePreviousResultAfterReanalysisFailure()) return;
+        if (restorePreviousResultAfterReanalysisFailure(`回测失败：AI 返回的 Part 1 同题组反馈不完整（${integrity.summary}），当前结果已保留。`)) return;
         setFeedbackFallbackUsed(diagnostic.fallbackUsed);
         setFeedback(null);
         setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
         setStep('editing');
-        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript, answers);
         if (failedBase) {
           const failedRecord = {
             ...failedBase,
@@ -3760,12 +3807,12 @@ export default function SpeakingPractice() {
       }));
       const certificationDiagnostics: ProviderDiagnostic[] = [];
       const saveCertificationFailure = (finalDiagnostic: ProviderDiagnostic, message: string) => {
-        if (restorePreviousResultAfterReanalysisFailure()) return;
+        if (restorePreviousResultAfterReanalysisFailure(message)) return;
         setFeedbackFallbackUsed(finalDiagnostic.fallbackUsed);
         setFeedback(null);
         setProviderErrorMessage(message);
         setStep('editing');
-        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript, answers);
         if (failedBase) {
           const failedRecord = {
             ...failedBase,
@@ -4026,7 +4073,7 @@ export default function SpeakingPractice() {
       setFeedbackFallbackUsed(finalDiagnostic.fallbackUsed);
       setFeedback(finalResult);
       setStep('results');
-      const analyzedBase = buildCurrentSpeakingRecord('analyzed', finalResult, combinedTranscript);
+      const analyzedBase = buildCurrentSpeakingRecord('analyzed', finalResult, combinedTranscript, answers);
       if (analyzedBase) {
         const saveResult = await upsertPracticeRecord({
           ...analyzedBase,
@@ -4052,7 +4099,7 @@ export default function SpeakingPractice() {
       );
     } catch (error) {
       addDebugLog(`Part 1 topic-thread analysis error: ${error}`);
-      if (restorePreviousResultAfterReanalysisFailure()) return;
+      if (restorePreviousResultAfterReanalysisFailure(`回测失败：${error instanceof Error ? error.message : String(error)}，当前结果已保留。`)) return;
       setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
       setStep('editing');
     }
@@ -4082,6 +4129,7 @@ export default function SpeakingPractice() {
     };
 
     try {
+      const speakingProfileCapsule = await buildCurrentSpeakingProfileCapsule();
       const { feedback: result, diagnostic } = await routedAnalyzeSpeaking({
         part: 3,
         sessionKind: 'part3_discussion_thread',
@@ -4094,6 +4142,7 @@ export default function SpeakingPractice() {
         })),
         question: part3DiscussionSet.questions.map((item, index) => `Q${index + 1}. ${item.question}`).join('\n'),
         transcript: combinedTranscript,
+        speakingProfileCapsule,
       }, isInsufficientSpeakingSample(combinedTranscript, 3));
       const resultFeedback: SpeakingFeedback = {
         ...result,
@@ -4116,7 +4165,7 @@ export default function SpeakingPractice() {
         setFeedbackFallbackUsed(false);
         setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
         setStep('editing');
-        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript, answers);
         if (failedBase) {
           const failedRecord = {
             ...failedBase,
@@ -4152,7 +4201,7 @@ export default function SpeakingPractice() {
         setFeedback(null);
         setProviderErrorMessage(lockedThreadRecoveryMessage(answers.length));
         setStep('editing');
-        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript);
+        const failedBase = buildCurrentSpeakingRecord('provider_failed', null, combinedTranscript, answers);
         if (failedBase) {
           const failedRecord = {
             ...failedBase,
@@ -4185,7 +4234,7 @@ export default function SpeakingPractice() {
       setFeedbackFallbackUsed(diagnostic.fallbackUsed);
       setFeedback(resultFeedback);
       setStep('results');
-      const analyzedBase = buildCurrentSpeakingRecord('analyzed', resultFeedback, combinedTranscript);
+      const analyzedBase = buildCurrentSpeakingRecord('analyzed', resultFeedback, combinedTranscript, answers);
       if (analyzedBase) {
         const saveResult = await upsertPracticeRecord({
           ...analyzedBase,
@@ -4242,6 +4291,7 @@ export default function SpeakingPractice() {
     addDebugLog("Analyzing final reviewed transcript");
     if (rawTranscript.trim()) addDebugLog("Raw browser transcript preserved separately.");
     try {
+      const speakingProfileCapsule = await buildCurrentSpeakingProfileCapsule();
       const { feedback: result, diagnostic } = await routedAnalyzeSpeaking({
         part,
         question: question?.question || '',
@@ -4249,6 +4299,7 @@ export default function SpeakingPractice() {
         masteredExpressions: part === 2 && part2MasteredExpressionHints.length
           ? part2MasteredExpressionHints
           : undefined,
+        speakingProfileCapsule,
       }, isInsufficientSpeakingSample(cleanedTranscript, part));
       setProviderDiagnostic(diagnostic);
 
@@ -4401,6 +4452,7 @@ export default function SpeakingPractice() {
   const shouldShowDevelopmentPlan = step === 'results' && isInsufficientSpeakingSample(transcript, part, feedback);
   const isHighBandStable = isHighBandSpeakingStable(feedback);
   const isPart1ThreadResult = feedback?.sessionKind === 'part1_topic_thread' && Boolean(feedback.threadFeedback);
+  const isPart1SingleQuestionResult = Boolean(step === 'results' && feedback?.part === 1 && !isPart1ThreadResult);
   const threadFeedback = feedback?.threadFeedback;
   const threadAnswersForReview = feedback?.threadAnswers || lockedThreadAnswers.map(answer => ({
     questionId: answer.questionId,
@@ -4693,6 +4745,31 @@ export default function SpeakingPractice() {
     (feedback.sessionKind === 'part3_discussion_thread' || part3DiscussionSet) &&
     threadAnswersForReview.length > 1,
   );
+  const speakingEvidenceLedger = useMemo(
+    () => feedback ? buildSpeakingEvidenceLedger(feedback, { threadAnswers: threadAnswersForReview }) : [],
+    [feedback, threadAnswersForReview],
+  );
+  const speakingEvidenceSummary = useMemo(
+    () => summarizeEvidenceLedger(speakingEvidenceLedger),
+    [speakingEvidenceLedger],
+  );
+  useEffect(() => {
+    if (!feedback || !speakingEvidenceSummary.total) return;
+    const signature = [
+      activeAttemptIdRef.current,
+      feedback.part,
+      feedback.sessionKind || 'single',
+      feedback.transcript.length,
+      speakingEvidenceSummary.total,
+      speakingEvidenceSummary.anchored,
+      speakingEvidenceSummary.missingDisplayRequired,
+    ].join('::');
+    if (lastSpeakingEvidenceLedgerLogRef.current === signature) return;
+    lastSpeakingEvidenceLedgerLogRef.current = signature;
+    addDebugLog(
+      `Evidence ledger: ${speakingEvidenceSummary.anchored}/${speakingEvidenceSummary.total} anchored; ${speakingEvidenceSummary.missingDisplayRequired} required missing.`,
+    );
+  }, [addDebugLog, feedback, speakingEvidenceSummary]);
   const part3AnswerFeedback = useMemo<Part3AnswerFeedback[]>(() => {
     if (!isPart3DiscussionResult) return [];
     const providerAnswers = feedback?.part3Feedback?.answers || [];
@@ -4724,60 +4801,110 @@ export default function SpeakingPractice() {
       };
     });
   }, [feedback?.part3Feedback?.answers, isPart3DiscussionResult, part3DiscussionSet, threadAnswersForReview]);
+  const part3AnswerFeedbackByQuestion = useMemo(() => new Map(
+    part3AnswerFeedback.map(item => [item.questionRef, item] as const),
+  ), [part3AnswerFeedback]);
   const part3TargetAnswers = part3AnswerFeedback.filter(item => item.targetAnswer.trim());
-  const shouldUsePart2InlineAnnotations = Boolean(step === 'results' && feedback?.part === 2 && !isPart1ThreadResult);
   const part2Feedback = feedback?.part === 2 ? feedback.part2Feedback : undefined;
+  const part2AnswerRouteRows = buildPart2AnswerRouteRows(part2Feedback);
+  const genericSpeakingIssueAnnotations = useMemo<Part1AnswerAnnotation[]>(() => {
+    if (!feedback) return [];
+    const allowedRepairKeys = new Set(criticalErrors.map(error => `${error.original}\u0000${error.correction}`));
+    const allowedSpokenChoiceKeys = new Set(optionalPolish.map(hint => `${hint.original}\u0000${hint.better}`));
+    const visibleGenericEvidence = speakingEvidenceLedger.filter(item => {
+      if (item.sourceKind === 'speaking_generic_repair') {
+        return allowedRepairKeys.has(`${item.original}\u0000${item.better}`);
+      }
+      if (item.sourceKind === 'speaking_generic_spoken_choice') {
+        return allowedSpokenChoiceKeys.has(`${item.original}\u0000${item.better}`);
+      }
+      return false;
+    });
+    const genericAnnotations = evidenceLedgerItemsToPart1Annotations(visibleGenericEvidence, {
+      sourceKinds: ['speaking_generic_repair', 'speaking_generic_spoken_choice'],
+    });
+    return currentLowerBound < 7
+      ? genericAnnotations
+      : genericAnnotations.map(annotation => ({
+        ...annotation,
+        layers: annotation.layers.map(layer => (
+          layer.severity === 'better_spoken_choice'
+            ? { ...layer, severity: 'optional_polish' }
+            : layer
+        )),
+      }));
+  }, [criticalErrors, currentLowerBound, feedback, optionalPolish, speakingEvidenceLedger]);
+  const singlePart1ReusableExpressions = useMemo(() => {
+    if (!feedback || !isPart1SingleQuestionResult) return [];
+    const seen = new Set<string>();
+    const items: {
+      original: string;
+      better: string;
+      explanationZh: string;
+      source: 'repair' | 'spoken_choice';
+    }[] = [];
+    const normalizeCandidate = (value = '') =>
+      normalizePart1TranscriptDisplayText(value)
+        .trim()
+        .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '');
+    const addCandidate = (
+      original: string,
+      better: string,
+      explanationZh: string,
+      source: 'repair' | 'spoken_choice',
+    ) => {
+      const safeBetter = normalizeCandidate(better);
+      const safeOriginal = normalizeCandidate(original);
+      if (!safeBetter || safeBetter.length < 4 || safeBetter.length > 140) return;
+      if (safeBetter.split(/\s+/).length < 2) return;
+      if (safeOriginal && safeOriginal.toLowerCase() === safeBetter.toLowerCase()) return;
+      const key = safeBetter.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({
+        original: safeOriginal,
+        better: safeBetter,
+        explanationZh: normalizePart1LearnerText(explanationZh),
+        source,
+      });
+    };
+    feedback.naturalnessHints.forEach(hint => {
+      addCandidate(hint.original, hint.better, hint.explanationZh, 'spoken_choice');
+    });
+    feedback.fatalErrors.forEach(error => {
+      addCandidate(error.original, error.correction, error.explanationZh, 'repair');
+    });
+    return items.slice(0, 6);
+  }, [feedback, isPart1SingleQuestionResult]);
+  const hasSinglePart1LearningAssets = Boolean(
+    isPart1SingleQuestionResult &&
+    (feedback?.preservedStyle.length || singlePart1ReusableExpressions.length),
+  );
+  const singlePart1AnswerLevelReminder = feedback && isPart1SingleQuestionResult
+    ? buildPart1AnswerLevelReminder({ answer: feedback.transcript })
+    : null;
+  const shouldUsePart1SingleInlineAnnotations = Boolean(isPart1SingleQuestionResult);
+  const shouldUsePart2InlineAnnotations = Boolean(step === 'results' && feedback?.part === 2 && !isPart1ThreadResult);
   const speakingInlineAnnotations = useMemo(() => {
+    if (shouldUsePart1SingleInlineAnnotations) return genericSpeakingIssueAnnotations;
     if (!part2Feedback) return [];
     return part2Feedback.annotations || [];
-  }, [part2Feedback]);
+  }, [genericSpeakingIssueAnnotations, part2Feedback, shouldUsePart1SingleInlineAnnotations]);
   const speakingAnnotationRenderData = useMemo(
     () => getPart1AnnotationRenderData(feedback?.transcript || '', speakingInlineAnnotations),
     [feedback?.transcript, speakingInlineAnnotations],
   );
-  const part2AnchoredRepairCount = speakingAnnotationRenderData.anchored.length;
-  const part2TranscriptAnnotationLabel = part2AnchoredRepairCount > 0
-    ? `Showing top critical issues · ${part2AnchoredRepairCount} priority ${part2AnchoredRepairCount === 1 ? 'repair' : 'repairs'}`
+  const speakingAnchoredRepairCount = speakingAnnotationRenderData.anchored.length;
+  const speakingTranscriptAnnotationLabel = speakingAnchoredRepairCount > 0
+    ? `Showing top critical issues · ${speakingAnchoredRepairCount} priority ${speakingAnchoredRepairCount === 1 ? 'repair' : 'repairs'}`
     : 'No anchored repairs';
-  const genericSpeakingIssueAnnotations = useMemo<Part1AnswerAnnotation[]>(() => {
-    if (!feedback) return [];
-    const mustFixAnnotations = criticalErrors
-      .filter(error => error.original.trim() && error.correction.trim())
-      .map((error, index): Part1AnswerAnnotation => ({
-        id: `speaking-must-${index}`,
-        questionRef: '',
-        sourceQuote: error.original,
-        combinedRepair: error.correction,
-        layers: [{
-          severity: 'must_fix',
-          issueType: error.tag || 'accuracy',
-          original: error.original,
-          better: error.correction,
-          explanationZh: error.explanationZh,
-        }],
-      }));
-    const polishAnnotations = optionalPolish
-      .filter(hint => hint.original.trim() && hint.better.trim())
-      .map((hint, index): Part1AnswerAnnotation => ({
-        id: `speaking-polish-${index}`,
-        questionRef: '',
-        sourceQuote: hint.original,
-        combinedRepair: hint.better,
-        layers: [{
-          severity: currentLowerBound < 7 ? 'better_spoken_choice' : 'optional_polish',
-          issueType: hint.tag || 'naturalness',
-          original: hint.original,
-          better: hint.better,
-          explanationZh: hint.explanationZh,
-        }],
-      }));
-    return [...mustFixAnnotations, ...polishAnnotations];
-  }, [criticalErrors, currentLowerBound, feedback, optionalPolish]);
   const part3AnnotationRenderByQuestion = useMemo(() => {
     if (!isPart3DiscussionResult || !genericSpeakingIssueAnnotations.length) return new Map<string, ReturnType<typeof getPart1AnnotationRenderData>>();
     const entries = threadAnswersForReview.map((answer, index) => {
       const questionRef = `Q${index + 1}`;
-      const annotations = genericSpeakingIssueAnnotations.map(annotation => ({
+      const annotations = genericSpeakingIssueAnnotations
+        .filter(annotation => !annotation.questionRef || annotation.questionRef === questionRef)
+        .map(annotation => ({
         ...annotation,
         id: `part3-${questionRef}-${annotation.id}`,
         questionRef,
@@ -5526,6 +5653,11 @@ export default function SpeakingPractice() {
                         const cleanRetry = cleanRetryByQuestion.get(questionRef);
                         const developmentTarget = part1DevelopmentTargetByQuestion.get(questionRef);
                         const answerAction = part1AnswerActionByQuestion.get(questionRef);
+                        const answerLevelReminder = buildPart1AnswerLevelReminder({
+                          answer: answer.answer,
+                          developmentTarget,
+                          actionSummary: answerAction?.summaryZh,
+                        });
                         const developmentChunks = [
                           ...(developmentTarget?.phraseChunks || []),
                           ...(answerAction?.examples || []),
@@ -5559,6 +5691,17 @@ export default function SpeakingPractice() {
                             </div>
                             <p className="mb-3 text-lg leading-8 text-paper-ink">{answer.question}</p>
                             {renderAnnotatedPart1Answer(answer.answer, questionRef)}
+                            {answerLevelReminder && (
+                              <div className="mt-4 border-t border-paper-ink/10 pt-4">
+                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">
+                                  {answerLevelReminder.label}
+                                </p>
+                                <p className="mt-2 text-sm leading-7 text-paper-ink/70">{answerLevelReminder.primary}</p>
+                                {answerLevelReminder.secondary && (
+                                  <p className="mt-1 text-sm leading-7 text-paper-ink/60">{answerLevelReminder.secondary}</p>
+                                )}
+                              </div>
+                            )}
                             {shouldRenderCleanRetry && cleanRetry && (
                               <div className="mt-4 border border-accent-terracotta/15 bg-paper-50/80 p-4">
                                 <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">
@@ -5697,7 +5840,184 @@ export default function SpeakingPractice() {
                 </>
               )}
 
-              {!isPart1ThreadResult && (
+              {isPart1SingleQuestionResult && (
+              <>
+              <PaperCard className="bg-paper-200 border-none relative">
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40 mb-2">
+                      PART 1 · SINGLE ANSWER REVIEW
+                    </p>
+                    <h3 className="text-2xl text-paper-ink">{feedback.question}</h3>
+                  </div>
+                  <div className="text-left md:text-right">
+                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45">IDEAL-DELIVERY ESTIMATE</p>
+                    <p className="text-4xl font-bold text-accent-terracotta">{scoreDisplayValue}</p>
+                  </div>
+                </div>
+                {feedback.estimateRationaleZh && (
+                  <p className="mt-4 border-l-2 border-l-accent-terracotta/35 bg-paper-50/70 px-4 py-3 text-sm leading-7 text-paper-ink/65">
+                    {feedback.estimateRationaleZh}
+                  </p>
+                )}
+                <p className="mt-3 text-xs leading-6 text-paper-ink/50">
+                  This is a single-question saved result. Fresh Part 1 practice now uses same-topic 3-4 question threads.
+                </p>
+                <div className="mt-5 grid gap-3 md:grid-cols-3">
+                  {[
+                    { label: 'Fluency & Coherence', score: feedback.scores.fluencyCoherence },
+                    { label: 'Lexical Resource', score: feedback.scores.lexicalResource },
+                    { label: 'Grammatical Range', score: feedback.scores.grammaticalRangeAccuracy },
+                  ].map((s) => (
+                    <div key={s.label} className="border border-paper-ink/10 bg-paper-50/50 p-4">
+                      <span className="block text-xs font-sans uppercase tracking-widest text-paper-ink/50 mb-2">{s.label}</span>
+                      <span className="text-2xl font-bold text-paper-ink">{formatBandEstimate(s.score)}</span>
+                    </div>
+                  ))}
+                </div>
+              </PaperCard>
+
+              <PaperCard className="border-l-2 border-l-red-800/70">
+                <div className="mb-5 border-b border-paper-ink/10 pb-4">
+                  <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-red-800/70">PART 1</p>
+                  <h4 className="mt-1 text-xl font-bold tracking-wide text-paper-ink">ANNOTATED ANSWER</h4>
+                  <p className="mt-2 text-sm leading-7 text-paper-ink/60">
+                    {speakingAnchoredRepairCount > 0
+                      ? '点击原回答中的标记，查看具体错误和修改方式。'
+                      : '当前记录没有可锚定到原文的批注。'}
+                  </p>
+                </div>
+                <section className="border border-paper-ink/10 bg-paper-ink/[0.02] p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/40">Q1</p>
+                    <p className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
+                      {speakingTranscriptAnnotationLabel}
+                    </p>
+                  </div>
+                  <p className="mb-3 text-lg leading-8 text-paper-ink">{feedback.question}</p>
+                  {renderAnnotatedSpeakingTranscript()}
+                  {singlePart1AnswerLevelReminder && (
+                    <div className="mt-4 border-t border-paper-ink/10 pt-4">
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">
+                        {singlePart1AnswerLevelReminder.label}
+                      </p>
+                      <p className="mt-2 text-sm leading-7 text-paper-ink/70">{singlePart1AnswerLevelReminder.primary}</p>
+                      {singlePart1AnswerLevelReminder.secondary && (
+                        <p className="mt-1 text-sm leading-7 text-paper-ink/60">{singlePart1AnswerLevelReminder.secondary}</p>
+                      )}
+                    </div>
+                  )}
+                  {visibleSpeakingTargetAnswer && !shouldShowDevelopmentPlan && (
+                    <div className="mt-4 border border-accent-terracotta/15 bg-paper-50/80 p-4">
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">
+                        A CLEANER ANSWER FOR YOUR NEXT TRY
+                      </p>
+                      <p className="mt-2 text-lg leading-8 text-paper-ink whitespace-pre-wrap">{visibleSpeakingTargetAnswer}</p>
+                    </div>
+                  )}
+                </section>
+              </PaperCard>
+
+              {hasSinglePart1LearningAssets && (
+                <PaperCard className="border-l-2 border-l-accent-terracotta/45">
+                  <div className="mb-5 border-b border-paper-ink/10 pb-4">
+                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">PART 1 · SESSION REVIEW</p>
+                    <h4 className="mt-1 text-xl font-bold tracking-wide text-paper-ink">MATERIAL DEVELOPMENT</h4>
+                  </div>
+                  {feedback.preservedStyle.length > 0 && (
+                    <section>
+                      <h5 className="text-sm font-bold leading-7 text-paper-ink">可积累素材</h5>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {feedback.preservedStyle.slice(0, 4).map((style, i) => {
+                          const materialEnglish = normalizePart1TranscriptDisplayText(style.sampleNextStep || style.text);
+                          const materialChinese = normalizePart1LearnerText(style.reasonZh || style.expansionZh || '');
+                          const materialNote = normalizePart1LearnerText(
+                            style.expansionZh && style.expansionZh !== materialChinese ? style.expansionZh : '',
+                          );
+                          return (
+                            <div key={i} className="border-l-2 border-l-accent-terracotta/30 bg-paper-50/60 py-3 pl-4 pr-3">
+                              <p className="text-base font-bold leading-7 text-paper-ink">{materialEnglish}</p>
+                              {materialChinese && (
+                                <p className="mt-1 text-sm leading-7 text-paper-ink/60">{materialChinese}</p>
+                              )}
+                              {materialNote && (
+                                <p className="mt-2 border-l-2 border-l-paper-ink/15 pl-3 text-sm leading-7 text-paper-ink/65">{materialNote}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  )}
+                  {singlePart1ReusableExpressions.length > 0 && (
+                    <section className={feedback.preservedStyle.length > 0 ? 'mt-6 border-t border-paper-ink/10 pt-5' : ''}>
+                      <h5 className="text-sm font-bold leading-7 text-paper-ink">可积累表达</h5>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {singlePart1ReusableExpressions.map((item, index) => (
+                          <div key={`${item.better}-${index}`} className="border-l-2 border-l-accent-terracotta/30 bg-paper-50/60 py-3 pl-4 pr-3">
+                            <p className="text-base font-bold leading-7 text-paper-ink">{item.better}</p>
+                            {item.original && (
+                              <p className="mt-1 text-sm leading-7 text-paper-ink/50">From: {item.original}</p>
+                            )}
+                            {item.explanationZh && (
+                              <p className="mt-1 text-sm leading-7 text-paper-ink/65">{item.explanationZh}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </PaperCard>
+              )}
+
+              {shouldShowDevelopmentPlan && (
+                <PaperCard className="bg-paper-50 !p-8 md:!p-10 border-l-2 border-l-paper-ink/20">
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-paper-ink/45 mb-6 border-b border-paper-ink/10 pb-3">
+                    Band 7.0+ Starter Target
+                  </h4>
+                  <div className="w-full max-w-none space-y-5 text-paper-ink">
+                    <p className="text-lg leading-9">
+                      样本太短或信息量不足，不能可靠生成完整高分改写。{starterPlan.questionReference}
+                    </p>
+                    <ul className="space-y-3">
+                      {starterPlan.items.map(item => (
+                        <li key={item} className="text-base leading-8 border-l-2 border-l-accent-terracotta/35 pl-4">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="border border-paper-ink/10 bg-paper-ink/[0.03] p-4 rounded-sm">
+                      <p className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/45 mb-2">
+                        Starter Target Answer
+                      </p>
+                      <p className="text-lg leading-8 text-paper-ink">{starterPlan.targetAnswer}</p>
+                    </div>
+                  </div>
+                </PaperCard>
+              )}
+
+              <PaperCard className="border-l-2 border-l-accent-terracotta/30">
+                <div className="flex flex-wrap gap-3">
+                  <SerifButton onClick={exportMarkdown} className="text-xs flex items-center justify-center gap-2 py-3" variant="outline">
+                    <FileDown className="w-4 h-4" /> Export Markdown
+                  </SerifButton>
+                  {canRetestCurrentAnswer && (
+                    <SerifButton onClick={retestCurrentAnswer} variant="outline" className="text-xs flex items-center gap-2">
+                      <RefreshCcw className="w-4 h-4" /> 回测当前回答
+                    </SerifButton>
+                  )}
+                  <SerifButton onClick={practiceThisQuestionAgain} className="text-xs flex items-center gap-2">
+                    <RefreshCcw className="w-4 h-4" /> Practice This Question Again
+                  </SerifButton>
+                  <SerifButton onClick={changeQuestion} variant="outline" className="text-xs">
+                    Change Topic
+                  </SerifButton>
+                </div>
+              </PaperCard>
+              </>
+              )}
+
+              {!isPart1ThreadResult && !isPart1SingleQuestionResult && (
               <>
               <PaperCard className="bg-paper-200 border-none relative">
                 <h3 className="text-sm font-bold tracking-wide mb-6 text-paper-ink/50 border-b border-paper-ink/10 pb-2">LANGUAGE PERFORMANCE</h3>
@@ -5733,9 +6053,9 @@ export default function SpeakingPractice() {
                   <h3 className="text-xs font-sans font-bold uppercase tracking-widest text-paper-ink/50 flex items-center gap-2">
                     <Edit3 className="w-3 h-3" /> {isPart3DiscussionResult ? 'PART 3 DISCUSSION ANSWERS' : 'TRANSCRIPT'}
                   </h3>
-                  {shouldUsePart2InlineAnnotations && (
+                  {(shouldUsePart2InlineAnnotations || shouldUsePart1SingleInlineAnnotations) && (
                     <span className="text-[10px] font-sans uppercase tracking-widest text-paper-ink/35">
-                      {part2TranscriptAnnotationLabel}
+                      {speakingTranscriptAnnotationLabel}
                     </span>
                   )}
                   {isPart3DiscussionResult && (
@@ -5754,6 +6074,8 @@ export default function SpeakingPractice() {
                     ? threadAnswersForReview.map((answer, index) => {
                       const questionRef = `Q${index + 1}`;
                       const renderData = part3AnnotationRenderByQuestion.get(questionRef) || { anchored: [], unanchored: [] };
+                      const answerFeedback = part3AnswerFeedbackByQuestion.get(questionRef);
+                      const answerReminderRows = buildPart3AnswerReminderRows(answerFeedback);
                       return (
                         <section key={`${answer.questionId}-${index}`} className="border border-paper-ink/10 bg-paper-ink/[0.025] p-5">
                           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -5770,6 +6092,18 @@ export default function SpeakingPractice() {
                           </div>
                           <p className="mb-3 text-lg leading-8 text-paper-ink">{answer.question}</p>
                           {renderAnnotatedPart3Answer(answer.answer, questionRef)}
+                          {answerReminderRows.length > 0 && (
+                            <div className="mt-4 border-t border-paper-ink/10 pt-4">
+                              <div className="grid gap-3 md:grid-cols-3">
+                                {answerReminderRows.map(row => (
+                                  <div key={`${questionRef}-${row.label}`} className="border-l-2 border-l-accent-terracotta/30 bg-paper-50/70 px-4 py-3">
+                                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/65">{row.label}</p>
+                                    <p className="mt-1 text-sm leading-7 text-paper-ink/70">{row.value}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </section>
                       );
                     })
@@ -5777,6 +6111,21 @@ export default function SpeakingPractice() {
                     ? renderAnnotatedSpeakingTranscript()
                     : <p className="whitespace-pre-wrap font-serif text-base leading-8 text-paper-ink/75">{normalizePart1TranscriptDisplayText(feedback.transcript)}</p>}
                 </div>
+                {part2AnswerRouteRows.length > 0 && (
+                  <div className="mt-4 border-t border-paper-ink/10 pt-4">
+                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">
+                      Answer route
+                    </p>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      {part2AnswerRouteRows.map(row => (
+                        <div key={`${row.label}-${row.value}`} className="border-l-2 border-l-accent-terracotta/30 bg-paper-50/70 px-4 py-3">
+                          <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/45">{row.label}</p>
+                          <p className="mt-1 text-sm leading-7 text-paper-ink/70">{row.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </PaperCard>
 
               {shouldShowPart3LanguageBank && (
@@ -5834,7 +6183,6 @@ export default function SpeakingPractice() {
                     {part3AnswerFeedback.map(item => {
                       const thinkingRows = part3ThinkingRows(item);
                       const reusableFrame = part3ReusableFrame(item);
-                      const tryThisLine = part3TryThisLine(item);
                       return (
                         <section key={`part3-ct-${item.questionRef}`} className="border border-paper-ink/10 bg-paper-ink/[0.025] p-5 md:p-6">
                           <div className="mb-5 flex flex-col gap-3 border-b border-paper-ink/10 pb-4 md:flex-row md:items-start md:justify-between">
@@ -5867,17 +6215,7 @@ export default function SpeakingPractice() {
                               </div>
                             )}
 
-                            {tryThisLine && (
-                              <div className="border border-accent-terracotta/20 bg-paper-50 p-4">
-                                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">试着这样说</p>
-                                {item.microUpgrade?.focusZh && part3TryThisMatchesIssue(item.microUpgrade.upgradedLine, item) && (
-                                  <p className="mt-1 text-sm leading-7 text-paper-ink/60">{item.microUpgrade.focusZh}</p>
-                                )}
-                                <p className="mt-2 font-serif text-lg leading-9 text-paper-ink">{tryThisLine}</p>
-                              </div>
-                            )}
-
-                            {!thinkingRows.length && !tryThisLine && (
+                            {!thinkingRows.length && !reusableFrame.frame && (
                               <div className="border-l-2 border-l-accent-terracotta/25 bg-paper-50/70 px-4 py-3">
                                 <p className="text-sm leading-7 text-paper-ink/65">
                                   这题暂无稳定诊断；请优先保留题目观点，再补一个原因或条件。

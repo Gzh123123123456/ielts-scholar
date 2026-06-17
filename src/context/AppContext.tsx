@@ -8,6 +8,7 @@ interface UserProfile {
   errorTags: Record<string, number>;
   lastPracticed: string | null;
   masteredExpressions: MasteredExpressionMemory[];
+  savedExpressions: SavedExpressionMemory[];
 }
 
 export interface MasteredExpressionMemory {
@@ -15,6 +16,19 @@ export interface MasteredExpressionMemory {
   expression: string;
   source: 'part2_signal' | 'part3_language_bank' | 'part3_discussion_frame' | 'manual';
   signal?: string;
+  module?: string;
+  part?: number;
+  createdAt: string;
+  updatedAt: string;
+  count: number;
+}
+
+export interface SavedExpressionMemory {
+  id: string;
+  expression: string;
+  originalSnippet: string;
+  sourcePath?: string;
+  sourceLabel?: string;
   module?: string;
   part?: number;
   createdAt: string;
@@ -44,6 +58,16 @@ interface AppContextType {
     part?: number;
   }) => void;
   forgetMasteredExpression: (item: { expression: string; signal?: string }) => void;
+  saveExpression: (item: {
+    expression: string;
+    originalSnippet: string;
+    sourcePath?: string;
+    sourceLabel?: string;
+    module?: string;
+    part?: number;
+  }) => void;
+  updateSavedExpression: (item: { id: string; expression: string }) => void;
+  removeSavedExpression: (id: string) => void;
   providerDiagnostic: ProviderDiagnostic | null;
   setProviderDiagnostic: (diagnostic: ProviderDiagnostic | null) => void;
   providerDiagnostics: ProviderDiagnostic[];
@@ -59,10 +83,14 @@ const defaultProfile = (): UserProfile => ({
   errorTags: {},
   lastPracticed: null,
   masteredExpressions: [],
+  savedExpressions: [],
 });
 
 const profileExpressionKey = (expression: string, signal?: string) =>
   `${signal || 'any'}:${expression.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
+
+const savedExpressionKey = (expression: string) =>
+  expression.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() || 'saved-expression';
 
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
@@ -121,6 +149,36 @@ const sanitizeProfile = (value: unknown): UserProfile => {
         })
         .filter(item => item.expression)
         .slice(0, 100)
+      : [],
+    savedExpressions: Array.isArray((source as Partial<UserProfile>).savedExpressions)
+      ? ((source as Partial<UserProfile>).savedExpressions || [])
+        .filter(item => (
+          item &&
+          typeof item === 'object' &&
+          typeof (item as { expression?: unknown }).expression === 'string'
+        ))
+        .map((item): SavedExpressionMemory => {
+          const record = item as Partial<SavedExpressionMemory>;
+          const expression = record.expression?.replace(/\s+/g, ' ').trim() || '';
+          const originalSnippet = typeof record.originalSnippet === 'string'
+            ? record.originalSnippet.replace(/\s+/g, ' ').trim()
+            : expression;
+          const now = new Date().toISOString();
+          return {
+            id: typeof record.id === 'string' && record.id ? record.id : savedExpressionKey(expression),
+            expression,
+            originalSnippet,
+            sourcePath: typeof record.sourcePath === 'string' ? record.sourcePath : undefined,
+            sourceLabel: typeof record.sourceLabel === 'string' ? record.sourceLabel : undefined,
+            module: typeof record.module === 'string' ? record.module : undefined,
+            part: typeof record.part === 'number' ? record.part : undefined,
+            createdAt: typeof record.createdAt === 'string' ? record.createdAt : now,
+            updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : now,
+            count: typeof record.count === 'number' && record.count > 0 ? record.count : 1,
+          };
+        })
+        .filter(item => item.expression)
+        .slice(0, 150)
       : [],
   };
 };
@@ -214,6 +272,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const saveExpression: AppContextType['saveExpression'] = ({
+    expression,
+    originalSnippet,
+    sourcePath,
+    sourceLabel,
+    module,
+    part,
+  }) => {
+    const cleanExpression = expression.replace(/\s+/g, ' ').trim();
+    const cleanSnippet = originalSnippet.replace(/\s+/g, ' ').trim();
+    if (!cleanExpression || !cleanSnippet) return;
+    const key = savedExpressionKey(cleanExpression);
+    const now = new Date().toISOString();
+    setProfile(prev => {
+      const existing = prev.savedExpressions.find(item => savedExpressionKey(item.expression) === key);
+      if (existing) {
+        return {
+          ...prev,
+          savedExpressions: [
+            {
+              ...existing,
+              originalSnippet: cleanSnippet || existing.originalSnippet,
+              sourcePath: sourcePath || existing.sourcePath,
+              sourceLabel: sourceLabel || existing.sourceLabel,
+              module: module || existing.module,
+              part: part || existing.part,
+              updatedAt: now,
+              count: existing.count + 1,
+            },
+            ...prev.savedExpressions.filter(item => item !== existing),
+          ].slice(0, 150),
+        };
+      }
+      return {
+        ...prev,
+        savedExpressions: [
+          {
+            id: key,
+            expression: cleanExpression,
+            originalSnippet: cleanSnippet,
+            sourcePath,
+            sourceLabel,
+            module,
+            part,
+            createdAt: now,
+            updatedAt: now,
+            count: 1,
+          },
+          ...prev.savedExpressions,
+        ].slice(0, 150),
+      };
+    });
+  };
+
+  const removeSavedExpression: AppContextType['removeSavedExpression'] = (id) => {
+    setProfile(prev => ({
+      ...prev,
+      savedExpressions: prev.savedExpressions.filter(item => item.id !== id),
+    }));
+  };
+
+  const updateSavedExpression: AppContextType['updateSavedExpression'] = ({ id, expression }) => {
+    const cleanExpression = expression.replace(/\s+/g, ' ').trim();
+    if (!cleanExpression) return;
+    const nextKey = savedExpressionKey(cleanExpression);
+    const now = new Date().toISOString();
+    setProfile(prev => {
+      const target = prev.savedExpressions.find(item => item.id === id);
+      if (!target) return prev;
+      const mergedDuplicate = prev.savedExpressions.find(item =>
+        item.id !== id && savedExpressionKey(item.expression) === nextKey
+      );
+      if (mergedDuplicate) {
+        return {
+          ...prev,
+          savedExpressions: [
+            {
+              ...mergedDuplicate,
+              originalSnippet: mergedDuplicate.originalSnippet || target.originalSnippet,
+              updatedAt: now,
+              count: mergedDuplicate.count + target.count,
+            },
+            ...prev.savedExpressions.filter(item => item.id !== id && item !== mergedDuplicate),
+          ].slice(0, 150),
+        };
+      }
+      return {
+        ...prev,
+        savedExpressions: prev.savedExpressions.map(item =>
+          item.id === id
+            ? {
+              ...item,
+              id: nextKey,
+              expression: cleanExpression,
+              updatedAt: now,
+            }
+            : item
+        ),
+      };
+    });
+  };
+
   useEffect(() => {
     try {
       localStorage.setItem('ielts_profile', JSON.stringify(profile));
@@ -270,6 +430,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addDebugLog,
       markMasteredExpression,
       forgetMasteredExpression,
+      saveExpression,
+      updateSavedExpression,
+      removeSavedExpression,
       providerDiagnostic,
       setProviderDiagnostic: recordProviderDiagnostic,
       providerDiagnostics,

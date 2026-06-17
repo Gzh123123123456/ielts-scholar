@@ -9,6 +9,7 @@ import { AppProvider } from './context/AppContext';
 import { DebugPanel } from './components/ui/DebugPanel';
 import { ApiStatusPanel } from './components/ui/ApiStatusPanel';
 import { HistoryPanel } from './components/ui/HistoryPanel';
+import { TextSelectionSaveButton } from './components/ui/TextSelectionSaveButton';
 import Home from './pages/Home';
 import Speaking from './pages/Speaking';
 import SpeakingPractice from './pages/SpeakingPractice';
@@ -36,9 +37,12 @@ export default function App() {
             <Route path="/writing/task2/mock" element={<WritingTask2Mock />} />
             <Route path="/writing/task1" element={<WritingTask1Placeholder />} />
             <Route path="/progress" element={<Progress />} />
+            <Route path="/progress/speaking" element={<Progress />} />
+            <Route path="/progress/writing" element={<Progress />} />
             <Route path="/practice-history" element={<PracticeHistory />} />
             <Route path="/speech-test" element={<SpeechTest />} />
           </Routes>
+          <TextSelectionSaveButton />
           <DebugPanel />
           <ApiStatusPanel />
           <HistoryPanel />
