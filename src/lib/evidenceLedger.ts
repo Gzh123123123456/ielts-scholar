@@ -14,6 +14,8 @@ export type EvidenceLedgerSourceKind =
   | 'speaking_generic_repair'
   | 'speaking_generic_spoken_choice'
   | 'speaking_part2_annotation'
+  | 'speaking_part3_thinking_diagnosis'
+  | 'speaking_high_band_stability'
   | 'writing_task2_sentence'
   | 'writing_task2_expression'
   | 'writing_task1_language';
@@ -205,6 +207,13 @@ const findBestThreadAnswerForQuote = (
   return null;
 };
 
+const isPriorityPart3FeedbackMode = (mode?: string) =>
+  mode === 'language_repair' ||
+  mode === 'reasoning_upgrade' ||
+  mode === 'part3_generalisation' ||
+  mode === 'answer_scope' ||
+  mode === 'nuance_upgrade';
+
 export const buildSpeakingEvidenceLedger = (
   feedback: SpeakingFeedback,
   options: { threadAnswers?: SpeakingThreadAnswer[] } = {},
@@ -253,6 +262,42 @@ export const buildSpeakingEvidenceLedger = (
     });
   });
 
+  (feedback.part3Feedback?.answers || []).forEach((answerFeedback, answerIndex) => {
+    const sourceAnswer = answerByQuestionRef.get(answerFeedback.questionRef);
+    const sourceText = sourceAnswer?.answer || answerFeedback.answer || '';
+    const diagnosis = answerFeedback.thinkingDiagnosis;
+    const explanationZh = compactText([
+      diagnosis?.questionThinkingZh,
+      diagnosis?.mainCeilingZh,
+      diagnosis?.answerControlZh,
+      diagnosis?.generalisationZh,
+      diagnosis?.nuanceZh,
+      diagnosis?.supportZh,
+      diagnosis?.upgradeRuleZh,
+      diagnosis?.bestNextMoveZh,
+      diagnosis?.reusableFrameZh,
+      answerFeedback.microUpgrade?.whyItHelpsZh,
+    ].filter(Boolean).join(' '));
+    const better = compactText(answerFeedback.microUpgrade?.upgradedLine || answerFeedback.targetAnswer);
+    if (!sourceText || !better || !explanationZh) return;
+    const priority = isPriorityPart3FeedbackMode(answerFeedback.feedbackMode);
+    items.push(withAnchor({
+      id: makeEvidenceId('speaking', 'part3-diagnosis', answerFeedback.questionRef || answerIndex + 1, answerFeedback.feedbackMode),
+      module: 'speaking',
+      sourceKind: 'speaking_part3_thinking_diagnosis',
+      sourceRef: answerFeedback.questionRef || `Q${answerIndex + 1}`,
+      prompt: sourceAnswer?.question || answerFeedback.question || feedback.question,
+      sourceText,
+      sourceQuote: sourceText,
+      issueType: answerFeedback.feedbackMode || 'part3_thinking_diagnosis',
+      severity: priority ? 'priority_repair' : 'development',
+      original: sourceText,
+      better,
+      explanationZh,
+      displayRequired: priority,
+    }));
+  });
+
   feedback.fatalErrors.forEach((error, index) => {
     const matchedAnswer = feedback.part === 3 ? findBestThreadAnswerForQuote(answerByQuestionRef, error.original) : null;
     items.push(withAnchor({
@@ -290,6 +335,38 @@ export const buildSpeakingEvidenceLedger = (
       displayRequired: false,
     }));
   });
+
+  const hasStabilityGuidance = Boolean(
+    feedback.highBandStabilityZh?.trim()
+      || feedback.estimateRationaleZh?.trim()
+      || feedback.upgradedAnswer?.trim(),
+  );
+  const noLocalSpeakingRepairs = feedback.fatalErrors.length === 0 && feedback.naturalnessHints.length === 0;
+  const shouldAnchorSpeakingStability =
+    feedback.targetState === 'high_band_stable' ||
+    (
+      feedback.part === 3 &&
+      feedback.bandEstimateExcludingPronunciation >= 7 &&
+      noLocalSpeakingRepairs &&
+      hasStabilityGuidance
+    );
+  if (shouldAnchorSpeakingStability && feedback.transcript?.trim()) {
+    items.push(withAnchor({
+      id: makeEvidenceId('speaking', 'high-band-stability', feedback.part, feedback.question),
+      module: 'speaking',
+      sourceKind: 'speaking_high_band_stability',
+      sourceRef: `PART ${feedback.part}`,
+      prompt: feedback.question,
+      sourceText: feedback.transcript,
+      sourceQuote: feedback.transcript,
+      issueType: 'high_band_stability',
+      severity: 'development',
+      original: feedback.transcript,
+      better: feedback.upgradedAnswer || feedback.highBandStabilityZh || feedback.targetValidationZh || 'Keep this answer structure.',
+      explanationZh: feedback.estimateRationaleZh || feedback.highBandStabilityZh,
+      displayRequired: false,
+    }));
+  }
 
   return items;
 };

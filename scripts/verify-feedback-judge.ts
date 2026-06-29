@@ -8,6 +8,7 @@ import {
   runHardSafetyFeedbackJudge,
 } from '../src/lib/feedbackJudgeHarness.ts';
 import { safeAnalyzeSpeaking } from '../src/lib/ai/safety.ts';
+import { buildPart1LearningDisplayModel } from '../src/lib/part1LearningDisplayModel.ts';
 import type {
   Part1AnswerAnnotation,
   Part2LanguageSignal,
@@ -716,12 +717,425 @@ const runPart1CleanRetryRecoveryRegression = async () => {
   );
 };
 
+const runIncompleteReusableExampleRegression = async () => {
+  const result = await safeAnalyzeSpeaking(
+    {
+      analyzeSpeaking: async () => ({
+        ...comprehensiveMorningFeedback,
+        reusableExample: {
+          canBeReusedFor: ['daily routine'],
+        },
+      } as unknown as SpeakingFeedback),
+    } as unknown as Parameters<typeof safeAnalyzeSpeaking>[0],
+    'fixture',
+    {
+      part: 1,
+      sessionKind: 'single_question',
+      question: comprehensiveMorningFeedback.question,
+      transcript: comprehensiveMorningFeedback.transcript,
+    },
+  );
+
+  assert.equal(
+    result.diagnostic.failureKind,
+    undefined,
+    `incomplete reusableExample should be dropped, not treated as schema failure: ${result.diagnostic.validationErrors.join(' | ')}`,
+  );
+  assert.equal(result.feedback.reusableExample, null);
+  assert.ok(
+    result.diagnostic.normalizedFields?.includes('reusableExampleDroppedIncomplete'),
+    'diagnostic should expose that incomplete reusableExample was dropped',
+  );
+  assert.equal(
+    result.diagnostic.validationErrors.some(error => error.startsWith('reusableExample.')),
+    false,
+    'incomplete optional reusableExample should not add validation errors',
+  );
+};
+
+const runIncompleteNaturalnessHintRegression = async () => {
+  const result = await safeAnalyzeSpeaking(
+    {
+      analyzeSpeaking: async () => ({
+        ...comprehensiveMorningFeedback,
+        naturalnessHints: [
+          {
+            original: 'cause',
+            tag: 'spoken_choice',
+            explanationZh: 'Use because in a more polished exam answer.',
+          },
+        ],
+      } as unknown as SpeakingFeedback),
+    } as unknown as Parameters<typeof safeAnalyzeSpeaking>[0],
+    'fixture',
+    {
+      part: 1,
+      sessionKind: 'single_question',
+      question: comprehensiveMorningFeedback.question,
+      transcript: comprehensiveMorningFeedback.transcript,
+    },
+  );
+
+  assert.equal(
+    result.diagnostic.failureKind,
+    undefined,
+    `incomplete naturalness hint should be dropped, not treated as schema failure: ${result.diagnostic.validationErrors.join(' | ')}`,
+  );
+  assert.equal(result.feedback.naturalnessHints.length, 0);
+  assert.ok(
+    result.diagnostic.normalizedFields?.includes('naturalnessHintDroppedIncomplete:0'),
+    'diagnostic should expose incomplete naturalness hint drop',
+  );
+};
+
+const runSpeakingHeadlineFromCriteriaRegression = async () => {
+  const result = await safeAnalyzeSpeaking(
+    {
+      analyzeSpeaking: async () => ({
+        ...undercoveredFamilyAlbumFeedback,
+        bandEstimateExcludingPronunciation: undefined,
+        bandEstimate: undefined,
+        estimatedBand: undefined,
+        overallBand: undefined,
+      } as unknown as SpeakingFeedback),
+    } as unknown as Parameters<typeof safeAnalyzeSpeaking>[0],
+    'fixture',
+    {
+      part: 2,
+      question: undercoveredFamilyAlbumFeedback.question,
+      transcript: undercoveredFamilyAlbumFeedback.transcript,
+    },
+  );
+
+  assert.equal(
+    result.diagnostic.failureKind,
+    undefined,
+    `missing headline should be recovered from visible criteria: ${result.diagnostic.validationErrors.join(' | ')}`,
+  );
+  assert.equal(result.feedback.bandEstimateExcludingPronunciation, 5.5);
+  assert.ok(
+    result.diagnostic.normalizedFields?.includes('speakingHeadlineFromCriteriaAverage'),
+    'diagnostic should expose headline recovery from visible criteria',
+  );
+  assert.equal(
+    result.diagnostic.validationErrors.some(error => error.includes('bandEstimateExcludingPronunciation')),
+    false,
+    'missing headline should not create a validation error when all visible criteria are valid',
+  );
+};
+
+const runPart1DevelopedAnswerDisplayRegression = async () => {
+  const cityThreadAnswers: SpeakingThreadAnswer[] = [{
+    questionId: 'city-q1',
+    question: 'What is your hometown like?',
+    answer: 'It is a medium-sized coastal city.',
+  }];
+  const result = await safeAnalyzeSpeaking(
+    {
+      analyzeSpeaking: async () => baseSpeakingFeedback({
+        part: 1,
+        sessionKind: 'part1_topic_thread',
+        topic: 'Home and hometown',
+        threadId: 'part1-developed-answer-fixture',
+        question: cityThreadAnswers.map((item, index) => `Q${index + 1}. ${item.question}`).join('\n'),
+        transcript: cityThreadAnswers.map((item, index) => `Q${index + 1}: ${item.question}\nA${index + 1}: ${item.answer}`).join('\n\n'),
+        threadAnswers: cityThreadAnswers,
+        bandEstimateExcludingPronunciation: 6,
+        scores: {
+          fluencyCoherence: 6,
+          lexicalResource: 6,
+          grammaticalRangeAccuracy: 6,
+          pronunciation: null,
+          pronunciationNote: 'Not formally assessed.',
+        },
+        threadFeedback: {
+          topic: 'Home and hometown',
+          threadId: 'part1-developed-answer-fixture',
+          questionCount: 1,
+          mustFix: [],
+          annotations: [],
+          cleanRetryAnswers: [{
+            questionRef: 'Q1',
+            answer: 'It is a medium-sized coastal city.',
+          }],
+          developmentTargets: [{
+            questionRef: 'Q1',
+            developmentMode: 'needs_content',
+            reasonZh: 'The answer is clear but needs one small real detail.',
+            developmentMoveZh: 'Add one short reason or feeling after the direct answer.',
+            optionalDevelopedAnswer: "It's a medium-sized coastal city, so daily life feels relaxed and convenient.",
+          }],
+          answerByAnswerCoaching: [],
+          highImpactPhraseFixes: [],
+          materialBank: {
+            myUsableMaterial: [],
+            reusableSpokenLanguage: [],
+          },
+          optionalPolish: [],
+          nextRetryFocusZh: 'Add one compact detail after the direct answer.',
+        },
+      }),
+    } as unknown as Parameters<typeof safeAnalyzeSpeaking>[0],
+    'fixture',
+    {
+      part: 1,
+      sessionKind: 'part1_topic_thread',
+      topic: 'Home and hometown',
+      threadId: 'part1-developed-answer-fixture',
+      question: cityThreadAnswers.map((item, index) => `Q${index + 1}. ${item.question}`).join('\n'),
+      transcript: cityThreadAnswers.map((item, index) => `Q${index + 1}: ${item.question}\nA${index + 1}: ${item.answer}`).join('\n\n'),
+      threadAnswers: cityThreadAnswers,
+    },
+  );
+
+  assert.equal(
+    result.diagnostic.failureKind,
+    undefined,
+    `Part 1 developed answer should survive normalization: ${result.diagnostic.validationErrors.join(' | ')}`,
+  );
+  const display = buildPart1LearningDisplayModel(result.feedback.threadFeedback, { answers: cityThreadAnswers });
+  assert.equal(display.answerCoaching.length, 1);
+  assert.equal(
+    display.answerCoaching[0]?.optionalDevelopedAnswer,
+    "It's a medium-sized coastal city, so daily life feels relaxed and convenient.",
+  );
+};
+
+const runPart1UnsupportedSpecificTargetRegression = async () => {
+  const result = await safeAnalyzeSpeaking(
+    {
+      analyzeSpeaking: async () => ({
+        ...comprehensiveMorningFeedback,
+        upgradedAnswer: "My favorite time is definitely morning. I'm an early riser, so I usually get up around 6. I go for a jog and have breakfast, which makes me feel refreshed for the rest of the day.",
+      } as SpeakingFeedback),
+    } as unknown as Parameters<typeof safeAnalyzeSpeaking>[0],
+    'fixture',
+    {
+      part: 1,
+      sessionKind: 'single_question',
+      question: comprehensiveMorningFeedback.question,
+      transcript: comprehensiveMorningFeedback.transcript,
+    },
+  );
+
+  assert.doesNotMatch(result.feedback.upgradedAnswer, /\baround\s+6\b/i);
+  assert.match(result.feedback.upgradedAnswer, /\bget up early\b/i);
+  assert.ok(
+    result.diagnostic.normalizedFields?.includes('part1UnsupportedTargetSpecificsScrubbed'),
+    'diagnostic should expose unsupported exact-time scrub',
+  );
+};
+
+const runPart1CleanRetryDescriptionIntegrationRegression = async () => {
+  const hometownAnswers: SpeakingThreadAnswer[] = [{
+    questionId: 'hometown-q3',
+    question: 'Please describe your hometown a little. How long have you been living there?',
+    answer: 'I have lived in Xiamen for most of my life, although I spent six years in Beijing for college.',
+  }];
+  const result = await safeAnalyzeSpeaking(
+    {
+      analyzeSpeaking: async () => baseSpeakingFeedback({
+        part: 1,
+        sessionKind: 'part1_topic_thread',
+        topic: 'Home and hometown',
+        threadId: 'part1-clean-retry-description-fixture',
+        question: hometownAnswers.map((item, index) => `Q${index + 1}. ${item.question}`).join('\n'),
+        transcript: hometownAnswers.map((item, index) => `Q${index + 1}: ${item.question}\nA${index + 1}: ${item.answer}`).join('\n\n'),
+        threadAnswers: hometownAnswers,
+        bandEstimateExcludingPronunciation: 6,
+        scores: {
+          fluencyCoherence: 6,
+          lexicalResource: 6,
+          grammaticalRangeAccuracy: 6,
+          pronunciation: null,
+          pronunciationNote: 'Not formally assessed.',
+        },
+        threadFeedback: {
+          topic: 'Home and hometown',
+          threadId: 'part1-clean-retry-description-fixture',
+          questionCount: 1,
+          mustFix: [],
+          annotations: [],
+          cleanRetryAnswers: [{
+            questionRef: 'Q1',
+            answer: 'I have lived in Xiamen for most of my life, although I spent six years in Beijing for college.',
+            noteZh: "当前回答只回答了居住时间，没有描述家乡。建议加入简单描述，例如'It's a coastal city with nice beaches and a pleasant climate.'",
+          }],
+          developmentTargets: [],
+          answerByAnswerCoaching: [],
+          highImpactPhraseFixes: [],
+          materialBank: {
+            myUsableMaterial: [],
+            reusableSpokenLanguage: [],
+          },
+          optionalPolish: [],
+          nextRetryFocusZh: 'Add one compact hometown description.',
+        },
+      }),
+    } as unknown as Parameters<typeof safeAnalyzeSpeaking>[0],
+    'fixture',
+    {
+      part: 1,
+      sessionKind: 'part1_topic_thread',
+      topic: 'Home and hometown',
+      threadId: 'part1-clean-retry-description-fixture',
+      question: hometownAnswers.map((item, index) => `Q${index + 1}. ${item.question}`).join('\n'),
+      transcript: hometownAnswers.map((item, index) => `Q${index + 1}: ${item.question}\nA${index + 1}: ${item.answer}`).join('\n\n'),
+      threadAnswers: hometownAnswers,
+    },
+  );
+
+  const cleanRetry = result.feedback.threadFeedback?.cleanRetryAnswers[0]?.answer || '';
+  assert.match(cleanRetry, /coastal city with nice beaches and a pleasant climate/i);
+  assert.match(cleanRetry, /lived in Xiamen for most of my life/i);
+  assert.ok(
+    result.diagnostic.normalizedFields?.includes('part1CleanRetryDescriptionIntegrated:Q1'),
+    'diagnostic should expose clean retry description integration',
+  );
+};
+
+const runPart2GenericRepairBackfillRegression = async () => {
+  const result = await safeAnalyzeSpeaking(
+    {
+      analyzeSpeaking: async () => ({
+        ...undercoveredFamilyAlbumFeedback,
+        fatalErrors: [
+          {
+            original: 'taking photos for me',
+            correction: 'taking photos of me',
+            tag: 'meaning',
+            explanationZh: 'Use "of me" when I am the person in the photo.',
+          },
+          {
+            original: 'flashlight',
+            correction: 'camera flash',
+            tag: 'word_choice',
+            explanationZh: 'A camera uses a flash, not a flashlight.',
+          },
+        ],
+        part2Feedback: {
+          ...undercoveredFamilyAlbumFeedback.part2Feedback!,
+          annotations: [],
+        },
+      } as SpeakingFeedback),
+    } as unknown as Parameters<typeof safeAnalyzeSpeaking>[0],
+    'fixture',
+    {
+      part: 2,
+      question: undercoveredFamilyAlbumFeedback.question,
+      transcript: undercoveredFamilyAlbumFeedback.transcript,
+    },
+  );
+
+  const annotations = result.feedback.part2Feedback?.annotations || [];
+  assert.ok(
+    annotations.some(item => item.sourceQuote === 'taking photos for me'),
+    'generic Part 2 fatal repair should be backfilled into Part 2 annotations',
+  );
+  assert.ok(
+    annotations.some(item => item.sourceQuote === 'flashlight'),
+    'generic Part 2 word-choice repair should be backfilled into Part 2 annotations',
+  );
+  assert.ok(
+    result.diagnostic.normalizedFields?.some(item => item.startsWith('part2AnnotationsBackfilled:')),
+    'diagnostic should expose Part 2 annotation backfill',
+  );
+};
+
+const runHighBandSpeakingStabilityLedgerRegression = async () => {
+  const transcript = "Yes, I'd say there's a clear difference. Younger people often prefer dynamic places like shopping malls because they want social interaction and novelty. Older people, by contrast, may prefer parks, markets, or quiet cafes where they can relax, talk at a slower pace, and enjoy a more familiar environment. So the difference is not only about age, but also about energy level and lifestyle.";
+  const result = await safeAnalyzeSpeaking(
+    {
+      analyzeSpeaking: async () => baseSpeakingFeedback({
+        part: 3,
+        question: 'Do young people and older people enjoy different types of places?',
+        transcript,
+        bandEstimateExcludingPronunciation: 7,
+        scores: {
+          fluencyCoherence: 7,
+          lexicalResource: 7,
+          grammaticalRangeAccuracy: 7,
+          pronunciation: null,
+          pronunciationNote: 'Not formally assessed.',
+        },
+        estimateRationaleZh: 'The answer gives a clear comparison, concrete examples, and natural Part 3 generalisation.',
+        fatalErrors: [],
+        naturalnessHints: [],
+        upgradedAnswer: '',
+      }),
+    } as unknown as Parameters<typeof safeAnalyzeSpeaking>[0],
+    'fixture',
+    {
+      part: 3,
+      question: 'Do young people and older people enjoy different types of places?',
+      transcript,
+    },
+  );
+
+  assert.equal(
+    result.diagnostic.failureKind,
+    undefined,
+    `strong Part 3 answer without a target should become stability feedback, not parse/schema: ${result.diagnostic.validationErrors.join(' | ')}`,
+  );
+  const packet = buildSpeakingFeedbackJudgePacket({
+    id: 'high-band-stability-ledger-fixture',
+    title: 'High-band Part 3 stability ledger fixture',
+    feedback: result.feedback,
+  });
+  assert.ok(
+    packet.evidence.some(item => item.sourceKind === 'speaking_high_band_stability' && item.anchor.status === 'anchored'),
+    'high-band stable Speaking feedback should anchor stability evidence to the source answer',
+  );
+
+  const generatedTargetPacket = buildSpeakingFeedbackJudgePacket({
+    id: 'high-band-generated-target-ledger-fixture',
+    title: 'High-band Part 3 generated target ledger fixture',
+    feedback: {
+      ...result.feedback,
+      targetState: 'generated_target',
+      upgradedAnswer: "I'd say the difference is usually about lifestyle rather than age alone. Younger people may prefer busier social places, while older people may value quieter, more familiar places.",
+    },
+  });
+  assert.ok(
+    generatedTargetPacket.evidence.some(item => item.sourceKind === 'speaking_high_band_stability' && item.anchor.status === 'anchored'),
+    'strong Part 3 feedback with a generated target and no local repairs should still anchor stability evidence',
+  );
+};
+
+const runPart3ThinkingDiagnosisLedgerRegression = () => {
+  const packet = buildSpeakingFeedbackJudgePacket({
+    id: 'part3-thinking-diagnosis-ledger-fixture',
+    title: 'Part 3 diagnosis ledger fixture',
+    feedback: undercoveredBooksReadingFeedback,
+    threadAnswers: booksReadingThreadAnswers,
+  });
+  const diagnosisEvidence = packet.evidence.filter(item => item.sourceKind === 'speaking_part3_thinking_diagnosis');
+  assert.equal(diagnosisEvidence.length, booksReadingThreadAnswers.length);
+  assert.ok(
+    diagnosisEvidence.every(item => item.anchor.status === 'anchored'),
+    'Part 3 thinking diagnosis evidence should anchor to each source answer',
+  );
+  assert.ok(
+    diagnosisEvidence.some(item => item.severity === 'priority_repair' && item.issueType === 'answer_scope'),
+    'answer-level Part 3 scope diagnosis should be priority evidence',
+  );
+};
+
 const main = async () => {
   const reportCases = [];
   let failed = false;
   const externalProvider = (process.env.FEEDBACK_JUDGE_PROVIDER || '').trim().toLowerCase() || 'not_configured';
 
   await runPart1CleanRetryRecoveryRegression();
+  await runIncompleteReusableExampleRegression();
+  await runIncompleteNaturalnessHintRegression();
+  await runSpeakingHeadlineFromCriteriaRegression();
+  await runPart1DevelopedAnswerDisplayRegression();
+  await runPart1UnsupportedSpecificTargetRegression();
+  await runPart1CleanRetryDescriptionIntegrationRegression();
+  await runPart2GenericRepairBackfillRegression();
+  await runHighBandSpeakingStabilityLedgerRegression();
+  runPart3ThinkingDiagnosisLedgerRegression();
 
   for (const item of cases) {
     const hardSafety = runHardSafetyFeedbackJudge(item.packet);

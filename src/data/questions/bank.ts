@@ -1,3 +1,5 @@
+import type { WritingTask1VisualSpec } from './task1VisualTypes';
+
 export type SpeakingTopicCategory =
   | 'Work & Study'
   | 'Home & Hometown'
@@ -314,6 +316,7 @@ export interface WritingTask1AcademicPrompt {
   instruction: string;
   visualBrief: string;
   data: string[];
+  visualSpec?: WritingTask1VisualSpec;
   expectedOverview: string;
   expectedKeyFeatures: string[];
   expectedComparisons?: string[];
@@ -330,6 +333,17 @@ export const writingTask1Academic: WritingTask1AcademicPrompt[] = [
     instruction: 'The line graph shows the percentage of commuters using three forms of transport in Riverton from 2000 to 2020. Summarize the information by selecting and reporting the main features, and make comparisons where relevant.',
     visualBrief: 'A three-line graph compares car, bus, and bicycle commuting over five-year intervals.',
     data: ['Car: 48% in 2000, 52% in 2005, 58% in 2010, 55% in 2015, 50% in 2020.', 'Bus: 34% in 2000, 31% in 2005, 26% in 2010, 24% in 2015, 22% in 2020.', 'Bicycle: 6% in 2000, 8% in 2005, 11% in 2010, 16% in 2015, 23% in 2020.'],
+    visualSpec: {
+      kind: 'line',
+      title: 'Commuters using three forms of transport in Riverton, 2000-2020',
+      unit: '%',
+      yLabel: 'Percentage of commuters',
+      series: [
+        { name: 'Car', values: [{ label: '2000', value: 48 }, { label: '2005', value: 52 }, { label: '2010', value: 58 }, { label: '2015', value: 55 }, { label: '2020', value: 50 }] },
+        { name: 'Bus', values: [{ label: '2000', value: 34 }, { label: '2005', value: 31 }, { label: '2010', value: 26 }, { label: '2015', value: 24 }, { label: '2020', value: 22 }] },
+        { name: 'Bicycle', values: [{ label: '2000', value: 6 }, { label: '2005', value: 8 }, { label: '2010', value: 11 }, { label: '2015', value: 16 }, { label: '2020', value: 23 }] },
+      ],
+    },
     expectedOverview: 'Cars remained the most common mode, buses declined steadily, and cycling rose sharply by the end of the period.',
     expectedKeyFeatures: ['Car use peaked in 2010 before falling slightly.', 'Bus commuting dropped by 12 percentage points.', 'Cycling almost quadrupled from 6% to 23%.'],
     expectedComparisons: ['Compare the narrowing gap between buses and bicycles by 2020.', 'Mention cars staying ahead despite a late decline.'],
@@ -344,6 +358,17 @@ export const writingTask1Academic: WritingTask1AcademicPrompt[] = [
     instruction: 'The bar chart compares the destinations of graduates from three departments in 2024. Summarize the information by selecting and reporting the main features, and make comparisons where relevant.',
     visualBrief: 'A grouped bar chart shows employment, further study, and unemployment for Arts, Engineering, and Business graduates.',
     data: ['Arts: employment 52%, further study 35%, unemployment 13%.', 'Engineering: employment 72%, further study 20%, unemployment 8%.', 'Business: employment 68%, further study 24%, unemployment 8%.'],
+    visualSpec: {
+      kind: 'bar',
+      title: 'Graduate destinations by department in 2024',
+      unit: '%',
+      categories: ['Arts', 'Engineering', 'Business'],
+      series: [
+        { name: 'Employment', values: [52, 72, 68] },
+        { name: 'Further study', values: [35, 20, 24] },
+        { name: 'Unemployment', values: [13, 8, 8] },
+      ],
+    },
     expectedOverview: 'Employment was the main destination in all departments, especially Engineering and Business, while Arts had the highest further-study and unemployment shares.',
     expectedKeyFeatures: ['Engineering had the highest employment rate at 72%.', 'Arts had the lowest employment rate and the highest further-study share.', 'Unemployment was below 15% in all departments.'],
     expectedComparisons: ['Compare Engineering and Business as similar employment-heavy departments.', 'Contrast Arts with the other two departments.'],
@@ -358,6 +383,18 @@ export const writingTask1Academic: WritingTask1AcademicPrompt[] = [
     instruction: 'The table shows average waiting times at public clinics in four districts in 2015 and 2025. Summarize the information by selecting and reporting the main features, and make comparisons where relevant.',
     visualBrief: 'A table compares clinic waiting times measured in minutes across four districts.',
     data: ['North: 44 minutes in 2015, 32 minutes in 2025.', 'East: 51 minutes in 2015, 45 minutes in 2025.', 'South: 39 minutes in 2015, 28 minutes in 2025.', 'West: 46 minutes in 2015, 54 minutes in 2025.'],
+    visualSpec: {
+      kind: 'table',
+      title: 'Average waiting times at public clinics',
+      unit: 'minutes',
+      columns: ['2015', '2025'],
+      rows: [
+        { label: 'North', values: [44, 32] },
+        { label: 'East', values: [51, 45] },
+        { label: 'South', values: [39, 28] },
+        { label: 'West', values: [46, 54] },
+      ],
+    },
     expectedOverview: 'Waiting times generally fell, but the West district worsened and became the slowest by 2025.',
     expectedKeyFeatures: ['South had the shortest waits in both years.', 'West rose from 46 to 54 minutes.', 'North and South both improved by more than 10 minutes.'],
     expectedComparisons: ['Compare the West with the improving districts.', 'Rank the shortest and longest waits in 2025.'],
@@ -372,6 +409,15 @@ export const writingTask1Academic: WritingTask1AcademicPrompt[] = [
     instruction: 'The pie charts show household energy use in a country in 2010 and 2025. Summarize the information by selecting and reporting the main features, and make comparisons where relevant.',
     visualBrief: 'Two pie charts compare the shares of gas, electricity, solar, and other fuels.',
     data: ['2010: gas 45%, electricity 35%, solar 5%, other fuels 15%.', '2025: gas 32%, electricity 38%, solar 20%, other fuels 10%.'],
+    visualSpec: {
+      kind: 'pie',
+      title: 'Household energy use in a country',
+      unit: '%',
+      charts: [
+        { label: '2010', slices: [{ name: 'Gas', value: 45 }, { name: 'Electricity', value: 35 }, { name: 'Solar', value: 5 }, { name: 'Other fuels', value: 15 }] },
+        { label: '2025', slices: [{ name: 'Gas', value: 32 }, { name: 'Electricity', value: 38 }, { name: 'Solar', value: 20 }, { name: 'Other fuels', value: 10 }] },
+      ],
+    },
     expectedOverview: 'Energy use shifted away from gas and other fuels toward electricity and especially solar power.',
     expectedKeyFeatures: ['Gas fell by 13 percentage points.', 'Solar increased fourfold from 5% to 20%.', 'Electricity became the largest category in 2025.'],
     expectedComparisons: ['Compare gas and electricity changing rank.', 'Contrast solar growth with other fuels decline.'],
@@ -386,6 +432,30 @@ export const writingTask1Academic: WritingTask1AcademicPrompt[] = [
     instruction: 'The charts show international visitor numbers to Lakeside City and their average spending from 2018 to 2023. Summarize the information by selecting and reporting the main features, and make comparisons where relevant.',
     visualBrief: 'A line graph gives visitor numbers, while a small bar chart shows average spending per visitor.',
     data: ['Visitors: 1.2 million in 2018, 1.4 million in 2019, 0.7 million in 2020, 0.9 million in 2021, 1.5 million in 2022, 1.8 million in 2023.', 'Average spending: $620 in 2018, $650 in 2019, $590 in 2020, $610 in 2021, $700 in 2022, $760 in 2023.'],
+    visualSpec: {
+      kind: 'mixed',
+      title: 'International visitors to Lakeside City and average spending',
+      parts: [
+        {
+          kind: 'line',
+          title: 'Visitor numbers',
+          unit: 'million',
+          yLabel: 'Visitors',
+          series: [
+            { name: 'Visitors', values: [{ label: '2018', value: 1.2 }, { label: '2019', value: 1.4 }, { label: '2020', value: 0.7 }, { label: '2021', value: 0.9 }, { label: '2022', value: 1.5 }, { label: '2023', value: 1.8 }] },
+          ],
+        },
+        {
+          kind: 'bar',
+          title: 'Average spending per visitor',
+          unit: '$',
+          categories: ['2018', '2019', '2020', '2021', '2022', '2023'],
+          series: [
+            { name: 'Spending', values: [620, 650, 590, 610, 700, 760] },
+          ],
+        },
+      ],
+    },
     expectedOverview: 'Both visitor numbers and spending dipped in 2020, then recovered strongly to reach their highest levels in 2023.',
     expectedKeyFeatures: ['Visitor numbers more than doubled after the 2020 low.', 'Average spending rose by $170 from 2020 to 2023.', '2018-2019 growth was moderate compared with the post-2020 recovery.'],
     expectedComparisons: ['Link the shared low point in 2020 across both visuals.', 'Compare the final year with the pre-drop years.'],
@@ -400,6 +470,19 @@ export const writingTask1Academic: WritingTask1AcademicPrompt[] = [
     instruction: 'The diagram shows the process of recycling glass bottles. Summarize the information by selecting and reporting the main features.',
     visualBrief: 'A process diagram shows six stages from collection to new bottles.',
     data: ['1. Used glass bottles are placed in public collection bins.', '2. Bottles are transported to a sorting centre.', '3. Glass is sorted by colour and unsuitable material is removed.', '4. Sorted glass is crushed and washed.', '5. The crushed glass is melted in a furnace and shaped into new bottles.', '6. New bottles are filled and delivered to shops.'],
+    visualSpec: {
+      kind: 'process',
+      title: 'The process of recycling glass bottles',
+      cyclical: true,
+      stages: [
+        'Used bottles are placed in collection bins',
+        'Bottles are transported to a sorting centre',
+        'Glass is sorted by colour and unsuitable material is removed',
+        'Sorted glass is crushed and washed',
+        'Crushed glass is melted and shaped into new bottles',
+        'New bottles are filled and delivered to shops',
+      ],
+    },
     expectedOverview: 'The process is cyclical and has six main stages, beginning with collection and ending with new bottles returning to shops.',
     expectedKeyFeatures: ['Mention the full sequence from collection to retail.', 'Group sorting/cleaning before melting/shaping.', 'Point out the cyclical nature.'],
     expectedComparisons: ['Comparison is less important; sequence and passive voice matter more.'],
@@ -414,6 +497,34 @@ export const writingTask1Academic: WritingTask1AcademicPrompt[] = [
     instruction: 'The maps show changes to a college campus between 2010 and 2025. Summarize the information by selecting and reporting the main features, and make comparisons where relevant.',
     visualBrief: 'Two maps compare the same campus before and after redevelopment.',
     data: ['2010: library in the north-west, lecture halls in the centre, car park in the east, sports field in the south, main entrance in the west.', '2025: library expanded into a learning centre, lecture halls replaced by a student hub, car park moved underground, sports field reduced, new science building added in the south-east, cycle path added around the campus.'],
+    visualSpec: {
+      kind: 'map',
+      title: 'Changes to a college campus, 2010-2025',
+      maps: [
+        {
+          label: '2010',
+          features: [
+            { label: 'Library', type: 'building', x: 8, y: 8, width: 25, height: 18 },
+            { label: 'Lecture halls', type: 'building', x: 38, y: 34, width: 26, height: 20 },
+            { label: 'Car park', type: 'parking', x: 70, y: 26, width: 22, height: 28 },
+            { label: 'Sports field', type: 'green', x: 16, y: 68, width: 46, height: 20 },
+            { label: 'Main entrance', type: 'entrance', x: 1, y: 43, width: 14, height: 14 },
+          ],
+        },
+        {
+          label: '2025',
+          features: [
+            { label: 'Learning centre', type: 'building', x: 7, y: 7, width: 34, height: 22 },
+            { label: 'Student hub', type: 'building', x: 38, y: 34, width: 27, height: 21 },
+            { label: 'Underground car park', type: 'parking', x: 71, y: 18, width: 19, height: 18 },
+            { label: 'Reduced sports field', type: 'green', x: 14, y: 72, width: 31, height: 16 },
+            { label: 'Science building', type: 'building', x: 64, y: 67, width: 25, height: 20 },
+            { label: 'Cycle path', type: 'path', x: 6, y: 5, width: 88, height: 88 },
+            { label: 'Main entrance', type: 'entrance', x: 1, y: 43, width: 14, height: 14 },
+          ],
+        },
+      ],
+    },
     expectedOverview: 'The campus became more built-up and student-focused, with new academic facilities and less surface space for cars and sport.',
     expectedKeyFeatures: ['Library expansion into a learning centre.', 'Central lecture halls changed into a student hub.', 'New science building and cycle path added.'],
     expectedComparisons: ['Compare removed/reduced spaces with newly added facilities.', 'Mention location changes such as the car park moving underground.'],
@@ -428,6 +539,17 @@ export const writingTask1Academic: WritingTask1AcademicPrompt[] = [
     instruction: 'The bar chart compares the age structure of the population in three towns in 2025. Summarize the information by selecting and reporting the main features, and make comparisons where relevant.',
     visualBrief: 'A grouped bar chart shows the percentages of children, working-age adults, and people aged 65+.',
     data: ['Riverport: 18% children, 62% working-age adults, 20% aged 65+.', 'Hillford: 25% children, 58% working-age adults, 17% aged 65+.', 'Eastmere: 15% children, 55% working-age adults, 30% aged 65+.'],
+    visualSpec: {
+      kind: 'bar',
+      title: 'Age structure of the population in three towns, 2025',
+      unit: '%',
+      categories: ['Riverport', 'Hillford', 'Eastmere'],
+      series: [
+        { name: 'Children', values: [18, 25, 15] },
+        { name: 'Working-age adults', values: [62, 58, 55] },
+        { name: 'Aged 65+', values: [20, 17, 30] },
+      ],
+    },
     expectedOverview: 'Working-age adults made up the largest group in all towns, while Eastmere had the oldest profile and Hillford the youngest.',
     expectedKeyFeatures: ['Working-age adults were over half in all towns.', 'Eastmere had the highest elderly share at 30%.', 'Hillford had the highest child share at 25%.'],
     expectedComparisons: ['Contrast Eastmere and Hillford.', 'Compare Riverport as the middle pattern.'],

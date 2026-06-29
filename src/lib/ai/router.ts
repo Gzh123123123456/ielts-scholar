@@ -54,6 +54,9 @@ import {
 
 type ProviderConfig = 'mock' | 'gemini' | 'auto';
 type ModelTier = 'mock' | 'gemini' | 'deepseek_flash' | 'deepseek_pro';
+type ImportMetaWithEnv = ImportMeta & {
+  env?: Record<string, string | undefined>;
+};
 
 interface RouteChoice {
   provider: AIProvider;
@@ -78,7 +81,7 @@ export interface RoutedResult<T> {
 }
 
 export const readEnv = (key: string): string | undefined => {
-  const viteValue = import.meta.env[key];
+  const viteValue = (import.meta as ImportMetaWithEnv).env?.[key];
   if (typeof viteValue === 'string') return viteValue;
 
   if (typeof process !== 'undefined') {
@@ -110,6 +113,13 @@ export const getProviderRouterMode = () => configuredProvider();
 export const getGeminiApiKey = () => readEnv('VITE_GEMINI_API_KEY') || readEnv('GEMINI_API_KEY') || '';
 const getDeepSeekApiKey = () => readEnv('VITE_DEEPSEEK_API_KEY') || '';
 export const getGeminiModel = () => readEnv('VITE_GEMINI_MODEL') || 'gemini-2.5-flash';
+export const getGeminiBaseUrl = () =>
+  readEnv('VITE_GEMINI_BASE_URL') ||
+  readEnv('GEMINI_BASE_URL') ||
+  readEnv('GEMINI_NEXT_GEN_API_BASE_URL') ||
+  '';
+export const getGeminiApiVersion = () => readEnv('VITE_GEMINI_API_VERSION') || readEnv('GEMINI_API_VERSION') || '';
+export const getGeminiTimeoutMs = () => envNumber('VITE_GEMINI_TIMEOUT_MS', envNumber('GEMINI_TIMEOUT_MS', 30000));
 const getDeepSeekBaseUrl = () => readEnv('VITE_DEEPSEEK_BASE_URL') || 'https://api.deepseek.com/v1';
 export const getDeepSeekFlashModel = () => readEnv('VITE_DEEPSEEK_FLASH_MODEL') || 'deepseek-v4-flash';
 export const getDeepSeekProModel = () => readEnv('VITE_DEEPSEEK_PRO_MODEL') || 'deepseek-v4-pro';
@@ -130,7 +140,11 @@ const hasDeepSeek = () => Boolean(getDeepSeekApiKey());
 const hasGemini = () => Boolean(getGeminiApiKey());
 
 const makeGemini = (): RouteChoice => ({
-  provider: new GeminiProvider(getGeminiApiKey(), getGeminiModel()),
+  provider: new GeminiProvider(getGeminiApiKey(), getGeminiModel(), {
+    baseUrl: getGeminiBaseUrl() || undefined,
+    apiVersion: getGeminiApiVersion() || undefined,
+    timeoutMs: getGeminiTimeoutMs(),
+  }),
   providerName: 'gemini',
   model: getGeminiModel(),
   tier: 'gemini',
@@ -227,7 +241,7 @@ const isProviderUnavailable = (diagnostic: ProviderDiagnostic) =>
 
 const isGeminiQuotaLike = (diagnostic: ProviderDiagnostic) => {
   const text = `${diagnostic.parseError || ''} ${diagnostic.validationErrors.join(' ')}`.toLowerCase();
-  return diagnostic.providerName === 'gemini' && [
+  return diagnostic.providerName === 'gemini' && (isProviderUnavailable(diagnostic) || [
     '429',
     'resource_exhausted',
     'quota',
@@ -236,8 +250,16 @@ const isGeminiQuotaLike = (diagnostic: ProviderDiagnostic) => {
     'unavailable',
     '503',
     '500',
-  ].some(marker => text.includes(marker));
+  ].some(marker => text.includes(marker)));
 };
+
+const shouldFallbackAfterGeminiFailure = (
+  operation: ProviderOperation,
+  diagnostic: ProviderDiagnostic,
+) =>
+  diagnostic.providerName === 'gemini' &&
+  (isGeminiQuotaLike(diagnostic) ||
+    (operation === 'writing_task1_analysis' && diagnostic.failureKind === 'parse_or_schema'));
 
 const chooseDeepSeekFallback = (operation: ProviderOperation) => {
   if (!hasDeepSeek()) return makeMock('Real providers unavailable; using Mock Provider.');
@@ -382,19 +404,27 @@ async function runWithGeminiRetry<T>(
   runner: (provider: AIProvider, providerName: string) => Promise<{ feedback: T; diagnostic: ProviderDiagnostic }>,
 ) {
   const first = await runWithRoute(operation, payload, route, runner);
-  if (route.providerName !== 'gemini' || !isGeminiQuotaLike(first.diagnostic) || !hasDeepSeek()) return first;
+  if (route.providerName !== 'gemini' || !shouldFallbackAfterGeminiFailure(operation, first.diagnostic)) return first;
+  if (!hasDeepSeek() && operation !== 'writing_task1_analysis') return first;
 
-  setGeminiCooldown(90, 'Gemini is cooling down after a rate-limit or quota response.');
+  if (isGeminiQuotaLike(first.diagnostic)) {
+    setGeminiCooldown(90, 'Gemini is cooling down after a rate-limit or quota response.');
+  }
   const fallback = chooseDeepSeekFallback(operation);
   const retried = await runWithRoute(operation, payload, fallback, runner);
+  const task1SchemaFallbackReason = `Gemini returned malformed Task 1 feedback. This attempt used ${fallback.model} automatically.`;
   return {
     ...retried,
     route: {
       ...retried.route,
-      fallbackReason: operation === 'writing_analysis' && fallback.tier === 'deepseek_pro'
+      fallbackReason: operation === 'writing_task1_analysis'
+        ? task1SchemaFallbackReason
+        : operation === 'writing_analysis' && fallback.tier === 'deepseek_pro'
         ? 'Task 2 high-quality fallback used DeepSeek V4 Pro.'
         : `Gemini is cooling down for about 90s. This attempt used ${fallback.model} automatically.`,
-      learnerReason: operation === 'writing_analysis' && fallback.tier === 'deepseek_pro'
+      learnerReason: operation === 'writing_task1_analysis'
+        ? task1SchemaFallbackReason
+        : operation === 'writing_analysis' && fallback.tier === 'deepseek_pro'
         ? 'Task 2 high-quality fallback used DeepSeek V4 Pro.'
         : `Gemini is cooling down for about 90s. This attempt used ${fallback.model} automatically.`,
     },

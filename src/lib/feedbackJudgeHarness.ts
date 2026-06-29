@@ -98,6 +98,19 @@ const visibleSpeakingText = (feedback: SpeakingFeedback) => [
     ...item.layers.flatMap(layer => [layer.original, layer.better, layer.explanationZh]),
   ]),
   ...(feedback.threadFeedback?.cleanRetryAnswers || []).flatMap(item => [item.answer, item.noteZh]),
+  ...(feedback.threadFeedback?.developmentTargets || []).flatMap(item => [
+    item.questionRef,
+    item.topicFrameZh,
+    item.reasonZh,
+    item.developmentMoveZh,
+    item.optionalDevelopedAnswer,
+    ...(item.phraseScaffolds || []),
+    ...(item.phraseChunks || []).flatMap(chunk => [chunk.text, chunk.purposeZh]),
+  ]),
+  feedback.threadFeedback?.nextRetryPlan?.priorityAccuracyPatternZh,
+  feedback.threadFeedback?.nextRetryPlan?.answerLengthRuleZh,
+  feedback.threadFeedback?.nextRetryPlan?.materialToTry,
+  ...(feedback.threadFeedback?.nextRetryPlan?.actions || []),
   ...(feedback.threadFeedback?.materialBank.myUsableMaterial || []).flatMap(item => [
     item.sourceWording,
     item.reusableVersion,
@@ -196,14 +209,21 @@ const speakingDigest = (feedback: SpeakingFeedback) => ({
   score: feedback.bandEstimateExcludingPronunciation,
   range: feedback.bandEstimateRange,
   estimateRationaleZh: feedback.estimateRationaleZh,
+  targetState: feedback.targetState,
+  highBandStabilityZh: feedback.highBandStabilityZh,
+  nextStepZh: feedback.nextStepZh,
   fatalErrors: feedback.fatalErrors,
   naturalnessHints: feedback.naturalnessHints,
   upgradedAnswer: feedback.upgradedAnswer,
   threadFeedback: feedback.threadFeedback ? {
     annotationCount: feedback.threadFeedback.annotations?.length || 0,
     cleanRetryAnswers: feedback.threadFeedback.cleanRetryAnswers,
+    developmentTargets: feedback.threadFeedback.developmentTargets || [],
+    nextRetryPlan: feedback.threadFeedback.nextRetryPlan,
     materialCount: feedback.threadFeedback.materialBank.myUsableMaterial.length,
+    myUsableMaterial: feedback.threadFeedback.materialBank.myUsableMaterial,
     expressionCount: feedback.threadFeedback.materialBank.reusableSpokenLanguage.length,
+    reusableSpokenLanguage: feedback.threadFeedback.materialBank.reusableSpokenLanguage,
     nextRetryFocusZh: feedback.threadFeedback.nextRetryFocusZh,
   } : undefined,
   part2Feedback: feedback.part2Feedback ? {
@@ -264,6 +284,7 @@ Speaking quality boundaries:
 - Part 1 feedback should help the learner move from "can answer" to a natural short conversation: direct answer, one reason, and one concrete detail or small contrast when the answer is thin. It should also catch semantic category mismatches in examples, not only grammar.
 - Part 2 feedback must prioritise story skeleton and timeline clarity before word-level polishing. Key setup, instruction/action, turning point, help/solution, and ending sentences should not disappear just because two easy local errors were found first.
 - Part 3 feedback must judge answer control before local wording. If the stance and support contradict each other, or the answer needs "yes, but not solely" rather than a flat "no", that is a higher priority than a synonym polish. Severity must separate priority reasoning repairs from better spoken choices.
+- High-band-stable Speaking answers do not need an upgraded answer or forced local error cards. Accept a stability-style report when the estimate rationale and high-band stability guidance explain why the answer is already strong, and the evidence ledger anchors the answer as stability evidence.
 - If one sentence contains several serious local problems, prefer a sentence-level repair that teaches the spoken sentence skeleton. Do not create a visually noisy page of fragments when the learner needs one rebuilt spoken line.
 - If the UI says it is showing only top critical issues, the selected issues must be genuinely the highest-value issues. If important later issues are omitted, fail the packet even when each shown issue is individually correct.
 
@@ -368,8 +389,12 @@ const feedbackDigestAs = (packet: FeedbackJudgePacket) => packet.feedbackDigest 
   threadFeedback?: {
     annotationCount?: number;
     cleanRetryAnswers?: unknown[];
+    developmentTargets?: unknown[];
+    nextRetryPlan?: unknown;
     materialCount?: number;
+    myUsableMaterial?: unknown[];
     expressionCount?: number;
+    reusableSpokenLanguage?: unknown[];
     nextRetryFocusZh?: string;
   };
   part2Feedback?: {
@@ -397,7 +422,21 @@ const addSpeakingBaselineQualityFindings = (
   const digest = feedbackDigestAs(packet);
   const sourceWords = countWords(packet.source.transcriptOrEssay);
   const priorityEvidenceCount = packet.evidence.filter(item => item.severity === 'priority_repair').length;
+  const anchoredPriorityEvidenceCount = packet.evidence.filter(
+    item => item.severity === 'priority_repair' && item.anchor?.status === 'anchored',
+  ).length;
   const answerCount = packet.source.threadAnswers?.length || 0;
+  const richPart3EvidenceCoverage =
+    anchoredPriorityEvidenceCount >= Math.max(7, answerCount * 2) ||
+    (
+      packet.evidenceSummary.anchored >= 10 &&
+      packet.evidenceSummary.displayRequired >= 7
+    );
+  const part3PriorityCoverageGood =
+    digest.part === 3 &&
+    digest.sessionKind === 'part3_discussion_thread' &&
+    packet.evidenceSummary.missingDisplayRequired === 0 &&
+    richPart3EvidenceCoverage;
   const sourceNorm = normalizeEvidenceText(packet.source.transcriptOrEssay);
   const evidenceQuoteNorm = normalizeEvidenceText(packet.evidence
     .flatMap(item => [item.sourceQuote, item.original])
@@ -420,6 +459,7 @@ const addSpeakingBaselineQualityFindings = (
     message: string;
   }) => {
     if (!sourcePattern.test(sourceNorm)) return;
+    if (part3PriorityCoverageGood && message.startsWith('Part 3')) return;
     if (!quotePattern.test(evidenceQuoteNorm)) {
       findings.push({
         severity: 'should_fix',
@@ -557,7 +597,10 @@ const addSpeakingBaselineQualityFindings = (
       });
     }
 
-    const learningAssetCount = (digest.threadFeedback?.materialCount || 0) + (digest.threadFeedback?.expressionCount || 0);
+    const learningAssetCount =
+      (digest.threadFeedback?.developmentTargets?.length || 0) +
+      (digest.threadFeedback?.materialCount || 0) +
+      (digest.threadFeedback?.expressionCount || 0);
     if (learningAssetCount === 0) {
       findings.push({
         severity: 'should_fix',
@@ -639,7 +682,20 @@ const addSpeakingBaselineQualityFindings = (
     }
 
     const localIssueCount = (digest.fatalErrors?.length || 0) + (digest.naturalnessHints?.length || 0);
-    if (localIssueCount >= 10 && !(digest.part3Feedback?.answers || []).some(answer => answer.feedbackMode === 'reasoning_upgrade' || answer.feedbackMode === 'answer_scope' || answer.feedbackMode === 'nuance_upgrade')) {
+    const hasPart3ReasoningPriority = (digest.part3Feedback?.answers || []).some(answer => {
+      if (
+        answer.feedbackMode === 'reasoning_upgrade' ||
+        answer.feedbackMode === 'answer_scope' ||
+        answer.feedbackMode === 'part3_generalisation' ||
+        answer.feedbackMode === 'nuance_upgrade'
+      ) {
+        return true;
+      }
+      return /\b(generalisation|generalization|scope|stance|contrast|condition|nuance|answerControl)\b|泛化|范围|立场|对比|条件|人群/.test(
+        JSON.stringify(answer.thinkingDiagnosis || {}),
+      );
+    });
+    if (localIssueCount >= 10 && !hasPart3ReasoningPriority) {
       findings.push({
         severity: 'should_fix',
         layer: 'prompt',

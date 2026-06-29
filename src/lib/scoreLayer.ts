@@ -108,6 +108,16 @@ export const resolveTargetState = ({
 export const resolveSpeakingTargetState = (feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>): TargetState => {
   if (hasSpeakingHardBlocker(feedback)) return 'needs_repair';
   if (feedback.bandEstimateExcludingPronunciation >= 8) return 'high_band_stable';
+  if (
+    feedback.highBandStabilityZh?.trim() &&
+    !feedback.upgradedAnswer.trim() &&
+    feedback.fatalErrors.length === 0 &&
+    feedback.naturalnessHints.length === 0
+  ) {
+    return feedback.bandEstimateExcludingPronunciation >= 7.5
+      ? 'high_band_stable'
+      : 'high_band_boundary';
+  }
   if (targetStatusFailed(feedback.targetAnswerStatus)) return 'target_failed_or_borderline';
   if (feedback.upgradedAnswer.trim()) return 'generated_target';
   return 'needs_repair';

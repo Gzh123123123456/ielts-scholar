@@ -492,13 +492,15 @@ const cleanDevelopmentTarget = (
       all.findIndex(candidate => normalizePart1ComparableText(candidate.text) === normalizePart1ComparableText(chunk.text)) === index,
     )
     .slice(0, 12);
-  if (!phraseChunks.length) return null;
+  const optionalDevelopedAnswer = normalizePart1TranscriptDisplayText(target.optionalDevelopedAnswer || '');
+  if (!phraseChunks.length && !optionalDevelopedAnswer) return null;
   const overexpands = /再补|更多地点|朋友|设备|场景|add more|more detail/i.test(`${reasonZh} ${developmentMoveZh}`);
   if (overexpands && /已经|already|地点|原因|reason|because/i.test(reasonZh)) return null;
   return {
     ...target,
     reasonZh,
     developmentMoveZh,
+    ...(optionalDevelopedAnswer ? { optionalDevelopedAnswer } : {}),
     phraseChunks,
   };
 };

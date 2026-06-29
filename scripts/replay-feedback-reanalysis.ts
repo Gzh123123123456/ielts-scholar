@@ -76,6 +76,7 @@ interface ReanalysisCaseReport {
   }[];
   teacherJudge?: ExternalTeacherJudgeResult;
   teacherJudgeError?: string;
+  teacherJudgeSkippedReason?: string;
   newPacket?: FeedbackJudgePacket;
   newTeacherJudgePrompt?: string;
 }
@@ -237,7 +238,15 @@ const providerFromEnv = (providerName: ReanalysisProviderName): { provider: AIPr
     const apiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error('Gemini re-analysis needs VITE_GEMINI_API_KEY or GEMINI_API_KEY.');
     const modelName = process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
-    return { provider: new GeminiProvider(apiKey, modelName), modelName };
+    const timeoutMs = Number(process.env.VITE_GEMINI_TIMEOUT_MS || process.env.GEMINI_TIMEOUT_MS);
+    return {
+      provider: new GeminiProvider(apiKey, modelName, {
+        baseUrl: process.env.VITE_GEMINI_BASE_URL || process.env.GEMINI_BASE_URL || process.env.GEMINI_NEXT_GEN_API_BASE_URL,
+        apiVersion: process.env.VITE_GEMINI_API_VERSION || process.env.GEMINI_API_VERSION,
+        timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined,
+      }),
+      modelName,
+    };
   }
   const apiKey = process.env.VITE_DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error('DeepSeek re-analysis needs VITE_DEEPSEEK_API_KEY or DEEPSEEK_API_KEY.');
@@ -402,6 +411,25 @@ const runOneReanalysis = async (
 
   const { provider, modelName } = providerFromEnv(options.providerName);
   const result = await safeAnalyzeSpeaking(provider, options.providerName, request);
+  if (result.diagnostic.failureKind) {
+    return {
+      record: item.record,
+      request,
+      oldHardSafety: item.oldHardSafety,
+      teacherJudgeSkippedReason: `Skipped teacher judge because ${options.providerName} did not return usable feedback (${result.diagnostic.failureKind}).`,
+      providerDiagnostic: {
+        providerName: options.providerName,
+        modelName,
+        fallbackUsed: result.diagnostic.fallbackUsed,
+        failureKind: result.diagnostic.failureKind,
+        parseError: result.diagnostic.parseError,
+        validationErrors: result.diagnostic.validationErrors,
+        normalizedFields: result.diagnostic.normalizedFields,
+        timestamp: result.diagnostic.timestamp,
+      },
+      auxiliaryDiagnostics: [],
+    };
+  }
   const coreFeedback = feedbackForPacket(result.feedback, request);
   const learningAssetsRun = await runPart1LearningAssetsPass(provider, options.providerName, coreFeedback, request);
   const newFeedback = feedbackForPacket(learningAssetsRun.feedback, request);
@@ -563,6 +591,8 @@ const main = async () => {
       ? ` teacher=${item.teacherJudge.pass ? 'pass' : 'fail'}:${item.teacherJudge.score}`
       : item.teacherJudgeError
         ? ' teacher=error'
+        : item.teacherJudgeSkippedReason
+          ? ' teacher=skipped'
         : '';
     console.log(`${index + 1}. ${item.record.id} | ${item.record.title} | old=${oldWeight} new=${newWeight} ${item.comparison?.verdict || 'planned'}${failure}${teacher}`);
   });

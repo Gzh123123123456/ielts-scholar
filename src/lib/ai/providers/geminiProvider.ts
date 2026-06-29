@@ -1,5 +1,35 @@
-import { createPartFromBase64, GoogleGenAI } from '@google/genai';
+import { createPartFromBase64, GoogleGenAI, type GoogleGenAIOptions, type HttpOptions } from '@google/genai';
 import { AIProvider, SpeakingAnalysisRequest } from './base';
+
+type ImportMetaWithEnv = ImportMeta & {
+  env?: Record<string, string | undefined>;
+};
+
+export interface GeminiProviderOptions {
+  baseUrl?: string;
+  timeoutMs?: number;
+  apiVersion?: string;
+}
+
+const readProviderEnv = (key: string): string | undefined => {
+  const viteValue = (import.meta as ImportMetaWithEnv).env?.[key];
+  if (typeof viteValue === 'string' && viteValue.trim()) return viteValue.trim();
+  if (typeof process !== 'undefined') {
+    const processValue = process.env?.[key];
+    if (typeof processValue === 'string' && processValue.trim()) return processValue.trim();
+  }
+  return undefined;
+};
+
+const positiveNumber = (value: unknown): number | undefined => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : undefined;
+};
+
+const geminiBaseUrlFromEnv = () =>
+  readProviderEnv('VITE_GEMINI_BASE_URL') ||
+  readProviderEnv('GEMINI_BASE_URL') ||
+  readProviderEnv('GEMINI_NEXT_GEN_API_BASE_URL');
 
 export const strictJsonInstruction = `Return one valid JSON object only.
 Do not wrap it in Markdown.
@@ -630,8 +660,10 @@ Correction depth by current estimate:
 - 6.5-7.5: return fewer but still meaningful targeted fixes, focused on precision, coherence, spoken naturalness, and idea development.
 - 8.0+ or high-band stable: keep feedback concise and do not force many corrections.
 Do not invent errors. Do not correct every tiny spoken imperfection. Do not mark isolated likely ASR artifacts as definite grammar errors. If a phrase could be ASR, either avoid making it a Must Fix or phrase the explanation as "check this phrase". Functional-word homophones such as will/well, went/but, and of/off should not be heavily penalized unless repeated or meaning-breaking.
+For Part 1 single-question answers around 6.0-7.0, do not stop after one preposition or article fix when other stable wording needs a natural spoken upgrade. Use naturalnessHints for high-value spoken choices such as an over-casual "cause" in an exam answer, habitual "could have" where "can have / get to have" is intended, weak closing formulas, or stiff transcript-like transitions. Do not treat capitalization or punctuation as speaking errors.
 Do not skip original sentence or phrase problems just because the target answer rewrites or omits them. For each major fatalError or naturalnessHint, make explanationZh include a short target-link when useful, for example "Target answer uses this as: ..." or "Target answer rebuilds this idea as: ..." or "This phrase was omitted because ...".
 Target answer linkage: upgradedAnswer must visibly apply the most important fixes from fatalErrors and naturalnessHints while preserving useful personal material. For a power-cut story, for example, use natural spoken repairs such as "the power went out", "everything went pitch black", "find a lighter and light some candles", and "the electricity company" where those ideas come from the learner.
+Do not add exact times, ages, dates, quantities, named people, places, private events, or concrete routines that are not in the transcript. If the learner says "early", keep it as "early"; do not turn it into "around 6" or another invented specific.
 band9Refinements must quote or reference exact learner wording in observation or explanationZh, otherwise the UI grounding filter may remove the item. Use this field for grounded idea/expression upgrades, not generic advice.
 preservedStyle must explain what material is worth keeping and how it was rebuilt. For Part 2, keep concrete personal material such as childhood power cut, home alone, fear, TV/Ultraman, monsters/darkness, and calling parents when present, then explain how to rebuild scattered details into a story spine. Do not make upgradedAnswer a totally unrelated model answer.`;
 
@@ -644,6 +676,7 @@ export const speakingTeacherQualitySelfCheckInstruction = `Final teacher-quality
 - For Part 2, do not route six-signal or story-module teaching into generic fatalErrors/naturalnessHints. Use part2Feedback as the source of truth.
 - For Part 2, self-check the selected annotations against the story skeleton: setup, instruction or situation, key action, turning point/problem, help/solution, and ending. A low/mid story with many audible language problems should not end up with only two local word repairs unless the rest is genuinely stable.
 - For Part 3, do not only repair grammar when the bigger issue is answer scope, generalisation, comparison, condition, consequence, or reasoning control.
+- For single-question Part 3, if there is no part3Feedback container, use band9Refinements to teach the top reasoning move explicitly: condition, concession, exception, generalisation, comparison, consequence, or scope expansion.
 - For Part 3, self-check the top priority path before returning JSON: stance/control first, then sentence skeleton and reasoning, then lexical variety and spoken naturalness. If the feedback contains many local repairs but no clear top-three path, revise it.
 - Do not output internal self-check wording. Revise the JSON silently if this self-check fails.`;
 
@@ -654,10 +687,12 @@ export const speakingPart2NativeFeedbackInstruction = `Part 2 native feedback co
 - First classify materialType as person, place, object, experience_event, abstract_or_opinion_experience, or unclear.
 - Before selecting annotations, identify the Part 2 route the answer needs: what it is/who it is, how long or when relevant, what it contains or what happened, how the learner's feeling changed, and why it matters. For object/old-thing cue cards, explicitly check whether the answer makes clear what the object is, who kept it/how long, what is inside or what it looks like, and why it has emotional value.
 - annotations must be provider-native anchored annotations for necessary local repairs only: copy exact learner wording into sourceQuote, choose severity, and explain why that span deserves repair. If a note cannot be anchored to the learner's words, do not put it in annotations.
+- If you place a high-impact Part 2 repair in generic fatalErrors or naturalnessHints, also include the same learner wording or the wider complete sentence span in part2Feedback.annotations. The Part 2 UI reads annotations as the main repair path, so generic repair arrays must not be the only place where core Part 2 issues appear.
 - Use must_fix only for issues that materially affect score, story clarity, meaning, or timeline control. Use better_spoken_choice for useful but non-fatal improvements. Use optional_polish sparingly.
 - Do not use annotations for answer-building strategy, generic opener directness, richer story frames, low-yield polish, or language-signal enrichment. Route those to storyModules or languageSignals only. A clearer opener is usually not an annotation unless the original wording creates real confusion.
 - Annotation selection must be stable for the same transcript. First make an internal full candidate list, then choose the visible annotations by this priority order: meaning/story/timeline-breaking must_fix issues; recurring grammar patterns; high-impact lexical precision/collocation; then optional spoken polish. If two candidates have similar value, keep the earlier sourceQuote in the transcript. Do not alternate between equally minor candidates across retests.
 - Story skeleton beats isolated word spotting. In a narrative, prioritise phrases that carry the story logic: how the situation began, what someone told the learner to do, what the learner did next, how the problem happened, who helped, how it ended, and how the learner reflects on it. A broken key action sentence is higher priority than a small local wording issue.
+- Treat confusing timeline or reference wording as story control, not a tiny word-choice issue. If the learner says something like "Today I am turning 30, [sportsperson] is still playing", teach the intended link: "Even now, as I'm turning 30, he is still playing..." Do not leave it as "Today" or a generic "Now" replacement.
 - Annotation volume must adapt to the learner level and error density, but stay within a stable visible budget. For mid/high-band answers, prefer 0-3 high-signal annotations over many phrase cards. For 5.5-6.0 style answers, normally return 4-5 anchored repairs. For low-band or structurally unstable answers, return up to 6 anchored repairs and group related layers inside the same sourceQuote where possible. If one sentence repeatedly misses past tense, agreement, articles, word forms, or basic sentence structure, show the recurring pattern through a representative span or a grouped annotation rather than a different random set each pass.
 - If a key story sentence has multiple problems, anchor the whole meaningful span and give one complete spoken repair. Do not leave the learner with only a corrected word when the actual problem is the sentence frame.
 - If the learner says that someone photographed them, distinguish "take photos of me" from "take photos for me"; the latter means helping on my behalf. If the learner means a camera light, repair "flashlight" to "camera flash" or "the camera and its flash" as a meaning issue, not just an article issue.
@@ -681,6 +716,7 @@ export const speakingPart2NativeFeedbackInstruction = `Part 2 native feedback co
   3. bestUpgrade must be the exact English expression/frame the learner should notice. Never put meta descriptions, grammar labels, or instructions in bestUpgrade, such as "future influence clause with will", "use past tense", "add a connector", or "adverb + adjective collocation". Put those explanations in nextMoveZh or guidanceZh.
   4. sampleUpgrade must contain sampleUpgradeHighlight exactly. sampleUpgradeHighlight should usually equal bestUpgrade; if grammar requires a slight inflection, set sampleUpgradeHighlight to the exact substring to highlight and make bestUpgrade a compact reusable frame, not the full sample sentence. For phrasal_verb, sampleUpgrade may include natural modifiers such as adverbs, but bestUpgrade and sampleUpgradeHighlight should mark only the phrasal verb core, e.g. bestUpgrade "look forward to" and highlight "looking forward to", not "eagerly looking forward to".
   5. If a languageSignals item has a bestUpgrade, that upgrade must be naturally integrated into nextSpeakableVersion and cited through usedInNextVersionQuote. Also include a matching nextSpeakableVersionHighlights item for the same exact quote and signal. If the expression cannot fit the next version without distorting meaning or flow, do not make it bestUpgrade; move it to alternatives or story/vocabulary material instead.
+  5b. If a languageSignals item identifies a useful learner expression already in the transcript, preserve it or a close natural version in nextSpeakableVersion unless there is a clear reason to remove it. For example, a usable stance frame such as "it is no exaggeration to say" should not disappear from the rebuilt answer after being praised.
   6. Before returning JSON, compare bestUpgrade, sampleUpgradeHighlight, usedInNextVersionQuote, alternatives, and alternativeUpgrades. They must not duplicate each other by exact wording or by same leading frame with different example content. If an alternative repeats the same sourceQuote, same upgrade, or same teaching frame as bestUpgrade, replace it with another signal-consistent asset or omit it.
   7. Scan qualityZh, nextMoveZh, insertLocationZh, and guidanceZh for stray concrete English suggestions. If a concrete English expression/frame appears there, move it into bestUpgrade or alternativeUpgrades when it is worth teaching, otherwise remove it from the Chinese guidance.
 - Treat the following as fixed Part 2 training standards, not optional style tips:
@@ -852,8 +888,26 @@ export class GeminiProvider implements AIProvider {
   private ai: GoogleGenAI;
   private model: string;
 
-  constructor(apiKey: string, model = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash') {
-    this.ai = new GoogleGenAI({ apiKey });
+  constructor(
+    apiKey: string,
+    model = readProviderEnv('VITE_GEMINI_MODEL') || 'gemini-2.5-flash',
+    options: GeminiProviderOptions = {},
+  ) {
+    const apiVersion = options.apiVersion || readProviderEnv('VITE_GEMINI_API_VERSION') || readProviderEnv('GEMINI_API_VERSION');
+    const timeout = positiveNumber(options.timeoutMs)
+      || positiveNumber(readProviderEnv('VITE_GEMINI_TIMEOUT_MS'))
+      || positiveNumber(readProviderEnv('GEMINI_TIMEOUT_MS'));
+    const baseUrl = options.baseUrl || geminiBaseUrlFromEnv();
+    const httpOptions: HttpOptions = {
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(timeout ? { timeout } : {}),
+    };
+    const aiOptions: GoogleGenAIOptions = {
+      apiKey,
+      ...(apiVersion ? { apiVersion } : {}),
+      ...(Object.keys(httpOptions).length ? { httpOptions } : {}),
+    };
+    this.ai = new GoogleGenAI(aiOptions);
     this.model = model;
   }
 
@@ -978,10 +1032,11 @@ ${speakingPart3DiscussionFeedbackInstruction}
 If the answer is already strong, return an empty fatalErrors array and use naturalnessHints or band9Refinements for concise grounded idea and expression upgrades.
 Feedback must be target-uplift training feedback. Keep the current estimate defensible and conservative, but make upgradedAnswer, naturalnessHints, band9Refinements, and the practice direction aim at least Band 7.0+.
 If the learner is weak or medium, produce a clean, natural Band 7 target answer for that part with enough improvement margin, not merely a minimal correction. If the learner is already around Band 7.0 or above but not high-band-stable, upgradedAnswer must become a meaningfully stronger Band 7+ training answer rather than another ordinary Band 7 answer. Do not call it Band 8+, Advanced, Verified, Not Verified, or certified.
-Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer.
+Preserve the learner's personal idea where possible; upgrade execution. Do not fabricate personal details beyond what is needed for a natural answer. Never add unsupported exact times, ages, quantities, dates, names, or routines; keep vague learner facts vague when the transcript is vague.
 If the transcript is extremely short, nonsensical, or too thin for the part, do not write a long upgradedAnswer. Return an insufficient-sample message with a short starter outline instead. Be stricter for Part 2 and Part 3 than Part 1.
 Use fatalErrors only for true mistakes. Use band9Refinements as an internal compatibility field for Idea & Expression Upgrade items, especially when fatalErrors is empty or short. In each band9Refinements item, observation should be a concise issue/upgrade point, refinement should contain 1-3 usable English phrases or sentence frames only, and explanationZh should be short Chinese guidance. Do not write "Band 9" in the content.
 Idea & Expression Upgrade items should cover over-formal or AI-like phrasing, unnatural spoken rhythm, overlong Part 1 answers, missed chances for concise natural development, reasoning depth, and ways to sound more spontaneous.
+For single-question Part 3 feedback, if upgradedAnswer adds a condition, concession, exception, generalisation, comparison, consequence, or scope expansion that is not visible in the original answer, add a grounded band9Refinements item that names that reasoning move and quotes or references the learner's wording. The learner should see why the answer became more nuanced, not only see a rewritten answer.
 For Part 1, keep upgradedAnswer compact and conversation-oriented. For Part 2, target a spoken story spine with concrete details. For Part 3, target natural spoken discussion logic with reasoning, examples, and consequences.
 Do not use targetRepairFocus, priorTargetAnswer, or authoritativeScore to describe target certification. Normal Speaking analysis is one structured feedback pass: score the learner answer, give feedback, and generate upgradedAnswer when appropriate.
 
@@ -1177,9 +1232,12 @@ Assess only the user's report against the supplied text visual brief and data.
 Do not implement General Training letters.
 Do not invent image details beyond the given brief.
 Do not explain causes unless the visual brief explicitly gives causes.
+Return the exact taskType, instruction, visualBrief, and report from the input. Do not paraphrase those fields.
+Every key in the schema is required. Do not omit optional-looking fields. Do not use null. Use [] for empty arrays and "" only for genuinely empty string fields.
+estimatedBand and taskAchievement.score must be valid IELTS whole or half bands from 1.0 to 9.0.
 Focus on overview quality, key feature selection, useful comparison, data accuracy, coherence, and concise academic reporting.
-Current estimate must remain honest and conservative. Target reports must follow the global uplift policy: if the current report is below Band 7.0, improvedReport/modelExcerpt must be a Band 7.0+ Target Report; if the current report is around Band 7.0 or above, improvedReport/modelExcerpt must be a Band 8+ Examiner-Friendly Report. Do not inflate the current estimate to match the target. Do not label output as Band 9 or Target Band 7.5.
-The target report must improve overview quality, key feature selection, comparison logic, data accuracy, and concise academic reporting style. Do not just correct grammar. For Band 8+ reports, self-check that the report has a clear overview, accurate key features, strong comparisons, precise data description, and no irrelevant detail dump.
+Current estimate must remain honest and conservative. improvedReport/modelExcerpt should be an optimized, data-accurate report after diagnosis, not a new band promise. Do not inflate the current estimate to match the optimized report. Do not label output as Band 9, Band 8, Band 7.5, or Band 7.0+.
+The optimized report must improve overview quality, key feature selection, comparison logic, data accuracy, and concise academic reporting style. Do not just correct grammar. Before returning it, self-check every comparative claim against the supplied data; if a superlative change is mentioned, verify that the named category really has the largest increase/decrease. Do not include irrelevant detail dumps.
 Keep feedback concise and Task 1-specific.
 Write overviewFeedback, keyFeaturesFeedback, comparisonFeedback, dataAccuracyFeedback, coherenceFeedback, mustFix, rewriteTask, and language correction explanations Chinese-first. Start each explanation in Chinese, diagnose the learner's English problem in Chinese, and include short English corrections or example phrases only where useful.
 Keep improvedReport and modelExcerpt in English.

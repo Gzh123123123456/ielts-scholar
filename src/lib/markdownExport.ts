@@ -1153,6 +1153,7 @@ ${answers.map((answer, index) => {
       .filter(Boolean)
       .filter((chunk, chunkIndex, chunks) => chunks.indexOf(chunk) === chunkIndex)
       .slice(0, 12);
+    const developedAnswer = cleanLearningText(developmentTarget?.optionalDevelopedAnswer);
     const suppressUnsafeCleaner = Boolean(cleanRetry && isPart1ExportCleanerEquivalent(answer.answer, cleanRetry.answer));
     const annotationLines = annotations.length
       ? annotations.map(item => [
@@ -1164,8 +1165,8 @@ ${answers.map((answer, index) => {
     const cleanRetryBlock = cleanRetry && !suppressUnsafeCleaner
       ? `\n\n### A Cleaner Answer for Your Next Try\n${cleanRetry.answer}`
       : '';
-    const developmentBlock = developmentChunks.length
-      ? `\n\n### Development\n${developmentChunks.length ? `- 可用表达: ${developmentChunks.join(' / ')}` : ''}`
+    const developmentBlock = developedAnswer || developmentChunks.length
+      ? `\n\n### Development${developedAnswer ? `\n- Developed answer to try: ${developedAnswer}` : ''}${developmentChunks.length ? `\n- 可用表达: ${developmentChunks.join(' / ')}` : ''}`
       : '';
     return `## ${questionRef}. ${answer.question}\n> Original answer: ${answer.answer}${annotationLines ? `\n\n### Annotations\n${annotationLines}` : ''}${cleanRetryBlock}${developmentBlock}`;
   }).join('\n\n')}
@@ -1627,12 +1628,10 @@ export const buildWritingTask1TrainingMarkdown = (
 ) => {
   const task1TargetState = feedback.targetState || resolveTask1TargetState(feedback);
   const task1TargetHeading = task1TargetState === 'high_band_stable'
-    ? 'STANDARD ANSWER'
+    ? 'EXAMINER-FRIENDLY VERSION'
     : task1TargetState === 'needs_repair' || task1TargetState === 'target_failed_or_borderline'
-      ? 'TARGET REPORT NEEDS REPAIR'
-      : feedback.estimatedBand >= 7
-        ? 'GENERATED BAND 8+ TARGET REPORT'
-        : 'GENERATED BAND 7.0+ TARGET REPORT';
+      ? 'OPTIMIZED REPORT HIDDEN'
+      : 'OPTIMIZED REPORT';
   const planItems = cleanLines([
     quickPlan?.overview && `Overview: ${quickPlan.overview}`,
     quickPlan?.keyFeatures && `Key features: ${quickPlan.keyFeatures}`,

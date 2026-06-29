@@ -14,6 +14,7 @@
     "verify:evidence-ledger": "tsx scripts/verify-evidence-ledger.ts",
     "verify:feedback-judge": "tsx scripts/verify-feedback-judge.ts",
     "verify:feedback-history-replay": "tsx scripts/verify-feedback-history-replay.ts",
+    "verify:writing-task1": "tsx scripts/verify-writing-task1-feedback-loop.ts",
     "replay:feedback-history": "tsx scripts/replay-feedback-history.ts",
     "replay:feedback-reanalysis": "tsx scripts/replay-feedback-reanalysis.ts",
     "verify:part1-runtime-fixtures": "tsx scripts/verify-part1-runtime-fixtures.mjs"

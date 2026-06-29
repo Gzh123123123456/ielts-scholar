@@ -52,17 +52,17 @@ export const getTargetLabel = (
   const layer = getTargetLayer(estimate);
   if (kind === 'modelAnswer') {
     return layer.isHighLayer
-      ? 'Band 8+ Examiner-Friendly Model Answer'
-      : 'Band 7.0+ Target Model Answer';
+      ? 'Examiner-Friendly Model Answer'
+      : 'Optimized Model Answer';
   }
   if (kind === 'report') {
     return layer.isHighLayer
-      ? 'Band 8+ Examiner-Friendly Report'
-      : 'Band 7.0+ Target Report';
+      ? 'Examiner-Friendly Report'
+      : 'Optimized Report';
   }
   return layer.isHighLayer
-    ? 'Band 8+ Examiner-Friendly Answer'
-    : 'Band 7.0+ Target Answer';
+    ? 'Examiner-Friendly Answer'
+    : 'Optimized Answer';
 };
 
 export const getTargetLabelZh = (

@@ -300,19 +300,46 @@ const buildPart1TargetStarter = (transcript: string): string => {
   return `${firstSentence.replace(/[.!?]+$/, '')}. Usually I would add one specific detail, like where we go or what we talk about. That makes the answer sound more natural and personal.`;
 };
 
+const scrubUnsupportedPart1TargetSpecifics = (
+  value: string,
+  transcript: string,
+  normalizedFields?: string[],
+) => {
+  const replacement = /\bearly\b/i.test(transcript) ? 'early' : 'at a natural time';
+  let scrubbedUnsupportedSpecific = false;
+  const scrubbed = value.replace(
+    /\b(?:around|at|by|before|after)\s+(\d{1,2}(?::\d{2})?)\s*(?:a\.?m\.?|p\.?m\.?|o'clock)?\b/gi,
+    (match, clockNumber: string) => {
+      const escapedNumber = clockNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (new RegExp(`\\b${escapedNumber}\\b`).test(transcript)) return match;
+      scrubbedUnsupportedSpecific = true;
+      return replacement;
+    },
+  );
+  if (scrubbedUnsupportedSpecific) {
+    normalizedFields?.push('part1UnsupportedTargetSpecificsScrubbed');
+  }
+  return scrubbed;
+};
+
 const calibrateSpeakingUpgradedAnswer = (
   value: string,
   part: SpeakingPart,
   transcript: string,
   limitTransformation: boolean,
+  normalizedFields?: string[],
 ): string => {
   if (limitTransformation || part !== 1 || isProviderIncompleteSpeakingAnswer(value)) return value;
   const words = countWords(value);
   const sentences = splitSentences(value);
-  if (words <= 80 && sentences.length <= 4) return value;
+  if (words <= 80 && sentences.length <= 4) {
+    return scrubUnsupportedPart1TargetSpecifics(value, transcript, normalizedFields);
+  }
 
   const trimmed = sentences.slice(0, 4).join(' ');
-  if (countWords(trimmed) >= 25 && countWords(trimmed) <= 85) return trimmed;
+  if (countWords(trimmed) >= 25 && countWords(trimmed) <= 85) {
+    return scrubUnsupportedPart1TargetSpecifics(trimmed, transcript, normalizedFields);
+  }
   return buildPart1TargetStarter(transcript);
 };
 
@@ -329,6 +356,23 @@ const applySpeakingLengthCap = (score: number, words: number, part: SpeakingPart
 
 const normalizeHalfBandScore = (score: number): number =>
   Math.max(0, Math.min(9, roundToHalfBand(score)));
+
+const isPositiveFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+const speakingCriteriaAverage = (scores: {
+  fluencyCoherence: number;
+  lexicalResource: number;
+  grammaticalRangeAccuracy: number;
+}): number | undefined => {
+  const values = [
+    scores.fluencyCoherence,
+    scores.lexicalResource,
+    scores.grammaticalRangeAccuracy,
+  ].filter(isPositiveFiniteNumber);
+  if (values.length !== 3) return undefined;
+  return normalizeHalfBandScore(values.reduce((sum, score) => sum + score, 0) / values.length);
+};
 
 const buildSpeakingLengthMustFix = (words: number, part: SpeakingPart): FatalError | null => {
   const minimum = speakingMinimumWords(part);
@@ -495,6 +539,59 @@ const optionalSafeStringArray = (value: unknown): string[] | undefined => {
     .map(item => optionalSafeString(item))
     .filter((item): item is string => Boolean(item));
   return items.length ? items : undefined;
+};
+
+const normalizeSpeakingReusableExample = (
+  value: unknown,
+  normalizedFields: string[],
+): SpeakingFeedback['reusableExample'] => {
+  if (!isRecord(value)) return null;
+
+  const example = optionalSafeString(value.example);
+  const explanationZh = optionalSafeString(value.explanationZh);
+  if (!example || !explanationZh) {
+    normalizedFields.push('reusableExampleDroppedIncomplete');
+    return null;
+  }
+
+  return {
+    example,
+    canBeReusedFor: optionalSafeStringArray(value.canBeReusedFor) || [],
+    explanationZh,
+  };
+};
+
+const normalizeSpeakingNaturalnessHints = (
+  value: unknown,
+  validationErrors: string[],
+  normalizedFields: string[],
+): NaturalnessHint[] => {
+  if (!Array.isArray(value)) {
+    validationErrors.push('naturalnessHints missing or invalid array');
+    return [];
+  }
+  return value
+    .map((item, index): NaturalnessHint | null => {
+      const record = isRecord(item) ? item : {};
+      if (!isRecord(item)) {
+        validationErrors.push(`naturalnessHints[${index}] missing or invalid object`);
+        return null;
+      }
+      const original = optionalSafeString(record.original);
+      const better = optionalSafeString(record.better);
+      const explanationZh = optionalSafeString(record.explanationZh);
+      if (!original || !better || !explanationZh) {
+        normalizedFields.push(`naturalnessHintDroppedIncomplete:${index}`);
+        return null;
+      }
+      return {
+        original,
+        better,
+        tag: optionalSafeString(record.tag) || 'provider_safety',
+        explanationZh,
+      };
+    })
+    .filter((item): item is NaturalnessHint => Boolean(item));
 };
 
 const SPEAKING_CEILING_TAGS: SpeakingCeilingTag[] = [
@@ -750,8 +847,17 @@ const isProviderUnavailableError = (parseError?: string): boolean => {
     'unavailable',
     'high demand',
     'try again later',
+    'fetch failed',
     'networkerror',
     'failed to fetch',
+    'connect timeout',
+    'connecttimeouterror',
+    'und_err_connect_timeout',
+    'operation was aborted',
+    'econnrefused',
+    'econnreset',
+    'etimedout',
+    'enotfound',
     'timeout',
     'rate limit',
   ].some(marker => normalized.includes(marker));
@@ -861,8 +967,12 @@ const normalizeSpeakingScoreOnly = (
     source.bandEstimate ??
     source.estimatedBand ??
     source.overallBand;
+  const hasExplicitHeadline = isPositiveFiniteNumber(headlineSource);
+  const criteriaHeadline = speakingCriteriaAverage(visibleScores);
   const headline = normalizeHalfBandScore(applySpeakingLengthCap(
-    asNumber(headlineSource, 'bandEstimateExcludingPronunciation', validationErrors, FALLBACK_SCORE),
+    hasExplicitHeadline
+      ? headlineSource
+      : criteriaHeadline ?? asNumber(headlineSource, 'bandEstimateExcludingPronunciation', validationErrors, FALLBACK_SCORE),
     transcriptWords,
     part,
   ));
@@ -916,12 +1026,19 @@ const normalizeThreadPhraseItems = (
   answers: NonNullable<SpeakingRequest['threadAnswers']>,
   validationErrors: string[],
   path: string,
+  normalizedFields?: string[],
 ) => asArray(value, path, validationErrors).map((item, index) => {
   const record = isRecord(item) ? item : {};
   if (!isRecord(item)) validationErrors.push(`${path}[${index}] missing or invalid object`);
   const questionRefs = normalizeQuestionRefs(record.questionRefs ?? record.affectedQuestions, answers);
-  const original = safeLearningText(asString(record.original ?? record.learnerWording, FALLBACK_TEXT, `${path}[${index}].original`, validationErrors));
-  const better = safeLearningText(asString(record.better ?? record.betterVersion, FALLBACK_TEXT, `${path}[${index}].better`, validationErrors));
+  const rawOriginal = record.original ?? record.learnerWording;
+  const rawBetter = record.better ?? record.betterVersion;
+  if (!optionalSafeString(rawOriginal) || !optionalSafeString(rawBetter)) {
+    normalizedFields?.push(`part1ThreadPhraseItemDroppedIncomplete:${path}[${index}]`);
+    return null;
+  }
+  const original = safeLearningText(asString(rawOriginal, FALLBACK_TEXT, `${path}[${index}].original`, validationErrors));
+  const better = safeLearningText(asString(rawBetter, FALLBACK_TEXT, `${path}[${index}].better`, validationErrors));
   const explanationZh = safeLearningText(asString(record.explanationZh, 'Provider feedback was incomplete; this item was normalized safely.', `${path}[${index}].explanationZh`, validationErrors));
   const answerIndex = Number((questionRefs[0] || 'Q1').replace(/^Q/i, '')) - 1;
   const repair = normalizePart1RepairLayer(original, better, path, explanationZh, answers[answerIndex]?.answer || '');
@@ -1005,6 +1122,7 @@ type Part1AnnotationDiagnostics = {
   severityDowngradedFromMustFix: number;
   cleanerConflictsFound: number;
   cleanerConflictsResolved: number;
+  incompleteLayersDropped: number;
 };
 
 const isPart1FullSentenceScaffold = (text: string) => {
@@ -1963,6 +2081,10 @@ const normalizePart1AnswerAnnotations = (
     .map((layer, layerIndex): Part1AnswerAnnotationLayer | null => {
       const layerRecord = isRecord(layer) ? layer : {};
       if (!isRecord(layer)) validationErrors.push(`threadFeedback.annotations[${index}].layers[${layerIndex}] missing or invalid object`);
+      if (!optionalSafeString(layerRecord.better ?? layerRecord.correction)) {
+        diagnostics && (diagnostics.incompleteLayersDropped += 1);
+        return null;
+      }
       const severity = normalizePart1AnnotationSeverity(layerRecord.severity);
       const original = safeLearningText(asString(layerRecord.original ?? sourceQuote, sourceQuote || FALLBACK_TEXT, `threadFeedback.annotations[${index}].layers[${layerIndex}].original`, validationErrors));
       const better = safeLearningText(asString(layerRecord.better ?? layerRecord.correction, FALLBACK_TEXT, `threadFeedback.annotations[${index}].layers[${layerIndex}].better`, validationErrors));
@@ -2803,6 +2925,85 @@ const normalizePart2Feedback = (
   };
 };
 
+const part2AnnotationDuplicate = (left: Part1AnswerAnnotation, right: Part1AnswerAnnotation) => {
+  const leftQuote = part1AnnotationKeyText(left.sourceQuote);
+  const rightQuote = part1AnnotationKeyText(right.sourceQuote);
+  if (!leftQuote || !rightQuote) return false;
+  if (leftQuote === rightQuote || leftQuote.includes(rightQuote) || rightQuote.includes(leftQuote)) return true;
+  return left.layers.some(leftLayer =>
+    right.layers.some(rightLayer =>
+      part1AnnotationKeyText(leftLayer.original) === part1AnnotationKeyText(rightLayer.original) ||
+      part1AnnotationKeyText(leftLayer.better) === part1AnnotationKeyText(rightLayer.better),
+    ),
+  );
+};
+
+const backfillPart2AnnotationsFromGenericRepairs = (
+  feedback: Omit<SpeakingFeedback, 'obsidianMarkdown'>,
+  normalizedFields: string[],
+): Omit<SpeakingFeedback, 'obsidianMarkdown'> => {
+  if (feedback.part !== 2 || !feedback.part2Feedback) return feedback;
+  const transcript = feedback.transcript || '';
+  const existing = feedback.part2Feedback.annotations || [];
+  const candidates: Part1AnswerAnnotation[] = [];
+  const pushCandidate = (
+    original: string,
+    better: string,
+    issueType: string,
+    explanationZh: string,
+    severity: Part1AnnotationSeverity,
+    index: number,
+  ) => {
+    if (!original || !better || !explanationZh || !textKeyContains(transcript, original)) return;
+    const layer: Part1AnswerAnnotationLayer = {
+      severity,
+      issueType,
+      original,
+      better,
+      explanationZh,
+    };
+    const candidate: Part1AnswerAnnotation = {
+      id: `part2_generic_${index + 1}`,
+      questionRef: 'PART 2',
+      sourceQuote: original,
+      layers: [layer],
+      combinedRepair: better,
+    };
+    if (existing.some(item => part2AnnotationDuplicate(item, candidate))) return;
+    if (candidates.some(item => part2AnnotationDuplicate(item, candidate))) return;
+    candidates.push(candidate);
+  };
+
+  feedback.fatalErrors.forEach((item, index) => {
+    pushCandidate(item.original, item.correction, item.tag || 'accuracy', item.explanationZh, 'must_fix', index);
+  });
+  feedback.naturalnessHints.forEach((item, index) => {
+    pushCandidate(item.original, item.better, item.tag || 'naturalness', item.explanationZh, 'better_spoken_choice', feedback.fatalErrors.length + index);
+  });
+
+  if (!candidates.length) return feedback;
+  const annotations = [...existing, ...candidates]
+    .sort((left, right) => {
+      const a = part2AnnotationSortKey(left, transcript);
+      const b = part2AnnotationSortKey(right, transcript);
+      return a.severityRank - b.severityRank ||
+        a.issueRank - b.issueRank ||
+        a.position - b.position ||
+        b.widthPenalty - a.widthPenalty ||
+        left.sourceQuote.localeCompare(right.sourceQuote);
+    })
+    .slice(0, 6)
+    .sort((left, right) => part2AnnotationPosition(transcript, left.sourceQuote) - part2AnnotationPosition(transcript, right.sourceQuote));
+  normalizedFields.push(`part2AnnotationsBackfilled:${annotations.length - existing.length}`);
+  return {
+    ...feedback,
+    part2Feedback: {
+      ...feedback.part2Feedback,
+      annotations,
+    },
+  };
+};
+
 const stripGenericPart1CleanRetryOpener = (answer: string) => {
   const stripped = answer
     .replace(/^\s*(?:well,\s*)?(?:that's|that is)\s+(?:an interesting|a good)\s+question(?:[.!?,;:]|\s|-)*\s*/i, '')
@@ -2960,6 +3161,43 @@ const completePart1CleanRetryAnswers = (
     answers: cleanRetryAnswers,
     filledRefs,
     fallbackSources,
+  };
+};
+
+const extractPart1CleanRetryExampleFromNote = (noteZh?: string) => {
+  const note = safeLearningText(noteZh || '');
+  if (!note) return '';
+  const quoted = Array.from(note.matchAll(/['"“”‘’]([^'"“”‘’]{8,160})['"“”‘’]/g))
+    .map(match => match[1])
+    .map(example => stripGenericPart1CleanRetryOpener(polishPart1RepairText(example)))
+    .filter(example =>
+      example &&
+      !containsUnsupportedSpeakingBoundaryClaim(example) &&
+      !/\[[^\]]+\]/.test(example) &&
+      countWords(example) >= 5 &&
+      countWords(example) <= 35,
+    );
+  return quoted[0] || '';
+};
+
+const repairUnderresponsivePart1CleanRetryAnswer = (
+  answer: NonNullable<SpeakingRequest['threadAnswers']>[number],
+  cleanRetry: Part1CleanRetryAnswer,
+) => {
+  const questionEvidence = `${answer.question} ${cleanRetry.noteZh || ''}`;
+  const questionAsksForDescription = /\bdescribe\b|\bwhat(?:'s| is).{0,40}\blike\b|\btell me about\b|\u63cf\u8ff0|\u4ec0\u4e48\u6837|\u600e\u4e48\u6837/i.test(questionEvidence);
+  const providerAdmitsMissingDescription = /\u53ea\u56de\u7b54|\u6ca1\u6709\u63cf\u8ff0|\u672a\u63cf\u8ff0|\u7f3a\u5c11\u63cf\u8ff0|add (?:a )?description|missing (?:a )?description|does not describe|only answer/i.test(questionEvidence);
+  if (!questionAsksForDescription || !providerAdmitsMissingDescription) return cleanRetry;
+  const example = extractPart1CleanRetryExampleFromNote(cleanRetry.noteZh);
+  if (!example || textKeyContains(cleanRetry.answer, example)) return cleanRetry;
+  const answerText = stripGenericPart1CleanRetryOpener(polishPart1RepairText(cleanRetry.answer));
+  if (!answerText) return cleanRetry;
+  return {
+    ...cleanRetry,
+    answer: `${example.replace(/[.!?]+$/, '')}. ${answerText}`.replace(/\s+/g, ' ').trim(),
+    noteZh: [cleanRetry.noteZh, 'System recovery: the provider note supplied a concrete description, so it was integrated into the clean retry answer.']
+      .filter(Boolean)
+      .join(' '),
   };
 };
 
@@ -3143,6 +3381,24 @@ const normalizePart1DevelopmentStatus = (value: unknown): Part1DevelopmentStatus
 const normalizePart1DevelopmentMode = (value: unknown): Part1DevelopmentTarget['developmentMode'] | undefined =>
   value === 'needs_content' || value === 'expression_upgrade' || value === 'no_extra_content' ? value : undefined;
 
+const normalizePart1OptionalDevelopedAnswer = (
+  value: unknown,
+  learnerAnswer: string,
+  diagnostics?: Part1DevelopmentDiagnostics,
+) => {
+  const raw = safeLearningText(optionalSafeString(value) || '');
+  const cleaned = sanitizePart1FeedbackText(polishPart1RepairText(raw)) || '';
+  if (!cleaned) return undefined;
+  if (containsUnsupportedSpeakingBoundaryClaim(cleaned)) return undefined;
+  const words = part1AnswerWords(cleaned);
+  if (words.length < 5 || words.length > 45) return undefined;
+  if (isUngroundedPart1Scaffold(cleaned, learnerAnswer)) {
+    diagnostics && (diagnostics.ungroundedScaffoldsFiltered += 1);
+    return undefined;
+  }
+  return cleaned;
+};
+
 const normalizePart1DevelopmentTargets = (
   value: unknown,
   answers: NonNullable<SpeakingRequest['threadAnswers']>,
@@ -3165,6 +3421,11 @@ const normalizePart1DevelopmentTargets = (
       ) || '';
       const developmentMode = normalizePart1DevelopmentMode(record.developmentMode ?? record.mode);
       const topicFrameZh = sanitizePart1FeedbackText(optionalSafeString(record.topicFrameZh ?? record.topicFrame));
+      const optionalDevelopedAnswer = normalizePart1OptionalDevelopedAnswer(
+        record.optionalDevelopedAnswer ?? record.developedAnswer ?? record.exampleAnswer,
+        learnerAnswer,
+        diagnostics,
+      );
       const phraseScaffolds = optionalSafeStringArray(record.phraseScaffolds ?? record.expressionFrames ?? record.scaffolds)
         ?.map(item => safeLearningText(item))
         .filter(item => {
@@ -3194,7 +3455,7 @@ const normalizePart1DevelopmentTargets = (
       const phraseChunks = providerPhraseChunks.length
         ? providerPhraseChunks
         : (phraseScaffolds || []).map(text => ({ text })).slice(0, 12);
-      const hasVisibleDevelopmentPayload = Boolean(phraseChunks.length);
+      const hasVisibleDevelopmentPayload = Boolean(phraseChunks.length || optionalDevelopedAnswer);
       if (!questionRef || !expectedRefs.includes(questionRef)) return null;
       if (!hasVisibleDevelopmentPayload) return null;
       if (part1DevelopmentClaimContradictsAnswer(reasonZh, developmentMoveZh, learnerAnswer)) {
@@ -3210,6 +3471,7 @@ const normalizePart1DevelopmentTargets = (
         developmentMoveZh,
         ...(phraseScaffolds?.length ? { phraseScaffolds: phraseScaffolds.slice(0, 12) } : {}),
         ...(phraseChunks.length ? { phraseChunks } : {}),
+        ...(optionalDevelopedAnswer ? { optionalDevelopedAnswer } : {}),
       };
     })
     .filter((item): item is Part1DevelopmentTarget => Boolean(item))
@@ -3539,8 +3801,8 @@ const normalizePart1TopicThreadFeedback = (
     };
   }).filter(item => item.questionRefs.length && item.issue && item.coachingZh);
   const materialSource = isRecord(threadSource.materialBank) ? threadSource.materialBank : {};
-  const highImpactPhraseFixes = normalizeThreadPhraseItems(threadSource.highImpactPhraseFixes, answers, validationErrors, 'threadFeedback.highImpactPhraseFixes');
-  const optionalPolish = normalizeThreadPhraseItems(threadSource.optionalPolish, answers, validationErrors, 'threadFeedback.optionalPolish');
+  const highImpactPhraseFixes = normalizeThreadPhraseItems(threadSource.highImpactPhraseFixes, answers, validationErrors, 'threadFeedback.highImpactPhraseFixes', normalizedFields);
+  const optionalPolish = normalizeThreadPhraseItems(threadSource.optionalPolish, answers, validationErrors, 'threadFeedback.optionalPolish', normalizedFields);
   const cleanRetryValidationWarnings: string[] = [];
   const providerCleanRetryAnswers = normalizePart1CleanRetryAnswers(threadSource.cleanRetryAnswers ?? [], answers, cleanRetryValidationWarnings);
   if (cleanRetryValidationWarnings.length) {
@@ -3550,6 +3812,7 @@ const normalizePart1TopicThreadFeedback = (
     severityDowngradedFromMustFix: 0,
     cleanerConflictsFound: 0,
     cleanerConflictsResolved: 0,
+    incompleteLayersDropped: 0,
   };
   const providerAnnotations = normalizePart1AnswerAnnotations(threadSource.annotations ?? [], answers, validationErrors, request.retryReference, annotationDiagnostics);
   const fallbackAnnotations = annotationsFromThreadItems(answers, mustFixWithAttribution, highImpactPhraseFixes, optionalPolish, request.retryReference);
@@ -3560,7 +3823,17 @@ const normalizePart1TopicThreadFeedback = (
     mergedAnnotationCandidates,
     request.retryReference,
   );
-  const cleanRetryAnswers = cleanRetryCompletion.answers;
+  const cleanRetryRecoveryRefs: string[] = [];
+  const cleanRetryAnswers = cleanRetryCompletion.answers.map((cleanRetry, index) => {
+    const sourceAnswer = answers[index];
+    if (!sourceAnswer) return cleanRetry;
+    const recovered = repairUnderresponsivePart1CleanRetryAnswer(sourceAnswer, cleanRetry);
+    if (recovered.answer !== cleanRetry.answer) cleanRetryRecoveryRefs.push(recovered.questionRef);
+    return recovered;
+  });
+  if (cleanRetryRecoveryRefs.length) {
+    normalizedFields.push(`part1CleanRetryDescriptionIntegrated:${cleanRetryRecoveryRefs.join(',')}`);
+  }
   if (cleanRetryCompletion.filledRefs.length) {
     normalizedFields.push(`part1CleanRetryFilled:${cleanRetryCompletion.filledRefs.join(',')}`);
     normalizedFields.push(`part1CleanRetryFallbackSources:${cleanRetryCompletion.fallbackSources.join(',')}`);
@@ -3582,6 +3855,9 @@ const normalizePart1TopicThreadFeedback = (
   normalizedFields.push(`part1SeverityDowngradedFromMustFix:${annotationDiagnostics.severityDowngradedFromMustFix}`);
   normalizedFields.push(`part1AnnotationCleanerConflictsFound:${annotationDiagnostics.cleanerConflictsFound}`);
   normalizedFields.push(`part1AnnotationCleanerConflictsResolved:${annotationDiagnostics.cleanerConflictsResolved}`);
+  if (annotationDiagnostics.incompleteLayersDropped) {
+    normalizedFields.push(`part1AnnotationLayersDroppedIncomplete:${annotationDiagnostics.incompleteLayersDropped}`);
+  }
   const threadLevelPatterns = normalizeThreadLevelPatterns(threadSource.threadLevelPatterns ?? [], validationErrors);
   const nextRetryPlan = normalizeNextRetryPlan(threadSource.nextRetryPlan, validationErrors);
   const hasOrdinaryMustFix = mustFixWithAttribution.some(item => item.origin !== 'previous_cleaner_answer_conflict');
@@ -4215,23 +4491,6 @@ const normalizeSpeakingFeedback = (
   const lengthMustFix = buildSpeakingLengthMustFix(transcriptWords, part);
   const limitTransformation = shouldLimitSpeakingTransformation(request.transcript || '', transcriptWords, part);
   const promptMismatchWarning = buildSpeakingPromptMismatchWarning(request.question || '', request.transcript || '', part);
-  const headlineSource =
-    source.bandEstimateExcludingPronunciation ??
-    source.bandEstimate ??
-    source.estimatedBand ??
-    source.overallBand;
-  const hasExplicitHeadline = typeof headlineSource === 'number' && Number.isFinite(headlineSource) && headlineSource > 0;
-  const cappedHeadline = normalizeHalfBandScore(applySpeakingLengthCap(
-    asNumber(
-      headlineSource,
-      'bandEstimateExcludingPronunciation',
-      validationErrors,
-      FALLBACK_SCORE,
-    ),
-    transcriptWords,
-    part,
-  ));
-  const promptAwareHeadline = promptMismatchWarning ? Math.min(cappedHeadline, 5.5) : cappedHeadline;
   const visibleScores = {
     fluencyCoherence: normalizeHalfBandScore(applySpeakingLengthCap(
       asNumber(scores.fluencyCoherence, 'scores.fluencyCoherence', validationErrors),
@@ -4253,7 +4512,31 @@ const normalizeSpeakingFeedback = (
       part,
     )),
   };
+  const headlineSource =
+    source.bandEstimateExcludingPronunciation ??
+    source.bandEstimate ??
+    source.estimatedBand ??
+    source.overallBand;
+  const hasExplicitHeadline = isPositiveFiniteNumber(headlineSource);
+  const criteriaHeadline = speakingCriteriaAverage(visibleScores);
+  if (!hasExplicitHeadline && criteriaHeadline !== undefined) {
+    normalizedFields.push('speakingHeadlineFromCriteriaAverage');
+  }
+  const cappedHeadline = normalizeHalfBandScore(applySpeakingLengthCap(
+    hasExplicitHeadline
+      ? headlineSource
+      : criteriaHeadline ?? asNumber(
+        headlineSource,
+        'bandEstimateExcludingPronunciation',
+        validationErrors,
+        FALLBACK_SCORE,
+      ),
+    transcriptWords,
+    part,
+  ));
+  const promptAwareHeadline = promptMismatchWarning ? Math.min(cappedHeadline, 5.5) : cappedHeadline;
   const sourceFatalErrors = Array.isArray(source.fatalErrors) ? source.fatalErrors : [];
+  const sourceNaturalnessHints = Array.isArray(source.naturalnessHints) ? source.naturalnessHints : [];
   const hasQualityCap = Boolean(lengthMustFix || limitTransformation || hasLowSignalSpeakingText(request.transcript || ''));
   const hasProviderFatalIssue = sourceFatalErrors.length > 0 || Boolean(promptMismatchWarning);
   const minimumVisibleScore = Math.min(
@@ -4318,10 +4601,20 @@ const normalizeSpeakingFeedback = (
   const providerTargetAnswerStatus = normalizeTargetAnswerStatus(source.targetAnswerStatus);
   const currentAnswerIsHighBand = layerEstimate >= 8 && !hasQualityCap && !hasProviderFatalIssue;
   const rootUpgradedAnswer = optionalSafeString(source.upgradedAnswer);
+  const strongPart3AnswerTargetOptional =
+    part === 3 &&
+    layerEstimate >= 7 &&
+    !rootUpgradedAnswer &&
+    sourceFatalErrors.length === 0 &&
+    sourceNaturalnessHints.length === 0 &&
+    !hasQualityCap &&
+    !hasProviderFatalIssue;
   const part3ThreadRootTargetOptional =
     request.sessionKind === 'part3_discussion_thread' && !rootUpgradedAnswer;
   let rawUpgradedAnswer = '';
   if (currentAnswerIsHighBand) {
+    rawUpgradedAnswer = '';
+  } else if (strongPart3AnswerTargetOptional) {
     rawUpgradedAnswer = '';
   } else if (limitTransformation) {
     rawUpgradedAnswer = buildInsufficientSpeakingTransformation(part);
@@ -4336,9 +4629,12 @@ const normalizeSpeakingFeedback = (
   if (part3ThreadRootTargetOptional) {
     normalizedFields.push('part3RootUpgradedAnswerOptional');
   }
+  if (strongPart3AnswerTargetOptional) {
+    normalizedFields.push('part3StrongAnswerTargetOptional');
+  }
   const hasTargetAnswer = Boolean(rawUpgradedAnswer.trim()) && !isProviderIncompleteSpeakingAnswer(rawUpgradedAnswer);
   const targetAnswerStatus: TargetAnswerStatus = (() => {
-    if (currentAnswerIsHighBand) return 'meets_target';
+    if (currentAnswerIsHighBand || strongPart3AnswerTargetOptional) return 'meets_target';
     if (!hasTargetAnswer || limitTransformation) return 'not_generated';
     return 'meets_target';
   })();
@@ -4400,8 +4696,8 @@ const normalizeSpeakingFeedback = (
         ? 'Strengthen the answer while preserving the learner meaning.'
         : undefined),
     highBandStabilityZh: optionalSafeString(source.highBandStabilityZh) ||
-      (currentAnswerIsHighBand
-        ? 'This answer is stable enough for the high-band layer.'
+      (currentAnswerIsHighBand || strongPart3AnswerTargetOptional
+        ? 'This answer is already stable enough to keep: it gives a clear Part 3 position, useful contrast, concrete examples, and natural generalisation. Next, refine with one sharper nuance or condition if needed.'
         : undefined),
     nextStepZh: optionalSafeString(source.nextStepZh) ||
       (currentAnswerIsHighBand
@@ -4439,21 +4735,7 @@ const normalizeSpeakingFeedback = (
         };
       }),
     ],
-    naturalnessHints: asArray(source.naturalnessHints, 'naturalnessHints', validationErrors).map((item, index) => {
-      const record = isRecord(item) ? item : {};
-      if (!isRecord(item)) validationErrors.push(`naturalnessHints[${index}] missing or invalid object`);
-      return {
-        original: asString(record.original, FALLBACK_TEXT, `naturalnessHints[${index}].original`, validationErrors),
-        better: asString(record.better, FALLBACK_TEXT, `naturalnessHints[${index}].better`, validationErrors),
-        tag: asString(record.tag, 'provider_safety', `naturalnessHints[${index}].tag`, validationErrors),
-        explanationZh: asString(
-          record.explanationZh,
-          'Provider feedback was incomplete; this item was normalized safely.',
-          `naturalnessHints[${index}].explanationZh`,
-          validationErrors,
-        ),
-      };
-    }),
+    naturalnessHints: normalizeSpeakingNaturalnessHints(source.naturalnessHints, validationErrors, normalizedFields),
     band9Refinements: Array.isArray(source.band9Refinements)
       ? source.band9Refinements.map((item, index) => {
           const record = isRecord(item) ? item : {};
@@ -4499,41 +4781,36 @@ const normalizeSpeakingFeedback = (
         riskNoteZh: typeof record.riskNoteZh === 'string' ? record.riskNoteZh : undefined,
       };
     }),
-    upgradedAnswer: calibrateSpeakingUpgradedAnswer(rawUpgradedAnswer, part, request.transcript || '', limitTransformation),
-    reusableExample: isRecord(source.reusableExample)
-      ? {
-          example: asString(source.reusableExample.example, FALLBACK_TEXT, 'reusableExample.example', validationErrors),
-          canBeReusedFor: normalizeStringArray(
-            source.reusableExample.canBeReusedFor,
-            'reusableExample.canBeReusedFor',
-            validationErrors,
-          ),
-          explanationZh: asString(
-            source.reusableExample.explanationZh,
-            'Provider feedback was incomplete; this item was normalized safely.',
-            'reusableExample.explanationZh',
-            validationErrors,
-          ),
-        }
-      : null,
+    upgradedAnswer: calibrateSpeakingUpgradedAnswer(
+      rawUpgradedAnswer,
+      part,
+      request.transcript || '',
+      limitTransformation,
+      normalizedFields,
+    ),
+    reusableExample: normalizeSpeakingReusableExample(source.reusableExample, normalizedFields),
   };
 
-  const resolvedSpeakingTargetState = resolveSpeakingTargetState(feedbackWithoutMarkdown);
+  const feedbackWithPart2AnnotationBackfill = backfillPart2AnnotationsFromGenericRepairs(
+    feedbackWithoutMarkdown,
+    normalizedFields,
+  );
+  const resolvedSpeakingTargetState = resolveSpeakingTargetState(feedbackWithPart2AnnotationBackfill);
   normalizedFields.push(`targetState:${resolvedSpeakingTargetState}`);
   const feedbackWithTargetState: Omit<SpeakingFeedback, 'obsidianMarkdown'> = {
-    ...feedbackWithoutMarkdown,
+    ...feedbackWithPart2AnnotationBackfill,
     targetState: resolvedSpeakingTargetState,
     targetLayer: resolvedSpeakingTargetState === 'high_band_stable'
-      ? feedbackWithoutMarkdown.targetLayer
+      ? feedbackWithPart2AnnotationBackfill.targetLayer
       : layerEstimate >= 7
         ? 'Band 7+ Target Answer'
         : 'Band 7 Target Answer',
     targetValidationZh: resolvedSpeakingTargetState === 'high_band_stable'
-      ? feedbackWithoutMarkdown.targetValidationZh
+      ? feedbackWithPart2AnnotationBackfill.targetValidationZh
       : '',
     highBandStabilityZh: resolvedSpeakingTargetState === 'high_band_stable'
-      ? feedbackWithoutMarkdown.highBandStabilityZh || HIGH_BAND_STABLE_ZH
-      : feedbackWithoutMarkdown.highBandStabilityZh,
+      ? feedbackWithPart2AnnotationBackfill.highBandStabilityZh || HIGH_BAND_STABLE_ZH
+      : feedbackWithPart2AnnotationBackfill.highBandStabilityZh,
     targetAnswerRepairFocusZh: undefined,
   };
 

@@ -5671,7 +5671,8 @@ export default function SpeakingPractice() {
                           .filter((chunk, chunkIndex, chunks) => chunks.findIndex(candidate => candidate.text === chunk.text) === chunkIndex)
                           .filter(chunk => !hiddenPart1DevelopmentKeys.includes(part1DevelopmentChunkKey(questionRef, chunk)))
                           .slice(0, 12);
-                        const shouldRenderDevelopmentCoaching = Boolean(developmentChunks.length);
+                        const developedAnswerToTry = normalizePart1TranscriptDisplayText(developmentTarget?.optionalDevelopedAnswer || '');
+                        const shouldRenderDevelopmentCoaching = Boolean(developmentChunks.length || developedAnswerToTry);
                         const cleanRetryRepeatsCurrentAnswer = Boolean(
                           cleanRetry &&
                           isPart1CleanerAnswerEquivalent(answer.answer, cleanRetry.answer),
@@ -5713,6 +5714,12 @@ export default function SpeakingPractice() {
                             {shouldRenderDevelopmentCoaching && (
                               <div className="mt-4 border-l-2 border-l-accent-terracotta/35 bg-paper-50/70 px-4 py-3">
                                 <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-accent-terracotta/70">DEVELOPMENT</p>
+                                {developedAnswerToTry && (
+                                  <div className="mt-3 border border-accent-terracotta/15 bg-paper-ink/[0.02] px-3 py-2">
+                                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-paper-ink/40">DEVELOPED ANSWER TO TRY</p>
+                                    <p className="mt-2 text-sm leading-7 text-paper-ink/75">{developedAnswerToTry}</p>
+                                  </div>
+                                )}
                                 {developmentChunks.length ? (
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {developmentChunks.map(frame => (

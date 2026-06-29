@@ -271,3 +271,144 @@ Next loop focus:
 
 - Extend the same recovery posture to other provider-owned answer blocks: complete or degrade gracefully, then certify or judge quality separately.
 - Consider a longer-term migration from JSON-mode prompt contracts toward strict schema outputs where the selected provider supports them.
+
+### 2026-06-17 - Real Replay Teacher Judge And Judge-Packet Repair
+
+Input:
+
+- `D:/chrome download/ielts-scholar-feedback-history-replay-2026-06-14T17-06-52-477Z.json`
+
+Observed failures:
+
+- DeepSeek 3-sample replay initially had teacher passes but one false provider failure from an incomplete optional `reusableExample`.
+- Gemini 3-sample replay failed at provider connection/schema recovery with `fetch failed` for all samples; no usable content-quality judgment was possible from that run.
+- After the reusable-example fix, DeepSeek 3-sample replay produced `providerFailures=0`, but one Part 1 teacher judge failed because the judge packet omitted visible Part 1 `developmentTargets`, causing a false claim that direct-answer + reason/detail coaching was missing.
+
+Fixes made:
+
+- Dropped incomplete optional Speaking `reusableExample` objects to `null` during safety normalization and recorded `reusableExampleDroppedIncomplete`.
+- Added a verifier regression so incomplete optional `reusableExample` no longer creates validation errors or `parse_or_schema`.
+- Expanded the feedback judge packet and visible-text scan to include Part 1 `developmentTargets`, `nextRetryPlan`, and material/expression details, and counted development targets as learning assets.
+
+Validation:
+
+- `npm run verify:feedback-judge` passed.
+- `npm run lint` passed.
+- DeepSeek Part 1 targeted replay: `sampled=1`, `executed=1`, `improved=1`, `worse=0`, `providerFailures=0`, `teacher=pass:95`.
+
+Next loop focus:
+
+- Run a fresh mixed DeepSeek 3-sample teacher replay when provider latency is acceptable.
+- Diagnose Gemini `fetch failed` separately as a provider/connectivity issue before treating Gemini output as feedback-quality evidence.
+
+### 2026-06-17 - Three-Part Real Replay Audit Loop
+
+Input:
+
+- `D:/chrome download/ielts-scholar-feedback-history-replay-2026-06-14T17-06-52-477Z.json`
+
+Commands:
+
+- `npm run replay:feedback-reanalysis -- --input "D:\chrome download\ielts-scholar-feedback-history-replay-2026-06-14T17-06-52-477Z.json" --limit 3 --part 1 --execute true --provider deepseek --judgeProvider deepseek --includePackets true --output "local_practice_data\feedback_judge\audit-part1-deepseek-after-loop-r2.json"`
+- `npm run replay:feedback-reanalysis -- --input "D:\chrome download\ielts-scholar-feedback-history-replay-2026-06-14T17-06-52-477Z.json" --limit 3 --part 2 --execute true --provider deepseek --judgeProvider deepseek --includePackets true --output "local_practice_data\feedback_judge\audit-part2-deepseek-after-loop-r2.json"`
+- `npm run replay:feedback-reanalysis -- --input "D:\chrome download\ielts-scholar-feedback-history-replay-2026-06-14T17-06-52-477Z.json" --limit 3 --part 3 --execute true --provider deepseek --judgeProvider deepseek --includePackets true --output "local_practice_data\feedback_judge\audit-part3-deepseek-after-loop-r6.json"`
+- `npm run replay:feedback-reanalysis -- --input "D:\chrome download\ielts-scholar-feedback-history-replay-2026-06-14T17-06-52-477Z.json" --limit 1 --part 3 --execute true --provider gemini --judgeProvider deepseek --includePackets false --output "local_practice_data\feedback_judge\audit-gemini-smoke-after-loop.json"`
+
+Observed failures:
+
+- Part 1 needed better recovery/display for optional developed answers and clean retry answers that should integrate a missing descriptive detail rather than only repeat the learner's original answer.
+- Part 2 provider output could place important repairs only in generic arrays, leaving the Part 2 annotation surface underfilled.
+- Part 3 had two audit issues: strong answers with no local errors could produce an empty evidence ledger when a generated target answer existed, and exact-lane hard judge rules could overreport after teacher-pass outputs already had rich anchored priority evidence.
+- Gemini still failed before content judging with `parseError: fetch failed`; the report then judged the local fallback template, so it is provider-connectivity evidence rather than Gemini feedback-quality evidence.
+
+Fixes made:
+
+- Normalized incomplete optional Speaking naturalness hints and reusable examples as recoverable provider issues instead of full parse failures.
+- Recovered missing Speaking headline bands from valid visible criteria averages.
+- Preserved Part 1 optional developed answers in safety normalization, the Part 1 display model, UI rendering, Markdown export, and judge packets.
+- Scrubbed unsupported exact Part 1 target specifics, and integrated provider-supplied descriptive examples into underresponsive Part 1 clean retry answers.
+- Backfilled Part 2 generic repairs into Part 2 annotations when the generic repair is anchored and the dedicated annotation surface is empty.
+- Added Part 3 thinking-diagnosis evidence, high-band stability evidence, strong Part 3 generated-target ledger anchoring, and a teacher-pass-aware hard-judge calibration for rich Part 3 discussion packets.
+- Strengthened Gemini prompts for unsupported Part 1 specifics, richer Part 1 naturalness feedback, Part 2 annotation mirroring, and Part 3 reasoning-refinement detail.
+
+Validation:
+
+- DeepSeek Part 1: `sampled=3`, `executed=3`, `improved=2`, `same=1`, `worse=0`, `providerFailures=0`, teacher passes `95`, `92`, `78`.
+- DeepSeek Part 2: `sampled=3`, `executed=3`, `improved=1`, `same=2`, `worse=0`, `providerFailures=0`, teacher passes `85`, `92`, `92`.
+- DeepSeek Part 3 r6: `sampled=3`, `executed=3`, `improved=0`, `same=3`, `worse=0`, `providerFailures=0`, teacher passes `92`, `92`, `93`.
+- Gemini smoke: `sampled=1`, `executed=1`, `providerFailures=1`, `failureKind=parse_or_schema`, `parseError=fetch failed`; content quality remains unverified for Gemini.
+- `npm run verify:feedback-judge` passed, with intentional undercovered fixtures still reporting expected `should_fix` counts.
+- `npm run lint` passed.
+- `npm run build` passed with existing Vite chunk/dynamic-import and large-chunk warnings.
+
+Next loop focus:
+
+- Treat DeepSeek as the currently validated Speaking replay provider for this loop.
+- Diagnose Gemini transport/config separately before using Gemini teacher or content output as product-quality evidence.
+- Expand the next replay only after provider latency/cost is acceptable, because the current 3x3 DeepSeek teacher loop already covers Part 1, Part 2, and Part 3 real-history samples.
+
+### 2026-06-18 - Gemini Transport Diagnosis And Clean Fallback
+
+Input:
+
+- `D:/chrome download/ielts-scholar-feedback-history-replay-2026-06-14T17-06-52-477Z.json`
+
+Observed failures:
+
+- Minimal Node `fetch('https://generativelanguage.googleapis.com')` timed out with `UND_ERR_CONNECT_TIMEOUT`.
+- PowerShell `Test-NetConnection generativelanguage.googleapis.com -Port 443` also failed.
+- `.env.local` has a Gemini key and model, but no proxy or Gemini-compatible base URL override.
+- The old replay script judged the local fallback feedback after Gemini failed, so teacher judge was reviewing fallback text rather than real Gemini output.
+- Router `readEnv()` assumed `import.meta.env` always exists, which is false in Node/tsx diagnostic scripts.
+
+Fixes made:
+
+- Added optional Gemini provider config for `VITE_GEMINI_BASE_URL`, `GEMINI_BASE_URL`, `GEMINI_NEXT_GEN_API_BASE_URL`, `VITE_GEMINI_TIMEOUT_MS`, `GEMINI_TIMEOUT_MS`, and optional API version.
+- Classified `fetch failed`, connect timeout, aborted timeout, and common network errors as `provider_unavailable` instead of `parse_or_schema`.
+- Let router Gemini retry/fallback treat `provider_unavailable` as a DeepSeek fallback trigger.
+- Made router `readEnv()` safe in both Vite/browser and Node/tsx contexts.
+- Changed replay re-analysis so provider failures skip teacher judge instead of judging normalized fallback output.
+- Added `.env.example` notes for optional Gemini base URL and timeout.
+
+Validation:
+
+- Gemini replay smoke: `sampled=1`, `executed=0`, `providerFailures=1`, `failure=provider_unavailable`, `teacher=skipped`.
+- Product router smoke with `VITE_AI_PROVIDER=gemini` and short Gemini timeout fell back to DeepSeek: route provider `deepseek`, model `deepseek-v4-flash`, score returned.
+- `npm run lint` passed.
+- `npm run verify:feedback-judge` passed.
+- `npm run build` passed with existing Vite chunk/dynamic-import and large-chunk warnings.
+
+Current Gemini status:
+
+- The app now handles Gemini failure cleanly and does not pollute content-quality review with fallback output.
+- Real Gemini content quality is still unverified on this machine until the network can reach a Gemini-compatible endpoint or a valid proxy/base URL is configured.
+
+### 2026-06-18 - Gemini Node Proxy Fix And Real Provider Replay
+
+Input:
+
+- `D:/chrome download/ielts-scholar-feedback-history-replay-2026-06-14T17-06-52-477Z.json`
+
+Observed failures:
+
+- The project Gemini key was present and valid: `models` API returned HTTP 200 when called through `curl.exe`.
+- `curl.exe` was not a clean direct-network comparison: verbose output showed it used local proxy `127.0.0.1:7890`.
+- Node/@google/genai did not automatically use that system proxy, so SDK calls still failed with `UND_ERR_CONNECT_TIMEOUT` / `fetch failed`.
+- After setting `HTTPS_PROXY=http://127.0.0.1:7890`, `HTTP_PROXY=http://127.0.0.1:7890`, and `NODE_USE_ENV_PROXY=1` before starting Node, Gemini SDK calls could reach the API.
+- First Gemini Part 1 replay then exposed a real provider-shape issue: incomplete optional `optionalPolish` and annotation layer objects missing `better`.
+
+Fixes made:
+
+- Documented the Node proxy requirement in `.env.example`.
+- Normalized incomplete Part 1 optional polish phrase items and incomplete Part 1 annotation layers by dropping the incomplete item/layer and recording diagnostics, instead of failing the whole report.
+
+Validation:
+
+- Gemini Part 1 replay with Node proxy: `sampled=1`, `executed=1`, `improved=1`, `worse=0`, `providerFailures=0`, teacher `pass:92`.
+- Gemini Part 2 replay with Node proxy: `sampled=1`, `executed=1`, `improved=1`, `worse=0`, `providerFailures=0`, teacher `pass:92`.
+- Gemini Part 3 replay with Node proxy: `sampled=1`, `executed=1`, `same=1`, `worse=0`, `providerFailures=0`, teacher `pass:88`.
+
+Current Gemini status:
+
+- Gemini is usable for CLI replay when Node is started with the local proxy environment variables.
+- The key is not currently the blocker; direct Node networking without proxy is the blocker.
