@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "ielts-scholar",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit",
     "verify:history-restore-ui": "node scripts/verify-history-restore-ui.mjs",
     "verify:progress-ui": "node scripts/verify-progress-ui.mjs",
+    "verify:progress-visualizations": "tsx scripts/verify-progress-visualizations.ts",
     "verify:evidence-ledger": "tsx scripts/verify-evidence-ledger.ts",
     "verify:feedback-judge": "tsx scripts/verify-feedback-judge.ts",
     "verify:feedback-history-replay": "tsx scripts/verify-feedback-history-replay.ts",

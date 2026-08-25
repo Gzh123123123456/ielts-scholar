@@ -1,36 +1,122 @@
-# IELTS Scholar: Local-First Training Agent
+# IELTS Scholar
 
-Welcome to your serious IELTS output training assistant. This application is designed to help Chinese native speakers transform their Speaking and Writing into Band 7+ assets.
+IELTS Scholar is a local-first IELTS Speaking and Writing training application for structured practice, AI-assisted feedback, persistent learning records, and learning analytics. It is designed as a genuine learning tool: estimates are conservative training signals, provenance is visible, and the product does not present AI feedback as an official IELTS result.
 
-## 🚀 Getting Started
+## What is implemented
 
-1. **Browse**: Use the Home page to choose between **Speaking** or **Writing** modules.
-2. **Practice**: 
-   - In **Speaking**, listen to the prompt, record your answer, and review the transcript.
-   - In **Writing**, discuss your essay structure in the **Framework Phase** before drafting your full response.
-3. **Analyze**: Click "Analyze" to see a detailed report. 
-   - *Note: V1 uses a **Mock AI** for the prototype. It shows you what the report will look like without requiring a paid API key.*
-4. **Export**: Download your results as an **Obsidian-ready Markdown note** to keep your learning permanent.
+- Speaking practice for Parts 1, 2, and 3, including topic-thread and discussion feedback flows.
+- Writing Task 1 Academic and Writing Task 2 practice with structured criterion feedback.
+- IndexedDB-backed practice history, active-state recovery, backup export/import, and legacy local-storage migration safeguards.
+- Structured TypeScript feedback schemas and local Markdown export.
+- Provider routing for the default mock provider and optional Gemini or auto/DeepSeek local-development modes.
+- Progress profiles, data-derived training recommendations, and interactive learning analytics.
+- Browser verification with Playwright plus focused TypeScript replay/fixture checks.
 
-## 🛠 For Developers / Claude Code users
+## Technical stack
 
-If you are continuing this project locally:
+- React 19, TypeScript, Vite, and React Router
+- Tailwind CSS with the project's paper-based visual system
+- Recharts for responsive, interactive SVG data visualizations
+- IndexedDB through the local `PracticeRepository`, with guarded legacy localStorage compatibility
+- Typed AI feedback contracts, normalization, provider diagnostics, and local export helpers
+- Playwright for route, persistence, interaction, and visualization verification
 
-1. **AI Setup**: Configure your `GEMINI_API_KEY` in `.env`.
-2. **Switch Provider**: Update `src/lib/ai/index.ts` to use `GeminiProvider` instead of `MockProvider`.
-3. **Docs**: Read the documentation in `/docs` for product memory, design philosophy, and future roadmap.
-4. **Data**: Session data is currently in `localStorage`. You may want to implement a local JSON file storage for a true local-first experience.
+The provider configuration is intentionally local-development oriented. Mock is the default. Browser-exposed API keys are not a production deployment model; do not commit `.env.local` or credentials.
 
-## ⚠️ Known V1 Limitations
+## Learning analytics and data visualization
 
-- **Browser Support**: Use **Chrome** or **Edge** for the best speech-to-text experience.
-- **Mock Mode**: Feedback is currently simulated for prototype purposes.
-- **Microphone**: Ensure you click "Allow" when the browser asks for microphone access.
+The Progress interface transforms structured local practice records into three analytical representations:
 
-## 📖 Product Documentation
+1. **Performance trajectory** — chronological observed band estimates for Speaking, Writing Task 1, and Writing Task 2, with module-specific markers and provenance tooltips.
+2. **Criterion profile** — the latest complete Speaking or Writing Task 2 criterion scores on a consistent 0–9 scale. Pronunciation is explicitly excluded from text-based Speaking assessment.
+3. **Practice coverage** — switchable horizontal category charts for Speaking topics, Task 1 visual types, and Task 2 topics, including zero-count gaps.
 
-- `docs/PRODUCT_SPEC.md`: Full product vision.
-- `docs/AI_BEHAVIOR_RULES.md`: How the AI should act (Strict & Calm).
-- `docs/CLAUDE_HANDOFF.md`: Instructions for future Claude Code development.
-- `docs/ROADMAP.md`: Planned features for V2 and beyond.
+The transformations live in `src/lib/progressAnalytics.ts`; Recharts rendering lives in `src/components/progress/`. Normal charts use IndexedDB-backed structured practice history rather than hard-coded production values. Sparse or missing evidence produces an honest insufficient-data state.
 
+```mermaid
+flowchart LR
+  A[Speaking and Writing practice] --> B[Structured feedback schemas]
+  B --> C[PracticeRecord]
+  C --> D[(IndexedDB PracticeRepository)]
+  D --> E[Typed progress analytics]
+  E --> F[Interactive visualizations]
+  E --> G[Training recommendations]
+  D --> H[History and backup export/import]
+```
+
+## Run locally
+
+Requirements: a current Node.js/npm installation and Chromium support for browser verification.
+
+```bash
+npm ci
+npm run dev
+```
+
+Open `http://localhost:3000`. The default mock provider works without an API key.
+
+For optional local provider testing, use an uncommitted `.env.local` with `VITE_AI_PROVIDER=gemini` or `VITE_AI_PROVIDER=auto` and the corresponding `VITE_GEMINI_API_KEY` / `VITE_DEEPSEEK_API_KEY`. See `src/lib/ai/router.ts` for the current routing contract.
+
+## Synthetic visualization demo
+
+Open:
+
+```text
+http://localhost:3000/progress?demo=1
+```
+
+The `demo=1` query uses a small deterministic in-memory fixture. It does not read personal Progress records, write synthetic records to IndexedDB/localStorage, or mix demo records with personal history. The interface displays a clear **Demo data** label.
+
+### Demo screenshots
+
+All screenshots below are generated by Playwright from synthetic demo records only.
+
+![Progress overview with performance trajectory and interactive analytics](docs/images/progress-overview-demo.png)
+
+<details>
+<summary>Speaking criterion and coverage view</summary>
+
+![Speaking Progress demo](docs/images/progress-speaking-demo.png)
+
+</details>
+
+<details>
+<summary>Writing trajectory, criterion and coverage view</summary>
+
+![Writing Progress demo](docs/images/progress-writing-demo.png)
+
+</details>
+
+## Verification
+
+```bash
+npm run lint
+npm run build
+npm run verify:progress-visualizations
+npm run verify:progress-ui
+npm run verify:history-restore-ui
+```
+
+`verify:progress-visualizations` checks chronological transformations, score-series separation, latest criterion selection, pronunciation exclusion, zero-count coverage, and empty analytics. `verify:progress-ui` checks normal Progress routes, demo rendering, all three chart surfaces, synthetic-data non-persistence, and regenerates the demo screenshots.
+
+Additional feedback-quality and replay commands are listed in `package.json` and mapped in `docs/CODEBASE_MAP.md`.
+
+## Repository orientation
+
+- `docs/CURRENT_STATE.md` — current validated product baseline
+- `docs/CODEBASE_MAP.md` — runtime and file navigation
+- `docs/PRODUCT_DESIGN_PRINCIPLES.md` — durable product and feedback principles
+- `docs/PROJECT_BACKLOG.md` and `docs/ROADMAP.md` — future work
+- `AGENTS.md` — repository working agreements
+
+## Development approach
+
+The project uses an AI-assisted software development workflow. The project owner directs product requirements, interaction design, data logic, iterative evaluation, and repository decisions; AI coding tools are used as implementation and verification assistants.
+
+## Current boundaries
+
+- Pronunciation is not formally scored.
+- Audio transcription remains browser/provider dependent.
+- Provider keys and routing are suitable for local personal development, not a multi-user production service.
+- There is no server-side auth, cloud database, or SaaS key-management layer.
+- Training estimates and preparation categories are not official IELTS results or an official IELTS syllabus.

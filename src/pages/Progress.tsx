@@ -48,6 +48,8 @@ import {
   formatBandEstimate,
 } from '@/src/lib/bands';
 import { buildSpeakingProfile } from '@/src/lib/speakingProfile';
+import { ProgressAnalyticsDashboard } from '@/src/components/progress/ProgressAnalyticsDashboard';
+import { getProgressDemoRecords } from '@/src/lib/progressDemoData';
 import type {
   SpeakingProfileEvidence,
   SpeakingProfileGrammarPattern,
@@ -322,8 +324,9 @@ export default function Progress() {
   const [, setResetVersion] = useState(0);
   const [records, setRecords] = useState<PracticeRecord[]>([]);
   const [recordsLoaded, setRecordsLoaded] = useState(false);
-  const masteredExpressions = profile.masteredExpressions || [];
-  const savedExpressions = profile.savedExpressions || [];
+  const isDemoMode = new URLSearchParams(location.search).get('demo') === '1';
+  const masteredExpressions = isDemoMode ? [] : profile.masteredExpressions || [];
+  const savedExpressions = isDemoMode ? [] : profile.savedExpressions || [];
   const progressView = location.pathname.endsWith('/speaking')
     ? 'speaking'
     : location.pathname.endsWith('/writing')
@@ -331,8 +334,24 @@ export default function Progress() {
       : 'overview';
 
   useEffect(() => {
-    listPracticeRecords().then(recs => { setRecords(recs); setRecordsLoaded(true); }).catch(() => setRecordsLoaded(true));
-  }, []);
+    let active = true;
+    setRecordsLoaded(false);
+    if (isDemoMode) {
+      setRecords(getProgressDemoRecords());
+      setRecordsLoaded(true);
+      return () => { active = false; };
+    }
+    listPracticeRecords()
+      .then(recs => {
+        if (!active) return;
+        setRecords(recs);
+        setRecordsLoaded(true);
+      })
+      .catch(() => {
+        if (active) setRecordsLoaded(true);
+      });
+    return () => { active = false; };
+  }, [isDemoMode]);
   const scoredSpeaking = records.filter(isScoredSpeaking);
   const scoredWritingTask2 = records.filter(isScoredWritingTask2);
   const scoredWritingTask1 = records.filter(isScoredWritingTask1);
@@ -405,6 +424,8 @@ export default function Progress() {
           <h2 className="text-3xl">Your Training Snapshot</h2>
         </div>
 
+        {isDemoMode && <DemoModeBanner />}
+
         <div className="space-y-8">
           <div className="grid gap-6 lg:grid-cols-2">
             <ProgressEntryCard
@@ -432,7 +453,9 @@ export default function Progress() {
             <SnapshotCard label="Last Practice" value={latestRecord ? formatDate(getTimestamp(latestRecord)) : 'No records yet'} small />
           </div>
 
-          <PaperCard className="border-l-2 border-l-red-800/70">
+          {recordsLoaded && <ProgressAnalyticsDashboard records={records} view="overview" />}
+
+          {!isDemoMode && <PaperCard className="border-l-2 border-l-red-800/70">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-widest text-red-900 mb-2">Clear Local Personal Data</h3>
@@ -444,7 +467,7 @@ export default function Progress() {
                 Clear Local Data
               </SerifButton>
             </div>
-          </PaperCard>
+          </PaperCard>}
         </div>
       </PageShell>
     );
@@ -457,12 +480,16 @@ export default function Progress() {
 
         <ProgressSubpageHeader title="Speaking Progress" />
 
+        {isDemoMode && <DemoModeBanner />}
+
         <div className="space-y-8">
           <div className="grid md:grid-cols-3 gap-6">
             <SnapshotCard label="Speaking Estimate" value={formatApproxBandEstimate(speakingEstimate)} muted={speakingEstimate === null} />
             <SnapshotCard label="Analyzed Speaking" value={scoredSpeaking.length} />
             <SnapshotCard label="Saved Expressions" value={savedExpressions.length} />
           </div>
+
+          {recordsLoaded && <ProgressAnalyticsDashboard records={records} view="speaking" />}
 
           <ScoreList
             title="Recent Speaking Training Estimates"
@@ -503,12 +530,16 @@ export default function Progress() {
 
         <ProgressSubpageHeader title="Writing Progress" />
 
+        {isDemoMode && <DemoModeBanner />}
+
         <div className="space-y-8">
           <div className="grid md:grid-cols-3 gap-6">
             <SnapshotCard label="Writing Estimate" value={formatApproxBandEstimate(writingEstimate)} muted={writingEstimate === null} />
             <SnapshotCard label="Task 2 Attempts" value={scoredWritingTask2.length} />
             <SnapshotCard label="Task 1 Attempts" value={scoredWritingTask1.length} />
           </div>
+
+          {recordsLoaded && <ProgressAnalyticsDashboard records={records} view="writing" />}
 
           <ScoreList
             title="Recent Writing Training Estimates"
@@ -689,6 +720,24 @@ export default function Progress() {
     </PageShell>
   );
 }
+
+const DemoModeBanner = () => (
+  <div
+    data-testid="progress-demo-banner"
+    className="mb-8 border border-accent-terracotta/30 bg-accent-terracotta/[0.04] px-5 py-4"
+    role="status"
+  >
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm font-bold uppercase tracking-widest text-accent-terracotta">Demo data</p>
+      <Link to="/progress" className="text-xs font-sans font-bold uppercase tracking-wider text-paper-ink/55 hover:text-accent-terracotta">
+        Return to personal progress
+      </Link>
+    </div>
+    <p className="mt-2 text-sm leading-6 text-paper-ink/65">
+      Deterministic synthetic records are held in memory for this preview. They are not personal performance and are never written to browser storage.
+    </p>
+  </div>
+);
 
 interface ScoreListProps {
   title: string;
